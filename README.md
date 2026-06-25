@@ -1,4 +1,4 @@
-# SightMetrics – effiziente Logauswertung ohne Matomo-Import
+# SightMetrics – effiziente Logauswertung
 
 Prototyp zum Konzept in [`loganalyse-gruene-wiese.md`](loganalyse-gruene-wiese.md):
 Webserver-Logs werden mit **DuckDB** (Heavy Lifting in C) geparst, sessionisiert und zu
