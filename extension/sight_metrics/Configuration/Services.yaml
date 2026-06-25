@@ -1,0 +1,12 @@
+services:
+  _defaults:
+    autowire: true
+    autoconfigure: true
+    public: false
+
+  SightMetrics\:
+    resource: '../Classes/*'
+
+  # Controller-Ziel des Backend-Moduls muss aus dem Container holbar sein
+  SightMetrics\Controller\DashboardController:
+    public: true

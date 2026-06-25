@@ -1,0 +1,8 @@
+# Static Analysis fuer die Extension. Lauf via extension/lint.sh im Demo-Container
+# (nutzt den TYPO3-Autoloader der Demo-App fuer die Typaufloesung).
+parameters:
+    level: 6
+    paths:
+        - Classes
+    bootstrapFiles:
+        - ../../vendor/autoload.php

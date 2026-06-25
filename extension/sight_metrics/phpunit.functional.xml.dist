@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Functional-Tests.
+     CI:          cd extension/sight_metrics && php vendor/bin/phpunit -c phpunit.functional.xml.dist
+     Demo-Docker: docker exec weg3-web bash -c "cd /var/www/html && php vendor/bin/phpunit \
+                    -c packages/sight_metrics/phpunit.functional.xml.dist \
+                    (Bootstrap: vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php)"
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         bootstrap="vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php"
+         cacheDirectory="/tmp/.phpunit.cache"
+         colors="true">
+    <testsuites>
+        <testsuite name="Functional">
+            <directory>Tests/Functional</directory>
+        </testsuite>
+    </testsuites>
+    <php>
+        <!-- Hauptverbindung auf SQLite → keine MariaDB für Tests nötig -->
+        <env name="typo3DatabaseDriver" value="pdo_sqlite"/>
+    </php>
+</phpunit>

@@ -1,0 +1,27 @@
+{
+    "name": "sightmetrics/sight-metrics",
+    "type": "typo3-cms-extension",
+    "description": "SightMetrics – Zugriffsauswertung als TYPO3-Backend-Modul (read-only auf die Cube-DB)",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": "^8.2",
+        "typo3/cms-core": "^13.4 || ^14.0",
+        "typo3/cms-backend": "^13.4 || ^14.0"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.0",
+        "typo3/coding-standards": "^0.8",
+        "phpunit/phpunit": "^11.0",
+        "typo3/testing-framework": "^8.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SightMetrics\\": "Classes/"
+        }
+    },
+    "extra": {
+        "typo3/cms": {
+            "extension-key": "sight_metrics"
+        }
+    }
+}

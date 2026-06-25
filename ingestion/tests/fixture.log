@@ -1,0 +1,7 @@
+8.8.8.8 - - [10/Jan/2026:10:00:00 +0000] "GET /a HTTP/1.1" 200 1000 "https://www.google.com/search?q=test+begriff" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+8.8.8.8 - - [10/Jan/2026:10:05:00 +0000] "GET /b HTTP/1.1" 200 1500 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+8.8.8.8 - - [10/Jan/2026:10:10:00 +0000] "GET /c.pdf HTTP/1.1" 200 2000 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+8.8.8.8 - - [10/Jan/2026:11:00:00 +0000] "GET /a HTTP/1.1" 200 1000 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+1.1.1.1 - - [10/Jan/2026:10:30:00 +0000] "GET /a HTTP/1.1" 200 1200 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+8.8.8.8 - - [10/Jan/2026:10:31:00 +0000] "GET /style.css HTTP/1.1" 200 300 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+8.8.8.8 - - [10/Jan/2026:10:32:00 +0000] "GET /missing HTTP/1.1" 404 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"

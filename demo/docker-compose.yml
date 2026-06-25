@@ -1,0 +1,63 @@
+name: weg3-typo3   # Projektname gepinnt -> bestehendes Volume weg3-typo3_dbdata bleibt erhalten
+
+services:
+  db:
+    image: mariadb:11.4
+    container_name: weg3-db
+    environment:
+      MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD:-root}"
+      MARIADB_DATABASE: t3
+      MARIADB_USER: t3
+      MARIADB_PASSWORD: "${MARIADB_T3_PASSWORD:-t3}"
+      CUBE_RW_PASSWORD: "${CUBE_RW_PASSWORD:-cube_rw}"
+      CUBE_RO_PASSWORD: "${CUBE_RO_PASSWORD:-report_ro}"
+    volumes:
+      - dbdata:/var/lib/mysql
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3307:3306"          # Host-DuckDB schreibt den Cube hier ueber
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: .
+    container_name: weg3-web
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PHP_CLI_SERVER_WORKERS: "6"   # Backend macht parallele Requests
+      TYPO3_CONTEXT: "Development"   # zeigt echte Fehlermeldungen
+      CUBE_RO_PASSWORD: "${CUBE_RO_PASSWORD:-report_ro}"
+    volumes:
+      - ./app:/var/www/html
+    ports:
+      - "8091:80"
+    working_dir: /var/www/html
+    # Server erst starten, wenn TYPO3 installiert ist (public/ existiert)
+    command: >
+      bash -c "until [ -f /var/www/html/public/index.php ]; do echo 'warte auf TYPO3-Install...'; sleep 5; done;
+               echo 'Starte PHP-Server'; php -S 0.0.0.0:80 -t public"
+
+  # Paket A als Container (one-shot). Nur via Profil 'import':
+  #   Alle Sites (Standard):   docker compose --profile import run --rm ingestion
+  #   Einzelimport:            docker compose --profile import run --rm ingestion load_cube.sh /logs/<datei> "Site-Name" <id>
+  ingestion:
+    build: ../ingestion
+    image: weg3-ingestion
+    profiles: ["import"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      CUBE_DSN: "${CUBE_DSN}"
+      STATE_DIR: /state
+    volumes:
+      - ../logs:/logs:ro
+      - ../state:/state   # Offset-State persistent über Container-Neustarts
+
+volumes:
+  dbdata:

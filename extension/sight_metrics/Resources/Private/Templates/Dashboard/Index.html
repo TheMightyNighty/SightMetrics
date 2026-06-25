@@ -1,0 +1,94 @@
+<html
+    xmlns:f="http://typo3.org/ns/TYPO3/CMS/Fluid/ViewHelpers"
+    data-namespace-typo3-fluid="true"
+>
+
+<f:if condition="{error}">
+<f:then>
+    <div style="max-width:680px;margin:48px auto;padding:32px 36px;text-align:center;
+                border:1px solid #e3e8ef;border-radius:12px;background:#fff;
+                font:15px/1.5 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#1d2733">
+        <div style="font-size:46px;line-height:1;color:#b9851d" aria-hidden="true">⚠</div>
+        <h1 style="font-size:20px;margin:14px 0 8px">{error.title}</h1>
+        <p style="color:#67758a;margin:0">{error.message}</p>
+        <f:if condition="{error.technical}">
+            <pre style="text-align:left;margin-top:18px;padding:10px 12px;background:#f4f6f9;
+                        border-radius:6px;font-size:12px;color:#8a4b3a;white-space:pre-wrap;overflow:auto">{error.technical}</pre>
+        </f:if>
+    </div>
+</f:then>
+<f:else>
+
+<script type="application/json" id="sm-data"><f:format.raw>{payload}</f:format.raw></script>
+
+<div id="sightmetrics">
+    <div class="sm-bar">
+        <div class="sm-site" id="w-site">–</div>
+        <select id="w-siteselect" class="sm-siteselect" aria-label="Website wählen"></select>
+        <div class="sm-spacer"></div>
+        <label for="w-preset">Zeitraum</label>
+        <select id="w-preset" class="sm-preset" aria-label="Zeitraum wählen"></select>
+        <span id="w-custom" class="sm-custom" hidden>
+            <label for="w-month">Monat</label>
+            <input type="month" id="w-month" aria-label="Bestimmten Monat wählen">
+            <label for="w-from" style="margin-left:8px">von</label><input type="date" id="w-from">
+            <label for="w-to" style="margin-left:8px">bis</label><input type="date" id="w-to">
+        </span>
+        <label class="sm-cmp"><input type="checkbox" id="w-cmp"> Vorperiode vergleichen</label>
+        <button type="button" id="w-csv" class="sm-btn" title="Aktuellen Zeitraum als CSV exportieren">CSV</button>
+        <button type="button" id="w-pdf" class="sm-btn" title="Als PDF drucken/speichern">PDF</button>
+        <span class="sm-gen" id="w-gen"></span>
+    </div>
+
+    <div class="sm-kpis" role="region" aria-label="Kennzahlen">
+        <div class="sm-kpi"><div class="v" id="k-visits">–</div><div class="d" id="d-visits"></div><div class="l">Besuche</div></div>
+        <div class="sm-kpi"><div class="v" id="k-uniq">–</div><div class="d" id="d-uniq"></div><div class="l">Eindeutige Besucher*</div></div>
+        <div class="sm-kpi"><div class="v" id="k-pv">–</div><div class="d" id="d-pv"></div><div class="l">Seitenaufrufe</div></div>
+        <div class="sm-kpi"><div class="v" id="k-bounce">–</div><div class="d" id="d-bounce"></div><div class="l">Absprungrate</div></div>
+        <div class="sm-kpi"><div class="v" id="k-band">–</div><div class="d" id="d-band"></div><div class="l">Bandbreite</div></div>
+    </div>
+
+    <div class="sm-card"><h2>Verlauf</h2><div id="w-time" class="sm-chart" role="img" aria-label="Verlaufsgrafik: Seitenaufrufe, Besuche und Eindeutige Besucher"></div></div>
+
+    <h2 class="sm-sec">Besucher</h2>
+    <div class="sm-card"><h3>Besucherkarte</h3><div id="w-map" class="sm-chart map" role="img" aria-label="Weltkarte: Besuche nach Land"></div></div>
+    <div class="sm-grid sm-g2">
+        <div class="sm-card"><h3>Länder</h3><div id="bl-country" class="barlist"></div></div>
+        <div class="sm-card"><h3>Besuchszeiten (Stunde)</h3><div id="w-hour" class="sm-chart" role="img" aria-label="Balkendiagramm: Seitenaufrufe nach Tagesstunde"></div></div>
+    </div>
+    <div class="sm-grid sm-g3">
+        <div class="sm-card"><h3>Browser <span class="sm-hint">▸ klicken für Versionen</span></h3><div id="bl-browser" class="barlist"></div></div>
+        <div class="sm-card"><h3>Betriebssystem <span class="sm-hint">▸ klicken für Versionen</span></h3><div id="bl-os" class="barlist"></div></div>
+        <div class="sm-card"><h3>Gerätetyp <span class="sm-hint">▸ klicken für Modelle</span></h3><div id="bl-device" class="barlist"></div></div>
+    </div>
+
+    <h2 class="sm-sec">Akquise</h2>
+    <div class="sm-grid sm-g3">
+        <div class="sm-card"><h3>Referrer-Typen <span class="sm-hint">▸ klicken für Quellen</span></h3><div id="bl-reftype" class="barlist"></div></div>
+        <div class="sm-card"><h3>Referrer-URLs</h3><div id="bl-refurl" class="barlist"></div></div>
+        <div class="sm-card"><h3>Suchbegriffe</h3><div id="bl-keyword" class="barlist"></div></div>
+    </div>
+
+    <h2 class="sm-sec">Verhalten</h2>
+    <div class="sm-grid sm-g23">
+        <div class="sm-card"><h3>Seiten (Drill-down)</h3><div id="w-tree" class="sm-tree"></div></div>
+        <div>
+            <div class="sm-card"><h3>Einstiegsseiten</h3><div id="bl-entry" class="barlist"></div></div>
+            <div class="sm-card"><h3>Ausstiegsseiten</h3><div id="bl-exit" class="barlist"></div></div>
+        </div>
+    </div>
+    <div class="sm-grid sm-g3">
+        <div class="sm-card"><h3>Downloads</h3><div id="bl-download" class="barlist"></div></div>
+        <div class="sm-card"><h3>Statuscodes</h3><div id="bl-status" class="barlist"></div></div>
+        <div class="sm-card"><h3>HTTP-Methoden</h3><div id="bl-method" class="barlist"></div></div>
+    </div>
+
+    <p class="sm-foot">* Eindeutige Besucher ueber einen Mehrtages-Zeitraum sind als Summe der
+       Tageswerte angenaehert (additiv nicht exakt; produktiv via HyperLogLog). Tageswerte exakt.
+       Daten read-only aus der Cube-DB.</p>
+</div>
+
+</f:else>
+</f:if>
+
+</html>

@@ -1,0 +1,11 @@
+# cat=fehlerseite//10; type=string; label=Titel der Fehlerseite (DB nicht erreichbar)
+errorTitle = Auswertung derzeit nicht verfügbar
+
+# cat=fehlerseite//20; type=text; label=Text der Fehlerseite
+errorMessage = Die Verbindung zur Auswertungs-Datenbank ist zurzeit unterbrochen. Bitte versuchen Sie es später erneut oder informieren Sie den Betrieb.
+
+# cat=fehlerseite//30; type=boolean; label=Technische Fehlermeldung anzeigen (nur fuer Admins/Debug)
+showTechnical = 0
+
+# cat=leistung//10; type=int+; label=Zeitfenster in Tagen: nur dieses Fenster wird aus der Cube-DB geladen (begrenzt das Transfervolumen unabhaengig von der Retention). 0 = unbegrenzt.
+windowDays = 92
