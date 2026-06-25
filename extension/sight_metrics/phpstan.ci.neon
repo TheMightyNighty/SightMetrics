@@ -1,5 +1,5 @@
 includes:
     - phpstan.neon
 parameters:
-    bootstrapFiles:
+    bootstrapFiles!:
         - vendor/autoload.php
