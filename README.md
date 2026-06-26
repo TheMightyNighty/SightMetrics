@@ -1,61 +1,147 @@
-# SightMetrics – effiziente Logauswertung
+# SightMetrics – datensparsame Webzugriffs-Auswertung
 
-Prototyp zum Konzept in [`loganalyse-gruene-wiese.md`](loganalyse-gruene-wiese.md):
-Webserver-Logs werden mit **DuckDB** (Heavy Lifting in C) geparst, sessionisiert und zu
-**Cubes** aggregiert – statt sie zeilenweise über Matomos Tracker-API zu importieren.
-Auswertung als **TYPO3-Backend-Extension**, die read-only auf die Cube-DB liest.
+SightMetrics wertet **Webserver-Logs** (Apache/nginx) aus und stellt die Ergebnisse
+als Dashboard in einem **TYPO3-Backend-Modul** dar – ohne JavaScript-Tracker, ohne
+Cookies, ohne dass Besucherdaten das eigene System verlassen.
 
-## Struktur (zwei Pakete + Demo)
+Statt jeden einzelnen Seitenaufruf über eine Tracking-API zu erfassen (wie z. B.
+Matomo es tut), liest SightMetrics die ohnehin vorhandenen Logdateien, rechnet sie
+**einmalig mit [DuckDB](https://duckdb.org/)** zu kompakten Tages-Aggregaten
+(„Cubes") herunter und legt nur diese in einer Datenbank ab. Das ist schnell,
+ressourcenschonend und **datenschutzfreundlich** – ein Entwurf, der besonders für
+Behörden und den öffentlichen Sektor (DSGVO/BSI) gedacht ist.
 
-| Pfad | Was |
-|------|-----|
-| `ingestion/` | **Paket A – Auswertung/Import (DuckDB)**, der *betriebliche* Teil. Generator, `cube_to_mysql.sql` (wertet die Logs aus), `load_cube.sh`, `bin/duckdb`, `geo/`. Einziger Schreiber der Cube-DB. |
-| `extension/` | **Paket B – TYPO3-Reporting-Extension** `sight_metrics`. Liest nur (`report_ro`), kein DuckDB. |
-| `demo/` | **Wegwerf-Stack**: TYPO3 v13 + MariaDB (Cube-DB), zum Testen. Nicht für Produktion. |
-| `docs/` | **Dokumentation**: [Extension-Handbuch](docs/extension-handbuch.md) (Entwickler/Admin) · [Ingestion-Runbook](docs/ingestion-runbook.md) (Ops/Betrieb). |
-| `logs/` | Test-Logs. |
+> Das zugrundeliegende Konzept ist in [`loganalyse-gruene-wiese.md`](loganalyse-gruene-wiese.md)
+> beschrieben.
 
-## Schnellstart
+---
+
+## Wie es funktioniert (in einem Bild)
+
+```
+   Apache/nginx          Paket A: Ingestion (DuckDB)              MariaDB           Paket B: TYPO3-Extension
+   ─────────────         ────────────────────────────            ─────────         ────────────────────────
+   access.log    ──────► parse → sessionisieren → aggregieren ──► Cube-DB   ◄────── Backend-Modul "Logauswertung"
+   (Rohzeilen)           (load_cube.sh / transform.sql)          (cube/daily/meta)   (liest nur, rendert Charts)
+                              ▲
+   Matomo (Altdaten) ─────────┘
+   Reporting-API (JSON)   matomo_import.sh  (einmaliger Import der Vergangenheit)
+```
+
+- **Paket A schreibt** den Cube (DB-User `cube_rw`), **Paket B liest nur** (`report_ro`, ausschließlich `SELECT`).
+- Die beiden Pakete teilen sich **keinen Code**, nur die Datenbank – eine bewusste Architektur-Grenze (Konzept §11).
+
+---
+
+## Zentrale Begriffe
+
+| Begriff | Bedeutung |
+|---|---|
+| **Cube** | Vorab aggregierte Auswertungsdaten in der MariaDB. Tabelle `cube(site_id, datum, dim, dimkey, pv, v)`: pro Tag, pro Dimension, pro Ausprägung die Pageviews (`pv`) und Visits (`v`). |
+| **Dimension (`dim`)** | Auswertungsachse, z. B. `url`, `country`, `browser`, `os`, `device`, `referrer_type`, `keyword`, `hour`, `entry`/`exit`, `download`, `status`, `method`. |
+| **`daily` / `meta`** | Tageskennzahlen (Visits, Pageviews, Unique Visitors, Bounces, Bytes) bzw. Gesamt-Metadaten je Site. |
+| **Sessionisierung** | Gruppierung von Einzel-Hits zu Besuchen (Visits) anhand von IP+User-Agent und 30-Minuten-Inaktivität – passiert in DuckDB, nicht in der DB. |
+| **Site / `site_id`** | Eine ausgewertete Website. Mehrere Sites liegen mit unterschiedlicher `site_id` in **einer** Cube-DB (Multi-Site). |
+
+---
+
+## Repository-Aufbau
+
+| Pfad | Inhalt |
+|------|--------|
+| `ingestion/` | **Paket A – Ingestion/Auswertung (DuckDB)**, der betriebliche Teil. Log-Parser, Aggregations-SQL, Import-Skripte, GeoIP-Daten, das DuckDB-Binary. Einziger Schreiber der Cube-DB. → [`ingestion/README.md`](ingestion/README.md) |
+| `extension/` | **Paket B – TYPO3-Reporting-Extension** `sight_metrics`. Read-only-Backend-Modul, kein DuckDB. → [`extension/README.md`](extension/README.md) |
+| `demo/` | **Wegwerf-Stack** zum Ausprobieren: TYPO3 v13 + MariaDB (Cube-DB) per Docker Compose. Nicht für Produktion. |
+| `docs/` | Ausführliche Dokumentation: [Extension-Handbuch](docs/extension-handbuch.md) (Entwickler/Admin) · [Ingestion-Runbook](docs/ingestion-runbook.md) (Ops/Betrieb) · [Matomo-Import](docs/matomo-import.md). |
+| `logs/` | Beispiel-/Test-Logs. |
+
+---
+
+## Schnellstart (Demo)
+
+Voraussetzungen: Docker + Docker Compose, Bash. Alles Weitere bringt der Demo-Stack mit.
 
 ```bash
-# 1) Demo-Stack hoch (MariaDB + TYPO3 v13, Extension ist installiert)
+# 1) Demo-Stack starten: MariaDB (Cube-DB) + TYPO3 v13 mit installierter Extension
 cd demo && docker compose up -d && cd ..
 
-# 2) Import/Auswertung: Log -> DuckDB-Cube -> MariaDB
+# 2) Beispiel-Log importieren: Log -> DuckDB-Cube -> MariaDB
 cd ingestion && ./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1 && cd ..
-#                ./load_cube.sh <log> "<Site-Name>" <site_id>   (Multi-Site, idempotent pro Site)
+#                ./load_cube.sh <Logdatei> "<Site-Name>" <site_id>
+#                (multi-site-fähig, idempotent pro Site)
 
-# 3) Backend ansehen
-#    http://localhost:8091/typo3/   (admin / Weg3-Admin-2026!)  ->  Web -> "Logauswertung"
+# 3) Im Backend ansehen:
+#    http://localhost:8091/typo3/   (admin / Weg3-Admin-2026!)
+#    -> Modul  Web > "Logauswertung"
 ```
 
-Import auch als **Container** (Paket A, nächtlicher one-shot). Standardlauf = alle Sites aus
-`sites.conf`; Einzelimport via `load_cube.sh`:
+Import als **Container** (Paket A als nächtlicher One-Shot). Standardlauf = alle Sites
+aus `sites.conf`:
+
 ```bash
-# alle Sites
+# alle Sites importieren
 cd demo && docker compose --profile import run --rm ingestion
-# Einzelimport
+# einzelne Site
 cd demo && docker compose --profile import run --rm ingestion load_cube.sh /logs/<datei> "Site-Name" <id>
 ```
-Betrieb produktiv: siehe [`ingestion/scheduling/README_scheduling.md`](ingestion/scheduling/README_scheduling.md)
-(CronJob/Cron, persistentes `STATE_DIR`-Volume, DSN als Laufzeit-Secret, Alarm).
 
-Tests (Lint + alle Suiten): `./run-tests.sh` · nur Lint: `extension/lint.sh` (PHPStan 2 + TYPO3
-Coding Standards). Extension neu deployen: `extension/sync-to-demo.sh`.
+Für den **produktiven Betrieb** (Scheduling, Secrets, Monitoring, Retention) siehe
+[`ingestion/scheduling/README_scheduling.md`](ingestion/scheduling/README_scheduling.md)
+und das [Ingestion-Runbook](docs/ingestion-runbook.md).
 
-GUI-Umfang: Verlauf, **Weltkarte (Choropleth)**, Länder, Besuchszeiten, Browser/OS/Gerät
-**mit Drill-down** (→ Versionen/Modelle), Referrer-Typen/-URLs, **Suchbegriffe**, Ein-/Ausstieg,
-Downloads, Statuscodes, HTTP-Methoden, Seitenbaum-Drill-down, KPIs (inkl. Absprungrate/Bandbreite),
-**Zeitraum-Auswahl** (Matomo-artiges Dropdown: relativ/Kalender/Jahre + benutzerdefiniert),
-**Perioden-Vergleich**, **CSV-/PDF-Export** und **Dark Mode**.
+---
 
-> Architektur-Grenze (Konzept §11): Paket A schreibt den Cube (`cube_rw`), Paket B liest nur
-> (`report_ro`, SELECT). `demo/app/` ist das temporäre TYPO3 (kein Paket-Bestandteil).
+## Altdaten aus Matomo übernehmen
 
-**Multi-Site:** Der Cube trägt `site_id`; mehrere Sites liegen in einer DB, die GUI hat eine
-Site-Auswahl. Zuordnung TYPO3-Site → Cube-`site_id` über `sightmetrics_site_id` in der Site-Config.
-Ausgelegt für **eine** TYPO3-Instanz mit mehreren Sites in einem Namespace (Cube in derselben MariaDB).
+Wer von Matomo umsteigt, kann die **historischen Daten einmalig pro Site** übernehmen –
+über Matomos Reporting-API, ohne Rohlogs. Funktioniert auch dann, wenn Matomos
+Roh-Trackingdaten längst gelöscht sind, und skaliert für Sites mit Millionen Hits/Tag:
 
-## Stack
+```bash
+cd ingestion
+export MATOMO_TOKEN="…"   # View-Token aus Matomo
+export CUBE_DSN="host=… user=cube_rw password=… database=analytics"
+./matomo_import.sh --url https://matomo.example.org --matomo-idsite 7 \
+                   --site-id 1 --site-name "Bürgeramt Mitte" \
+                   --from 2020-01-01 --to 2024-12-31
+```
 
-TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.4 · MariaDB · ECharts (Backend-Modul).
+Details, Mapping und Grenzen: [`docs/matomo-import.md`](docs/matomo-import.md).
+
+---
+
+## Funktionsumfang des Dashboards
+
+- **Verlauf** über die Zeit, **Weltkarte** (Choropleth) und Länder-Liste
+- **Besuchszeiten** (Stunden-Heatmap), **Browser / Betriebssystem / Gerät** mit **Drill-down** (→ Versionen/Modelle)
+- **Referrer**-Typen und -URLs, **Suchbegriffe**
+- **Ein-/Ausstiegsseiten**, **Downloads**, **Statuscodes**, **HTTP-Methoden**, **Seitenbaum-Drill-down**
+- **KPIs** inkl. Absprungrate und Bandbreite
+- **Zeitraum-Auswahl** (ein Matomo-artiges Dropdown: relativ / Kalender / einzelne Jahre / benutzerdefiniert), **Perioden-Vergleich**
+- **CSV- und PDF-Export**, **Dark Mode**
+
+---
+
+## Multi-Site
+
+Der Cube trägt eine `site_id`; mehrere Sites liegen gemeinsam in einer Cube-DB, das
+Dashboard hat eine Site-Auswahl. Die Zuordnung **TYPO3-Site → Cube-`site_id`** erfolgt
+über `sightmetrics_site_id` in der TYPO3-Site-Konfiguration. Ausgelegt für **eine**
+TYPO3-Instanz mit mehreren Sites in einem Namespace (Cube in derselben MariaDB).
+
+---
+
+## Entwicklung & Tests
+
+```bash
+./run-tests.sh            # Lint + alle Testsuiten (Ingestion-Pipeline + Extension)
+extension/lint.sh         # nur Lint: PHPStan 2 + TYPO3 Coding Standards
+extension/sync-to-demo.sh # Extension ins Wegwerf-TYPO3 deployen
+```
+
+---
+
+## Technologie-Stack
+
+TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.4 (statisches Binary in `ingestion/bin/`) ·
+MariaDB · [Apache ECharts](https://echarts.apache.org/) (Charts im Backend-Modul).
