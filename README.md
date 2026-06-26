@@ -11,9 +11,6 @@ Matomo es tut), liest SightMetrics die ohnehin vorhandenen Logdateien, rechnet s
 ressourcenschonend und **datenschutzfreundlich** – ein Entwurf, der besonders für
 Behörden und den öffentlichen Sektor (DSGVO/BSI) gedacht ist.
 
-> Das zugrundeliegende Konzept ist in [`loganalyse-gruene-wiese.md`](loganalyse-gruene-wiese.md)
-> beschrieben.
-
 ---
 
 ## Wie es funktioniert (in einem Bild)
