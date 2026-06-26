@@ -115,8 +115,8 @@ fi
 TMPLOG=$(mktemp /tmp/sm_inc_XXXXXX.log)
 SQL_TMP=$(mktemp /tmp/sm_sql_XXXXXX.sql)
 trap 'rm -f "$TMPLOG" "$SQL_TMP"' EXIT
-envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' \
-  < "$(pwd)/cube_to_mysql.sql" > "$SQL_TMP"
+cat "$(pwd)/cube_to_mysql.sql" "$(pwd)/sink_mysql.sql" \
+  | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
 tail -c "+$((OFFSET + 1))" "$LOGFILE" > "$TMPLOG"
 NEW_BYTES=$(wc -c < "$TMPLOG")
 
