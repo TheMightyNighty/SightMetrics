@@ -41,7 +41,6 @@ extension/
 ├── README.md                  diese Datei
 ├── lint.sh                    Linting: PHPStan 2 + TYPO3 Coding Standards
 ├── run-tests.sh               Test-Runner (Unit / Functional / Smoke)
-├── sync-to-demo.sh            Deploy ins Wegwerf-TYPO3 (demo/app/packages/sight_metrics/)
 └── sight_metrics/             Composer-Paket  sightmetrics/sight-metrics
     ├── Classes/
     │   ├── Controller/        DashboardController  (baut das Modul-Payload)
@@ -77,7 +76,6 @@ Versionsmatrix, Architektur, Troubleshooting - steht im
 ```bash
 ./lint.sh                 # PHPStan (Level 6) + TYPO3 Coding Standards
 ./run-tests.sh            # Unit-, Functional- (SQLite) und Smoke-Tests
-./sync-to-demo.sh         # Extension ins laufende Wegwerf-TYPO3 deployen
 ```
 
 Die Extension ist offen für **TYPO3 v13.4 LTS und v14**, PHP 8.2-8.4. Im Backend-Modul

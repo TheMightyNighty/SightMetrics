@@ -133,7 +133,6 @@ TYPO3-Instanz mit mehreren Sites in einem Namespace (Cube in derselben MariaDB).
 ```bash
 ./run-tests.sh            # Lint + alle Testsuiten (Ingestion-Pipeline + Extension)
 extension/lint.sh         # nur Lint: PHPStan 2 + TYPO3 Coding Standards
-extension/sync-to-demo.sh # Extension ins Wegwerf-TYPO3 deployen
 ```
 
 ---

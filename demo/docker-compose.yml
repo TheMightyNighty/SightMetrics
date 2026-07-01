@@ -34,6 +34,7 @@ services:
       CUBE_RO_PASSWORD: "${CUBE_RO_PASSWORD:-report_ro}"
     volumes:
       - ./app:/var/www/html
+      - ../extension:/var/www/html/packages:ro
     ports:
       - "8091:80"
     working_dir: /var/www/html

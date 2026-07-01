@@ -17,7 +17,6 @@ docker compose -f "$DEMO/docker-compose.yml" run --rm --no-deps \
   php /phpunit.phar -c /ext/phpunit.xml.dist || fail=1
 
 echo; echo "== 2b: PHP Functional (typo3/testing-framework, SQLite) =="
-bash ./sync-to-demo.sh >/dev/null 2>&1
 # Prüfen ob testing-framework installiert ist (erst nach: composer update in demo/app/)
 if docker exec weg3-web test -f /var/www/html/vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php; then
   docker exec weg3-web bash -c \
