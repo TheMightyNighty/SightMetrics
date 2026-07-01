@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Daten/Engine
+
+#TODO: Download DuckDB within this Dockerfile, instead of copying it from the host. This will make the image more portable and easier to build in different environments.
 COPY bin/ ./bin/
 COPY geo/ ./geo/
 

@@ -60,15 +60,31 @@ Voraussetzungen: Docker + Docker Compose, Bash. Alles Weitere bringt der Demo-St
 
 ```bash
 # 1) Demo-Stack starten: MariaDB (Cube-DB) + TYPO3 v13 mit installierter Extension
-cd demo && docker compose up -d && cd ..
+cd demo
+cp .env.example .env
+docker compose up -d
+docker exec -it weg3-web bash
+composer install
+exit
+cd ..
 
 # 2) Beispiel-Log importieren: Log -> DuckDB-Cube -> MariaDB
-cd ingestion && ./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1 && cd ..
-#                ./load_cube.sh <Logdatei> "<Site-Name>" <site_id>
-#                (multi-site-fähig, idempotent pro Site)
+cd ingestion
+python3 generate_logs.py
+mv logs ..
+# Download DuckDB binary from here:
+#   https://duckdb.org/install/?platform=linux&environment=cli
+# Extract to ingestion/bin
+docker build -t ingestion .
+docker run --rm -it -v $(pwd):/app --workdir /app -e CUBE_DSN="host=host.docker.internal port=3307 user=cube_rw password=cube_rw database=analytics" --entrypoint bash ingestion
+cd ingestion
+./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1
+# ./load_cube.sh <Logdatei> "<Site-Name>" <site_id>
+# (multi-site-fähig, idempotent pro Site)
+exit
 
 # 3) Im Backend ansehen:
-#    http://localhost:8091/typo3/   (admin / Weg3-Admin-2026!)
+#    http://localhost:8091/typo3/   (User Daten aus Schritt 1)
 #    -> Modul  Web > "Logauswertung"
 ```
 

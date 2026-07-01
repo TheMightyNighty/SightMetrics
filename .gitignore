@@ -16,6 +16,7 @@ demo/app/config/system/settings.php
 # Symlinks, die TYPO3 erzeugt (außerhalb config/)
 demo/app/sites/
 demo/app/system/
+/demo/app/config/sites/
 
 # ---- Extension: standalone composer install (CI) ----------------------------
 extension/sight_metrics/vendor/
