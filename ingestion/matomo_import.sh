@@ -121,6 +121,7 @@ fetch() { # $1=method $2=outfile $3=daterange $4=flat(0/1) $5=limit
   [ "$flat" = "1" ] && url="${url}&flat=1"
   # Token im POST-Body (Matomo-Haertung); leere/fehlerhafte Antwort -> '{}'.
   if ! curl -fsS "$url" --data-urlencode "token_auth=${TOKEN}" -o "$out" 2>/dev/null; then
+    echo "   WARN: ${method} ${range} -> curl-Fehler (Netzwerk/Timeout/HTTP), uebersprungen." >&2
     echo "{}" > "$out"; return
   fi
   # API-Fehler ("result":"error") ebenfalls zu '{}' degradieren.
