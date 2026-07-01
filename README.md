@@ -56,11 +56,20 @@ Behörden und den öffentlichen Sektor (DSGVO/BSI) gedacht ist.
 
 ## Schnellstart (Demo)
 
-Voraussetzungen: Docker + Docker Compose, Bash. Alles Weitere bringt der Demo-Stack mit.
+Voraussetzungen: Docker + Docker Compose, Bash, `curl`/`unzip`, Python 3. Kein
+lokales PHP/Composer/Apache nötig – TYPO3 läuft im Container über den eingebauten
+PHP-Dev-Server, Composer läuft ebenfalls containerisiert.
+
+`demo/setup.sh` holt/erzeugt einmalig alles, was bewusst **nicht** im Repo liegt
+(große Binärdateien, generierte Installationen, lizenzpflichtige Datensätze):
+DuckDB-Binary, ein Beispiel-Log, eine synthetische Demo-Geo-CSV (siehe
+[Ingestion-Runbook §3a](docs/ingestion-runbook.md#3a-geoip-datensatz-todo-für-betreiber)
+für echte GeoIP-Quellen im Produktivbetrieb) sowie die TYPO3-Installation selbst.
 
 ```bash
-# 1) Demo-Stack starten: MariaDB (Cube-DB) + TYPO3 v13 mit installierter Extension
-cd demo && docker compose up -d && cd ..
+# 1) Einmaliges Setup (dauert beim ersten Mal ein paar Minuten: composer install,
+#    TYPO3-Setup, Extension-Deploy). Danach läuft der komplette Stack bereits.
+cd demo && ./setup.sh && cd ..
 
 # 2) Beispiel-Log importieren: Log -> DuckDB-Cube -> MariaDB
 cd ingestion && ./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1 && cd ..
@@ -70,6 +79,9 @@ cd ingestion && ./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1 && cd
 # 3) Im Backend ansehen:
 #    http://localhost:8091/typo3/   (admin / Weg3-Admin-2026!)
 #    -> Modul  Web > "Logauswertung"
+
+# Weitere Terminal-Sessions (Stack schon eingerichtet): nur noch
+cd demo && docker compose up -d && cd ..
 ```
 
 Import als **Container** (Paket A als nächtlicher One-Shot). Standardlauf = alle Sites

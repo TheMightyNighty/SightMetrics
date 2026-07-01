@@ -9,6 +9,7 @@ echo "== Pipeline: transform.sql gegen Fixture =="
 OUT=$(./bin/duckdb <<'SQL'
 SET VARIABLE logpath   = 'tests/fixture.log';
 SET VARIABLE geopath   = 'tests/geo_mini.csv';
+.read 'geo_sources/native.sql'
 SET VARIABLE site_name = 'Test';
 SET VARIABLE tagessalt = 'testsalt';
 .read 'tests/pipeline_test.sql'
@@ -27,7 +28,7 @@ ENVSUBST_TMP=$(mktemp /tmp/sm_envsubst_XXXXXX.sql)
 trap 'rm -f "$ENVSUBST_TMP"' EXIT
 SM_TABLE_CUBE=mein_cube SM_TABLE_DAILY=mein_daily SM_TABLE_META=mein_meta \
   envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' \
-  < cube_to_mysql.sql > "$ENVSUBST_TMP"
+  < sink_mysql.sql > "$ENVSUBST_TMP"
 envsubst_ok=1
 grep -q 'm\.mein_cube'  "$ENVSUBST_TMP" || { echo "FAIL m.mein_cube nicht gefunden";  envsubst_ok=0; }
 grep -q 'm\.mein_daily' "$ENVSUBST_TMP" || { echo "FAIL m.mein_daily nicht gefunden"; envsubst_ok=0; }
@@ -58,6 +59,7 @@ VHOST_REGEX='^\S+:\d+ (\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) [^"]*" (\d+) (\d+)
 VHOST_OUT=$(./bin/duckdb <<SQL
 SET VARIABLE logpath   = '${VHOST_LOG}';
 SET VARIABLE geopath   = 'tests/geo_mini.csv';
+.read 'geo_sources/native.sql'
 SET VARIABLE site_name = 'Test-VHost';
 SET VARIABLE tagessalt = 'testsalt';
 SET VARIABLE logregex  = '${VHOST_REGEX}';

@@ -17,16 +17,50 @@
 #   SM_TABLE_CUBE     Name der Cube-Tabelle
 #   SM_TABLE_DAILY    Name der Daily-Tabelle
 #   SM_TABLE_META     Name der Meta-Tabelle
+#
+# GeoIP (TODO für Betreiber: Datei ist NICHT Teil des Repos, siehe
+#        docs/ingestion-runbook.md -> Abschnitt "GeoIP-Datensatz"):
+#   SM_GEO_SOURCE     native (Standard) | ip2location | dbip | maxmind
+#                     legt fest, welches geo_sources/<quelle>.sql geladen wird.
+#   SM_GEO_PATH       Pfad zur Geo-CSV (Standard: geo/country-ipv4-num.csv)
+#   SM_GEO_LOC_PATH   nur SM_GEO_SOURCE=maxmind: Pfad zu
+#                     GeoLite2-Country-Locations-en.csv
 # ---------------------------------------------------------------------------
 set -euo pipefail
 export LC_ALL=C
 cd "$(dirname "$0")"
 REPO="$(cd .. && pwd)"
 DUCKDB="$(pwd)/bin/duckdb"
-GEO="$(pwd)/geo/country-ipv4-num.csv"
 LOGFILE="${1:-${REPO}/logs/example_1k.log}"
 SITENAME="${2:-Musterbehörde}"
 SITEID="${3:-1}"
+
+# ---- Geo-Quelle -------------------------------------------------------------
+SM_GEO_SOURCE="${SM_GEO_SOURCE:-native}"
+case "$SM_GEO_SOURCE" in
+  native|ip2location|dbip|maxmind) ;;
+  *)
+    echo "Fehler: unbekanntes SM_GEO_SOURCE='${SM_GEO_SOURCE}'." >&2
+    echo "        Gültig: native (Standard), ip2location, dbip, maxmind" >&2
+    exit 1
+    ;;
+esac
+GEO_SOURCE_SQL="$(pwd)/geo_sources/${SM_GEO_SOURCE}.sql"
+GEO="${SM_GEO_PATH:-$(pwd)/geo/country-ipv4-num.csv}"
+GEO_LOC="${SM_GEO_LOC_PATH:-$(pwd)/geo/GeoLite2-Country-Locations-en.csv}"
+if [ ! -f "$GEO" ]; then
+  echo "Fehler: Geo-Datensatz fehlt unter '${GEO}'." >&2
+  echo "        TODO: Datei selbst beschaffen und ablegen (siehe" >&2
+  echo "        docs/ingestion-runbook.md -> Abschnitt 'GeoIP-Datensatz')." >&2
+  exit 1
+fi
+if [ "$SM_GEO_SOURCE" = "maxmind" ] && [ ! -f "$GEO_LOC" ]; then
+  echo "Fehler: MaxMind-Locations-Datei fehlt unter '${GEO_LOC}'." >&2
+  echo "        TODO: GeoLite2-Country-Locations-en.csv ablegen (siehe" >&2
+  echo "        docs/ingestion-runbook.md -> Abschnitt 'GeoIP-Datensatz')." >&2
+  exit 1
+fi
+echo ">> Geo-Quelle: ${SM_GEO_SOURCE} (${GEO})"
 
 # ---- Secrets ---------------------------------------------------------------
 if [ -z "${CUBE_DSN:-}" ] && [ -f "${CUBE_DSN_FILE:-/run/secrets/cube_dsn}" ]; then
@@ -134,11 +168,13 @@ INSTALL mysql; LOAD mysql;
 ATTACH '${DSN}' AS m (TYPE mysql);
 SET VARIABLE logpath   = '${TMPLOG}';
 SET VARIABLE geopath   = '${GEO}';
+SET VARIABLE geolocpath = '${GEO_LOC}';
 SET VARIABLE site_name = '${SITENAME}';
 SET VARIABLE site_id   = '${SITEID}';
 SET VARIABLE tagessalt = '$(date +%Y%m%d)-sightmetrics';
 SET VARIABLE logregex  = '${SM_LOG_REGEX}';
 SET VARIABLE tsformat  = '${SM_TS_FORMAT}';
+.read '${GEO_SOURCE_SQL}'
 .read '${SQL_TMP}'
 SQL
 t1=$(date +%s.%N)

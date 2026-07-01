@@ -2,7 +2,10 @@
 -- SightMetrics – Auswertungslogik (sink-neutral). Parse -> Sessionisierung -> Cube.
 -- Erzeugt die TEMP-Tabellen cube_rows / daily_rows / meta_row.
 -- Genutzt von cube_to_mysql.sql (Import) UND tests/pipeline_test.sql.
--- Parameter (SET VARIABLE): logpath, geopath, site_name, tagessalt
+-- Parameter (SET VARIABLE): logpath, site_name, tagessalt
+-- Geo: setzt voraus, dass die TEMP VIEW 'geo_ranges' (start,"end",cc) bereits
+--      existiert -> wird von load_cube.sh/tests via geo_sources/<quelle>.sql
+--      angelegt (SM_GEO_SOURCE: native, ip2location, dbip, maxmind).
 -- ===========================================================================
 
 -- ---- Log-Format-Defaults (überschreibbar via SET VARIABLE in load_cube.sh) ----
@@ -82,8 +85,7 @@ CREATE OR REPLACE TEMP TABLE ip_country AS
 SELECT ipint, cc FROM (
   SELECT s.ipint, geo.cc, row_number() OVER (PARTITION BY s.ipint ORDER BY (geo."end"-geo.start)) rn
   FROM (SELECT DISTINCT ipint FROM sess) s
-  JOIN (SELECT start,"end",cc FROM read_csv(getvariable('geopath'),
-          columns={'start':'BIGINT','end':'BIGINT','cc':'VARCHAR'}, header=false)) geo
+  JOIN geo_ranges geo
     ON s.ipint BETWEEN geo.start AND geo."end"
 ) WHERE rn=1;
 

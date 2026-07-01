@@ -11,6 +11,7 @@ liest nur.
 1. [Dateistruktur](#1-dateistruktur)
 2. [Cube-DB anlegen](#2-cube-db-anlegen)
 3. [Voraussetzungen an die Logs](#3-voraussetzungen-an-die-logs)
+3a. [GeoIP-Datensatz (TODO für Betreiber)](#3a-geoip-datensatz-todo-für-betreiber)
 4. [Schnellstart](#4-schnellstart)
 5. [sites.conf konfigurieren](#5-sitesconf-konfigurieren)
 6. [CUBE_DSN – Secrets](#6-cube_dsn--secrets)
@@ -47,7 +48,13 @@ ingestion/
 ├── bin/
 │   └── duckdb                  DuckDB-CLI-Binary (v1.5.4, x86_64-Linux)
 │
-├── geo/
+├── geo_sources/
+│   ├── native.sql               Geo-Join: eigenes Schema (start,end,cc)
+│   ├── ip2location.sql          Geo-Join: IP2Location LITE DB1
+│   ├── dbip.sql                 Geo-Join: DB-IP Country-Lite
+│   └── maxmind.sql              Geo-Join: MaxMind GeoLite2 Country
+│
+├── geo/                         NICHT im Repo (.gitignore) – TODO: siehe §3a
 │   └── country-ipv4-num.csv   GeoIP-Datensatz (IPv4 → Land-Code, numerisch)
 │
 ├── scheduling/
@@ -146,6 +153,51 @@ einem kompatiblen JSON-Format. Pflichtfelder:
 - **Kein Sampling**: jede Zeile wird gezählt.
 - **Einheitliches Format** über alle Sites und Server (nginx und apache identisch).
 - PII in Query-Strings (Tokens, E-Mails) vor dem Import maskieren/herausfiltern.
+
+---
+
+## 3a. GeoIP-Datensatz (TODO für Betreiber)
+
+**Die GeoIP-CSV ist nicht Teil des Repos** (`ingestion/geo/` ist in `.gitignore`) und
+muss von jedem Betreiber selbst beschafft und abgelegt werden — die genaue
+Lizenzlage lässt sich nicht pauschal für alle Betreiber klären, daher liefern wir
+keine Datei mit. Ohne diese Datei bricht der Import mit einer klaren Fehlermeldung
+ab (`load_cube.sh` prüft das Vorhandensein vor dem Lauf).
+
+Unterstützt werden drei frei verfügbare Quellen, auswählbar über `SM_GEO_SOURCE`:
+
+| `SM_GEO_SOURCE` | Anbieter | Lizenz | Download | Account nötig |
+|---|---|---|---|---|
+| `native` *(Standard)* | eigenes/vorkonvertiertes Format | – (selbst verantwortet) | – | – |
+| `ip2location` | IP2Location LITE DB1 | CC-BY-SA-4.0 (Attribution) | https://lite.ip2location.com/database/ip-country | ja (kostenlos) |
+| `dbip` | DB-IP Country-Lite | CC-BY-4.0 (Attribution) | https://db-ip.com/db/download/ip-to-country-lite | nein |
+| `maxmind` | MaxMind GeoLite2 Country | EULA (Attribution, Weitergabe der Rohdaten eingeschränkt) | https://www.maxmind.com/en/geolite2/eula | ja (Lizenzschlüssel) |
+
+**Ablage:**
+
+```
+ingestion/geo/<heruntergeladene Datei(en)>
+```
+
+Pfade sind konfigurierbar (Standard passt zu `native`):
+
+| Variable | Standard | Bedeutung |
+|---|---|---|
+| `SM_GEO_SOURCE` | `native` | `native` \| `ip2location` \| `dbip` \| `maxmind` |
+| `SM_GEO_PATH` | `geo/country-ipv4-num.csv` | Pfad zur Haupt-CSV der gewählten Quelle |
+| `SM_GEO_LOC_PATH` | `geo/GeoLite2-Country-Locations-en.csv` | nur bei `maxmind`: Locations-Datei (Geoname-ID → Ländercode) |
+
+Das erwartete Rohformat je Quelle ist in `ingestion/geo_sources/<quelle>.sql`
+dokumentiert (dort auch die SQL-Umwandlung ins interne Schema `start,end,cc`).
+`native` ist das SightMetrics-eigene Format (kein Header, `start,end,cc` als
+Integer/Integer/ISO-2-Code) — z. B. wenn ihr euch selbst einen Datensatz aus
+RIR-Daten (APNIC/ARIN/RIPE) zusammenstellt.
+
+```bash
+# Beispiel: IP2Location LITE nutzen
+SM_GEO_SOURCE=ip2location SM_GEO_PATH=/opt/sightmetrics/ingestion/geo/IP2LOCATION-LITE-DB1.CSV \
+  ./load_cube.sh /logs/access.log "Behörde A" 1
+```
 
 ---
 
@@ -632,6 +684,9 @@ fehlerhafte Daten korrekt.
 | `SM_LOG_FORMAT` | `combined` | Log-Format: `combined`, `combined_vhost`, `common`, `custom` |
 | `SM_LOG_REGEX_CUSTOM` | – | Regex für `SM_LOG_FORMAT=custom` (8 Capture-Groups) |
 | `SM_TS_FORMAT_CUSTOM` | – | strptime-Format für `SM_LOG_FORMAT=custom` |
+| `SM_GEO_SOURCE` | `native` | GeoIP-Quelle: `native`, `ip2location`, `dbip`, `maxmind` (siehe §3a) |
+| `SM_GEO_PATH` | `geo/country-ipv4-num.csv` | Pfad zur Geo-CSV (Datei selbst beschaffen, s. §3a) |
+| `SM_GEO_LOC_PATH` | `geo/GeoLite2-Country-Locations-en.csv` | nur `SM_GEO_SOURCE=maxmind`: Locations-Datei |
 | `SM_TABLE_CUBE` | `cube` | Tabellenname Cube (für abweichende Tabellennamen) |
 | `SM_TABLE_DAILY` | `daily` | Tabellenname Daily |
 | `SM_TABLE_META` | `meta` | Tabellenname Meta |
