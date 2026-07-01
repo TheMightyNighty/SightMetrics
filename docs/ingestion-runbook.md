@@ -1,4 +1,4 @@
-# SightMetrics – Ingestion-Runbook (Paket A)
+# SightMetrics - Ingestion-Runbook (Paket A)
 
 Betriebsdokumentation für den **DuckDB-basierten Log-Import** (`ingestion/`).
 Dieser Teil ist der einzige Schreiber der Cube-DB. Die TYPO3-Extension (Paket B)
@@ -13,7 +13,7 @@ liest nur.
 3. [Voraussetzungen an die Logs](#3-voraussetzungen-an-die-logs)
 4. [Schnellstart](#4-schnellstart)
 5. [sites.conf konfigurieren](#5-sitesconf-konfigurieren)
-6. [CUBE_DSN – Secrets](#6-cube_dsn--secrets)
+6. [CUBE_DSN - Secrets](#6-cube_dsn--secrets)
 7. [Log-Format konfigurieren](#7-log-format-konfigurieren)
 8. [Inkrementeller Import & Offset-Tracking](#8-inkrementeller-import--offset-tracking)
 9. [Scheduling (Wegwerf-Container)](#9-scheduling-wegwerf-container)
@@ -193,7 +193,7 @@ Wird eine Site entfernt, bleiben ihre historischen Daten in der Cube-DB erhalten
 
 ---
 
-## 6. CUBE_DSN – Secrets
+## 6. CUBE_DSN - Secrets
 
 Niemals Passwörter in `sites.conf` oder Skripten hinterlegen.
 
@@ -222,7 +222,7 @@ sudo chown root:sightmetrics /etc/sightmetrics/cube_dsn.env
 
 `rotate_cube_secret.sh` erneuert das DB-Passwort (`ALTER USER`) **und** schreibt die
 DSN-Secret-Datei atomar neu. Weil alle Skripte das DSN bei **jedem** Lauf frisch aus der
-Datei lesen, ist die Rotation praktisch unterbrechungsfrei – kein Dienst-Neustart nötig.
+Datei lesen, ist die Rotation praktisch unterbrechungsfrei - kein Dienst-Neustart nötig.
 Vom alten DSN bleibt ein Backup (`<datei>.bak-<ts>`, Anzahl via `ROTATE_KEEP_BACKUPS`).
 
 ```bash
@@ -237,13 +237,13 @@ CUBE_DSN_FILE=/etc/sightmetrics/cube_dsn.env ROTATE_DRY_RUN=1 ./rotate_cube_secr
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `CUBE_DSN_FILE` | – (Pflicht) | Secret-Datei, die neu geschrieben wird |
+| `CUBE_DSN_FILE` | - (Pflicht) | Secret-Datei, die neu geschrieben wird |
 | `ROTATE_NEW_PASSWORD` | (zufällig) | neues Passwort; sonst via `openssl rand` |
 | `ROTATE_USER` / `ROTATE_USER_HOST` | aus DSN / `%` | zu rotierender DB-User |
 | `ROTATE_ADMIN_USER` | `root` | Admin mit `ALTER`-Recht |
-| `ROTATE_ADMIN_PASSWORD` / `…_FILE` | – | Admin-Passwort (Datei bevorzugt) |
+| `ROTATE_ADMIN_PASSWORD` / `…_FILE` | - | Admin-Passwort (Datei bevorzugt) |
 | `ROTATE_KEEP_BACKUPS` | `5` | Anzahl alter DSN-Backups |
-| `ROTATE_DRY_RUN` / `ROTATE_SKIP_DB` | – | nur anzeigen / DB nicht ändern (nur Datei) |
+| `ROTATE_DRY_RUN` / `ROTATE_SKIP_DB` | - | nur anzeigen / DB nicht ändern (nur Datei) |
 
 Nach dem Setzen verifiziert das Skript den Login mit dem neuen Passwort (`SELECT 1`).
 Bei Bedarf als separater, seltener Scheduler-Job (z. B. vierteljährlich) ausführen.
@@ -344,7 +344,7 @@ oder Host-Cron) startet den Ingestion-Container nachts kurz; er importiert alle 
   weg3-ingestion run_all.sh >> /var/log/sightmetrics/cron.log 2>&1
 ```
 
-**Pflicht:** `STATE_DIR` auf ein **persistentes Volume** legen – sonst Voll-Reimport je Lauf.
+**Pflicht:** `STATE_DIR` auf ein **persistentes Volume** legen - sonst Voll-Reimport je Lauf.
 **Alarm:** Scheduler wertet den Exit-Code aus; `run_all.sh` ruft bei Fehlern zusätzlich
 inline `notify.sh` auf (siehe §12). Purge/Backup/Rotation als separate, seltenere
 Scheduler-Jobs (§11, §6).
@@ -369,7 +369,7 @@ Default; ein Feintuning der DuckDB-Threads ist nicht nötig.
 **Concurrency-Schutz** (zweistufig):
 - `run_all.sh` setzt beim Start ein **flock-Lock** (`state/run_all.lock`); ein
   überlappender Lauf endet sofort mit Exit 0.
-- `load_cube.sh` setzt zusätzlich ein **Per-Site-Lock** (`state/site_<id>.lock`) – derselbe
+- `load_cube.sh` setzt zusätzlich ein **Per-Site-Lock** (`state/site_<id>.lock`) - derselbe
   Site-Import kann sich nie überschneiden (schützt Offset-/Meta-Konsistenz).
 
 ### Hochverfügbarkeit (HA)
@@ -410,7 +410,7 @@ BACKUP_DIR=/state/backups ./backup_cube.sh && RETENTION_MONTHS=12 ./purge_cube.s
 ```
 
 > Liegt der Cube in **eurer** ohnehin gesicherten MariaDB, ist dies nur der gezielte
-> Rollback-Punkt unmittelbar vor dem Löschen – das reguläre DB-Backup deckt den Rest ab.
+> Rollback-Punkt unmittelbar vor dem Löschen - das reguläre DB-Backup deckt den Rest ab.
 
 ```bash
 # Manuelles Backup (read-only-User wie report_ro genügt zum Dumpen)
@@ -431,7 +431,7 @@ CUBE_DSN="..." BACKUP_DRY_RUN=1 ./backup_cube.sh
 | `BACKUP_COMPRESS` | `gzip` | `gzip` \| `zstd` \| `none` |
 | `BACKUP_PREFIX` | `cube` | Dateinamen-Präfix |
 | `BACKUP_DSN` / `BACKUP_DSN_FILE` | (Fallback `CUBE_DSN`) | eigene Backup-Credentials |
-| `MYSQLDUMP` / `BACKUP_EXTRA_ARGS` | `mysqldump` / – | Binary bzw. Zusatzargumente |
+| `MYSQLDUMP` / `BACKUP_EXTRA_ARGS` | `mysqldump` / - | Binary bzw. Zusatzargumente |
 
 Wiederherstellung: siehe [§17 Rollback](#17-rollback) (Dump entpacken und einspielen).
 
@@ -448,9 +448,9 @@ sofern ein Kanal konfiguriert ist:
 
 | Variable | Standard | Bedeutung |
 |---|---|---|
-| `ALERT_EMAIL` | – | Empfänger (kommagetrennt); leer = kein Mail |
+| `ALERT_EMAIL` | - | Empfänger (kommagetrennt); leer = kein Mail |
 | `ALERT_MAIL_FROM` | `sightmetrics@<host>` | Absender |
-| `ALERT_WEBHOOK` | – | Webhook-URL; leer = kein Webhook |
+| `ALERT_WEBHOOK` | - | Webhook-URL; leer = kein Webhook |
 | `ALERT_WEBHOOK_FORMAT` | `slack` | `slack` \| `teams` \| `json` |
 | `ALERT_MIN_LEVEL` | `WARN` | ab welchem Level gesendet wird (`OK`/`WARN`/`CRIT`) |
 | `ALERT_PREFIX` | `[SightMetrics]` | Betreff-/Text-Präfix |
@@ -462,7 +462,7 @@ ALERT_WEBHOOK=https://hooks.slack.com/... ./notify.sh WARN "Testalarm"
 ```
 
 **2. Freshness (lief der Import überhaupt?):** aus der **dauerhaft laufenden** TYPO3-
-Instanz prüfen – `sightmetrics:health` prüft den Lesepfad der GUI (Cube erreichbar +
+Instanz prüfen - `sightmetrics:health` prüft den Lesepfad der GUI (Cube erreichbar +
 Aktualität von `meta.bis` je Site):
 
 ```bash
@@ -481,7 +481,7 @@ Cube-DB-Wachstum (Tabellengröße), letztes Backup (`state/backup.last`),
 
 ## 13. Log-Rotation
 
-Im Wegwerf-Container schreiben die Skripte nach **stdout/stderr** – Log-Aufbewahrung
+Im Wegwerf-Container schreiben die Skripte nach **stdout/stderr** - Log-Aufbewahrung
 und Rotation übernimmt der Orchestrator (Docker-/k8s-Logging, journald des Host-Cron).
 Persistente Run-Logs unter `LOG_DIR` (falls gesetzt) ggf. über die normale Host-
 Logrotation des Log-Volumes abdecken. Die Erkennung **rotierter Webserver-Logs**
@@ -503,7 +503,7 @@ zu (siehe Extension-Handbuch §5); die GUI zeigt die Site-Auswahl entsprechend.
 > Eine Mandanten-/DB-Isolation über getrennte Datenbanken ist für diesen Single-
 > Instance-Betrieb **nicht nötig** und wurde bewusst nicht eingebaut.
 
-<!-- entfernt: Mandanten-Isolation (Variante A/B) – nicht für Single-Instance-Betrieb -->
+<!-- entfernt: Mandanten-Isolation (Variante A/B) - nicht für Single-Instance-Betrieb -->
 
 ---
 
@@ -627,11 +627,11 @@ fehlerhafte Daten korrekt.
 
 | Variable | Standard | Beschreibung |
 |---|---|---|
-| `CUBE_DSN` | – | MariaDB-DSN (Pflicht, wenn `CUBE_DSN_FILE` nicht gesetzt) |
+| `CUBE_DSN` | - | MariaDB-DSN (Pflicht, wenn `CUBE_DSN_FILE` nicht gesetzt) |
 | `CUBE_DSN_FILE` | `/run/secrets/cube_dsn` | Alternative: DSN aus Datei (K8s Secrets) |
 | `SM_LOG_FORMAT` | `combined` | Log-Format: `combined`, `combined_vhost`, `common`, `custom` |
-| `SM_LOG_REGEX_CUSTOM` | – | Regex für `SM_LOG_FORMAT=custom` (8 Capture-Groups) |
-| `SM_TS_FORMAT_CUSTOM` | – | strptime-Format für `SM_LOG_FORMAT=custom` |
+| `SM_LOG_REGEX_CUSTOM` | - | Regex für `SM_LOG_FORMAT=custom` (8 Capture-Groups) |
+| `SM_TS_FORMAT_CUSTOM` | - | strptime-Format für `SM_LOG_FORMAT=custom` |
 | `SM_TABLE_CUBE` | `cube` | Tabellenname Cube (für abweichende Tabellennamen) |
 | `SM_TABLE_DAILY` | `daily` | Tabellenname Daily |
 | `SM_TABLE_META` | `meta` | Tabellenname Meta |
@@ -641,4 +641,4 @@ fehlerhafte Daten korrekt.
 | `STATE_DIR` | `../state/` | Offset-State + Lock + Metriken |
 | `LOG_DIR` | `../logs/import-logs/` | Import-Logs |
 | `SITES_CONF` | `./sites.conf` | Pfad zur Site-Liste |
-| `ALERT_EMAIL` / `ALERT_WEBHOOK` | – | Alarm-Kanäle für `notify.sh` (inline in `run_all.sh`) |
+| `ALERT_EMAIL` / `ALERT_WEBHOOK` | - | Alarm-Kanäle für `notify.sh` (inline in `run_all.sh`) |

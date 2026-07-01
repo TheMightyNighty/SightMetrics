@@ -1,4 +1,4 @@
-# Paket A – Ingestion-Container: DuckDB-Auswertung als nächtlicher one-shot/CronJob.
+# Paket A - Ingestion-Container: DuckDB-Auswertung als nächtlicher one-shot/CronJob.
 # Liest die Webserver-Logs, schreibt den Cube in die (externe) MariaDB-Cube-DB und
 # beendet sich wieder. Standard-Lauf = run_all.sh (alle Sites aus sites.conf).
 FROM debian:bookworm-slim

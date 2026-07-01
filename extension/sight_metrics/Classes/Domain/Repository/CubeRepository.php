@@ -10,7 +10,7 @@ use TYPO3\CMS\Core\Database\Query\QueryBuilder;
 
 /**
  * Liest die Cube-Tabellen ueber eine SEPARATE, read-only DB-Verbindung ('cube').
- * Kein Extbase, keine TCA – nur DBAL-SELECTs gegen aussenstehende Tabellen
+ * Kein Extbase, keine TCA - nur DBAL-SELECTs gegen aussenstehende Tabellen
  * (Abschnitt 11.1/11.4). Multi-Site: alle Lesezugriffe sind nach site_id gefiltert.
  */
 final class CubeRepository

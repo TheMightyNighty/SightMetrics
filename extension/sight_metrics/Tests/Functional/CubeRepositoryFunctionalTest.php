@@ -125,7 +125,7 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         $this->insertSite(1, 'Site-1', [
             ['dim' => 'browser', 'dimkey' => 'Chrome', 'pv' => 5, 'v' => 3],
         ]);
-        // Zeilen ausserhalb des Fensters (anderer Tag) – muessen ausgeschlossen werden.
+        // Zeilen ausserhalb des Fensters (anderer Tag) - muessen ausgeschlossen werden.
         $c = $this->cubeConn();
         $c->insert('daily', ['site_id' => 1, 'datum' => '2026-03-15', 'visits' => 9, 'pageviews' => 9, 'uniques' => 9, 'bounces' => 0, 'bytes' => 0]);
         $c->insert('cube', ['site_id' => 1, 'datum' => '2026-03-15', 'dim' => 'browser', 'dimkey' => 'Edge', 'pv' => 9, 'v' => 9]);

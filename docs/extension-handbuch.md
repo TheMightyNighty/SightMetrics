@@ -1,4 +1,4 @@
-# SightMetrics – Extension-Handbuch (Paket B)
+# SightMetrics - Extension-Handbuch (Paket B)
 
 TYPO3-Backend-Modul für Webzugriffsauswertung. Liest **ausschließlich read-only** die
 Cube-DB (MariaDB, User `report_ro`); kein DuckDB, kein Schreiben.
@@ -142,7 +142,7 @@ cd demo && docker compose up -d
 ```
 
 Die Demo nutzt einen `path`-Repository-Eintrag in `demo/app/composer.json`, sodass
-`sync-to-demo.sh` genügt – kein `composer update` für Klassen-Änderungen nötig.
+`sync-to-demo.sh` genügt - kein `composer update` für Klassen-Änderungen nötig.
 
 ---
 
@@ -166,7 +166,7 @@ $GLOBALS['TYPO3_CONF_VARS']['DB']['Connections']['cube'] = [
 ];
 ```
 
-**Sicherheitshinweis:** Passwort immer aus Umgebungsvariable oder Secret-Datei lesen –
+**Sicherheitshinweis:** Passwort immer aus Umgebungsvariable oder Secret-Datei lesen -
 niemals im Klartext in `additional.php` hinterlegen. Für Container: Env-Var via
 `docker-compose.yml` / Kubernetes Secret.
 
@@ -226,7 +226,7 @@ CUBE_DSN="..." ./load_cube.sh /logs/access.log "Behörde B" 2
 ```
 
 Beide schreiben in dieselbe `analytics`-Datenbank. TYPO3 zeigt im Modul
-nur die Sites, die über `sightmetrics_site_id` zugeordnet sind – bei
+nur die Sites, die über `sightmetrics_site_id` zugeordnet sind - bei
 Einzelzuordnung ohne Dropdown, bei mehreren mit Auswahl.
 
 ---
@@ -244,7 +244,7 @@ statt einer PHP-Exception. Konfiguration im TYPO3-Backend unter
 | `showTechnical` | `0` | Technische Fehlermeldung anzeigen (nur für Admins/Debug) |
 | `windowDays` | `92` | Serverseitiges Zeitfenster in Tagen: nur dieses Fenster wird aus der Cube-DB geladen (begrenzt das Transfervolumen unabhängig von der Retention). `0` = unbegrenzt. |
 
-Die Cube-Connection ist von der TYPO3-Hauptverbindung vollständig getrennt – ein
+Die Cube-Connection ist von der TYPO3-Hauptverbindung vollständig getrennt - ein
 Cube-DB-Ausfall nimmt das TYPO3-Backend nicht mit.
 
 ---
@@ -259,7 +259,7 @@ Config (§5); die GUI bietet die Site-Auswahl entsprechend an.
 > Eine Mandanten-/DB-Isolation über getrennte Datenbanken pro Mandant ist für diesen
 > Single-Instance-Betrieb **nicht nötig** und wurde bewusst nicht eingebaut. Sollte
 > später echte Mehrmandantentrennung gefordert sein, wäre „eigene DB + eigene
-> `cube`-Connection je Instanz" der Weg – die Extension bliebe unverändert.
+> `cube`-Connection je Instanz" der Weg - die Extension bliebe unverändert.
 
 ---
 
@@ -317,7 +317,7 @@ Klasse `sm-dark` am Wurzel-Container.
 
 ### KPI-Leiste
 
-Visits, Pageviews, Unique Visitors, Absprungrate, Gesamtbandbreite – immer für den
+Visits, Pageviews, Unique Visitors, Absprungrate, Gesamtbandbreite - immer für den
 gewählten Zeitraum und die gewählte Site.
 
 ### Perioden-Vergleich
@@ -328,18 +328,18 @@ Zeitraum gegen die **unmittelbar vorausgehende Periode gleicher Länge** verglic
 (grün = besser, rot = schlechter; bei der Absprungrate ist „runter" gut). Im Verlauf
 erscheint die Vorperiode als gestrichelte Referenzlinie (positionsweise Tag-zu-Tag).
 Hinweis: Liegt die Vorperiode ganz oder teilweise vor dem ersten Datenstand
-(`meta.von`), bleibt das Delta leer – verglichen wird nur über vollständig
+(`meta.von`), bleibt das Delta leer - verglichen wird nur über vollständig
 vorhandene Zeiträume (keine verzerrten Teilvergleiche). Bei voll gewähltem
 Gesamtzeitraum gibt es daher naturgemäß keine Vorperiode.
 
 ### Export
 
 Zwei Buttons in der Leiste, rein clientseitig (kein Server-Roundtrip, CSP-konform):
-- **CSV** – lädt den aktuellen Zeitraum als CSV herunter (UTF-8 mit BOM, `;`-getrennt,
+- **CSV** - lädt den aktuellen Zeitraum als CSV herunter (UTF-8 mit BOM, `;`-getrennt,
   Excel-kompatibel): Kopf (Site/Zeitraum/Stand), Verlauf je Tag und alle Dimensions-
   Auswertungen (Land, Browser, OS, Gerät, Referrer, Suchbegriffe, Seiten, Ein-/Ausstieg,
   Downloads, Status, Methode, Stunde). Dateiname `sightmetrics_<site>_<von>_<bis>.csv`.
-- **PDF** – öffnet den Browser-Druckdialog (》Als PDF speichern《). Ein Druck-Stylesheet
+- **PDF** - öffnet den Browser-Druckdialog (》Als PDF speichern《). Ein Druck-Stylesheet
   blendet die Bedienleiste aus und legt die Panels für den Ausdruck um.
 
 ### Auswertungs-Panels
@@ -430,7 +430,7 @@ Drei parallele Jobs (`.github/workflows/ci.yml`):
 | Job | Was | Matrix |
 |---|---|---|
 | `lint-and-unit` | PHPStan + TYPO3 CS + PHPUnit Unit | PHP 8.2, 8.3 |
-| `pipeline` | DuckDB transform.sql + Backup/Notify/Rotation/Lock | – |
+| `pipeline` | DuckDB transform.sql + Backup/Notify/Rotation/Lock | - |
 | `functional` | PHPUnit Functional Tests (SQLite, kein Docker) | PHP 8.2, 8.3 |
 
 Smoke- und E2E-Tests laufen nur lokal (brauchen Docker-Stack).
@@ -498,5 +498,5 @@ Im TYPO3-Backend unter **Admin-Tools → Benutzer → Benutzergruppen**: Modul
 ### Leere Auswertung obwohl Daten importiert
 
 - `site_id` in `sites.conf` muss mit der im Dropdown gewählten Site übereinstimmen.
-- Datums-Picker: Standard ist der aktuelle Monat – prüfen, ob Daten in diesem Zeitraum liegen.
+- Datums-Picker: Standard ist der aktuelle Monat - prüfen, ob Daten in diesem Zeitraum liegen.
 - `SELECT COUNT(*) FROM meta;` auf der Cube-DB prüfen.

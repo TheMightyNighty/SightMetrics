@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Alarmierung (E-Mail und/oder Webhook).
+# SightMetrics - Alarmierung (E-Mail und/oder Webhook).
 #
 # Verschickt eine Meldung an die konfigurierten Kanaele. Wird benutzt von:
-#   – run_all.sh (inline-Alarm bei fehlgeschlagenem Import)
-#   – manuell:   ./notify.sh CRIT "Import fuer site=3 fehlgeschlagen"
+#   - run_all.sh (inline-Alarm bei fehlgeschlagenem Import)
+#   - manuell:   ./notify.sh CRIT "Import fuer site=3 fehlgeschlagen"
 #
 # ALLES KONFIGURIERBAR ueber Env-Variablen:
 #   ALERT_EMAIL       Empfaenger-Adresse(n), kommagetrennt   (leer = kein Mail)
@@ -55,7 +55,7 @@ BODY="${LVL_NAME}: ${MSG} (Host: ${HOST}, $(date -u +%Y-%m-%dT%H:%M:%SZ))"
 
 # Unterhalb der Schwelle (z. B. OK bei MIN=WARN) -> nichts senden.
 if [ "$LVL" -lt "$MIN" ]; then
-  echo ">> notify: Level ${LVL_NAME} < Schwelle ${ALERT_MIN_LEVEL} – nichts gesendet."
+  echo ">> notify: Level ${LVL_NAME} < Schwelle ${ALERT_MIN_LEVEL} - nichts gesendet."
   exit 0
 fi
 

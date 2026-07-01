@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Alle Sites importieren (Orchestrator).
+# SightMetrics - Alle Sites importieren (Orchestrator).
 #
 # Liest sites.conf, ruft load_cube.sh pro Site auf, schreibt ein Log und
 # gibt am Ende eine Zusammenfassung aus.  Exit-Code 1 wenn mind. eine Site

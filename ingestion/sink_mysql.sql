@@ -1,5 +1,5 @@
 -- ===========================================================================
--- SightMetrics – Gemeinsamer MariaDB-Sink (Abschnitt 11).
+-- SightMetrics - Gemeinsamer MariaDB-Sink (Abschnitt 11).
 -- Erwartet die TEMP-Tabellen daily_rows / cube_rows (sink-neutral erzeugt) und
 -- ein per ATTACH ... (TYPE mysql) gemountetes Schema 'm'.
 -- Genutzt von:
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS m.${SM_TABLE_META}  (site_id INTEGER, site VARCHAR, v
 -- Vorrang hat ein explizit gesetzter Bereich range_from/range_to (Matomo-Pfad
 -- setzt hier den vollen --from/--to-Chunk, damit auch Tage OHNE neue Daten
 -- sauber geleert werden); sonst MIN/MAX der tatsaechlich erzeugten daily_rows
--- (Log-Pfad – range_* ist dort nicht gesetzt -> getvariable() = NULL).
+-- (Log-Pfad - range_* ist dort nicht gesetzt -> getvariable() = NULL).
 SET VARIABLE d_min = COALESCE(getvariable('range_from'), (SELECT MIN(datum)::VARCHAR FROM daily_rows), '1970-01-01');
 SET VARIABLE d_max = COALESCE(getvariable('range_to'),   (SELECT MAX(datum)::VARCHAR FROM daily_rows), '1970-01-01');
 SET VARIABLE sid   = getvariable('site_id')::INTEGER::VARCHAR;

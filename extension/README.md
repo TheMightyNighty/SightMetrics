@@ -1,8 +1,8 @@
-# Paket B – TYPO3-Reporting-Extension `sight_metrics`
+# Paket B - TYPO3-Reporting-Extension `sight_metrics`
 
 Das **TYPO3-v13-Backend-Modul „Logauswertung"**. Es liest die vorberechneten
 Auswertungsdaten (den „Cube") aus der MariaDB und stellt sie als interaktives
-Dashboard dar – Diagramme, Barlisten mit Drill-down, Weltkarte und Seitenbaum.
+Dashboard dar - Diagramme, Barlisten mit Drill-down, Weltkarte und Seitenbaum.
 
 Diese Extension ist der **Lese-Teil** von SightMetrics. Sie enthält **kein**
 DuckDB und schreibt **nichts** in die Datenbank: Sie greift ausschließlich
@@ -58,7 +58,7 @@ extension/
 
 ## Installation & Konfiguration (Kurzfassung)
 
-1. **Paket einbinden** – als Composer-Paket `sightmetrics/sight-metrics` (im Demo als
+1. **Paket einbinden** - als Composer-Paket `sightmetrics/sight-metrics` (im Demo als
    path-Repository eingebunden).
 2. **Cube-Connection** `cube` konfigurieren (Doctrine-Connection in `additional.php`),
    zeigend auf die Cube-DB mit dem **read-only**-User `report_ro`.
@@ -66,8 +66,8 @@ extension/
    Site-Konfiguration (siehe Multi-Site im Repo-README).
 4. Modul im Backend unter **Web → „Logauswertung"** öffnen.
 
-Die vollständige Anleitung – Installation, Connection, Site-Mapping, Fehlerseite,
-Versionsmatrix, Architektur, Troubleshooting – steht im
+Die vollständige Anleitung - Installation, Connection, Site-Mapping, Fehlerseite,
+Versionsmatrix, Architektur, Troubleshooting - steht im
 **[Extension-Handbuch](../docs/extension-handbuch.md)**.
 
 ---
@@ -80,5 +80,5 @@ Versionsmatrix, Architektur, Troubleshooting – steht im
 ./sync-to-demo.sh         # Extension ins laufende Wegwerf-TYPO3 deployen
 ```
 
-Die Extension ist offen für **TYPO3 v13.4 LTS und v14**, PHP 8.2–8.4. Im Backend-Modul
+Die Extension ist offen für **TYPO3 v13.4 LTS und v14**, PHP 8.2-8.4. Im Backend-Modul
 kommt [Apache ECharts](https://echarts.apache.org/) für die Diagramme zum Einsatz.

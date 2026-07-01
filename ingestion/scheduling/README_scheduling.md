@@ -1,9 +1,9 @@
-# Scheduling & Betrieb – SightMetrics Ingestion
+# Scheduling & Betrieb - SightMetrics Ingestion
 
 Betriebsmodell: **nächtlicher Wegwerf-Container.** Ein externer Scheduler
 (Kubernetes-CronJob, Docker-/Compose-Scheduler oder Host-Cron) startet den
 Container kurz, er importiert alle Sites (`run_all.sh`) und beendet sich wieder.
-Es läuft **kein systemd** im Container – Planung, Neustart und Alarm auf Exit-Code
+Es läuft **kein systemd** im Container - Planung, Neustart und Alarm auf Exit-Code
 übernimmt der Scheduler.
 
 ## Pflicht: State persistent halten
@@ -69,7 +69,7 @@ der Scheduler (CronJob/`backoffLimit`, Cron-MAILTO) meldet das. Zusätzlich ruft
 
 ## Freshness-Monitoring (lief der Import überhaupt?)
 
-Aus der **dauerhaft laufenden** TYPO3-Instanz prüfen – nicht aus dem Wegwerf-Container:
+Aus der **dauerhaft laufenden** TYPO3-Instanz prüfen - nicht aus dem Wegwerf-Container:
 
 ```bash
 vendor/bin/typo3 sightmetrics:health --warn-hours=26 --crit-hours=50 --json
@@ -80,7 +80,7 @@ Per TYPO3-Scheduler oder externem Monitoring (z. B. Uptime-Check) takten.
 
 ## Retention/Purge & Backup (gelegentlich)
 
-Kein eigener Daueranbieter nötig – als separater Scheduler-Job (z. B. monatlich):
+Kein eigener Daueranbieter nötig - als separater Scheduler-Job (z. B. monatlich):
 
 ```bash
 # Rollback-Punkt sichern, dann alte Daten löschen
@@ -89,7 +89,7 @@ RETENTION_MONTHS=12 CUBE_DSN_FILE=/run/secrets/cube_dsn ./purge_cube.sh
 ```
 
 > Hinweis: Liegt der Cube in **eurer** MariaDB, die ohnehin gesichert wird, ist
-> `backup_cube.sh` nur als gezielter Rollback-Punkt vor dem Purge nötig – das
+> `backup_cube.sh` nur als gezielter Rollback-Punkt vor dem Purge nötig - das
 > reguläre DB-Backup deckt den Cube bereits ab.
 
 ## Secrets-Rotation (bei Bedarf, manuell/orchestriert)

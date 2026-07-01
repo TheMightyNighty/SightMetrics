@@ -1,6 +1,6 @@
 <?php
 $EM_CONF[$_EXTKEY] = [
-    'title' => 'SightMetrics – Zugriffsauswertung',
+    'title' => 'SightMetrics - Zugriffsauswertung',
     'description' => 'Backend-Modul: liest read-only die DuckDB-Cube-DB und zeigt die Auswertung (Verlauf, Seitenbaum, Geo/Technik, Top-Listen).',
     'category' => 'module',
     'author' => 'SightMetrics',

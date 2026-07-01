@@ -1,4 +1,4 @@
-# SightMetrics – Site-Konfiguration
+# SightMetrics - Site-Konfiguration
 # Format: site_id<TAB>logfile<TAB>site_name
 # Leerzeilen und Zeilen mit # werden ignoriert.
 # Kopiere diese Datei nach sites.conf und passe sie an.

@@ -1,5 +1,5 @@
 -- ===========================================================================
--- SightMetrics – Auswertungslogik (sink-neutral). Parse -> Sessionisierung -> Cube.
+-- SightMetrics - Auswertungslogik (sink-neutral). Parse -> Sessionisierung -> Cube.
 -- Erzeugt die TEMP-Tabellen cube_rows / daily_rows / meta_row.
 -- Genutzt von cube_to_mysql.sql (Import) UND tests/pipeline_test.sql.
 -- Parameter (SET VARIABLE): logpath, geopath, site_name, tagessalt

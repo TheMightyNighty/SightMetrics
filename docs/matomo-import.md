@@ -1,12 +1,12 @@
 # Matomo-Altdaten-Import
 
 Einmaliger Import historischer Analytics-Daten aus einer bestehenden
-**Matomo**-Installation in den SightMetrics-Cube – pro Kundensite, typischerweise
+**Matomo**-Installation in den SightMetrics-Cube - pro Kundensite, typischerweise
 einmal beim Onboarding („die Kunden wollen ihre alten Daten sehen").
 
 Der Import nutzt **Matomos Reporting-API** (JSON), nicht die Rohlogs. Damit
 funktioniert er auch dann, wenn die Roh-Trackingdaten in Matomo längst per
-Aufbewahrungsregel gelöscht wurden – die aggregierten Report-Archive bleiben
+Aufbewahrungsregel gelöscht wurden - die aggregierten Report-Archive bleiben
 erhalten und genau die liefert die API.
 
 ---
@@ -32,7 +32,7 @@ sich die Zeiträume nicht überschneiden, stören sich die beiden Pfade nicht:
 ```
 
 Praxis: Matomo-Import bis zum Tag **vor** Beginn des Log-Imports laufen lassen.
-Überschneiden sich Tage, gewinnt der zuletzt geschriebene Lauf für diese Tage –
+Überschneiden sich Tage, gewinnt der zuletzt geschriebene Lauf für diese Tage -
 beide Quellen sind für denselben Tag nicht additiv, sondern ersetzend.
 
 ---
@@ -137,9 +137,9 @@ Pro Dimension ein Report → `cube` (`pv` ← Pageviews, `v` ← Visits):
 
 ## Skalierung (Sites mit Millionen Hits/Tag)
 
-Der Import zieht **Aggregate**, keine Rohzeilen – ein Tag mit 2 Mio. Hits ergibt
+Der Import zieht **Aggregate**, keine Rohzeilen - ein Tag mit 2 Mio. Hits ergibt
 nur so viele Cube-Zeilen wie es distinkte Dimensionswerte gibt. Damit bleibt der
-Ansatz auch über 4–5 Jahre handhabbar.
+Ansatz auch über 4-5 Jahre handhabbar.
 
 * **Monats-Chunking:** Pro Monat ein API-Call je Report (`period=day` + Range
   liefert die Tage einzeln gebucketet). 5 Jahre ≈ 60 Chunks × 12 Reports.
@@ -153,7 +153,7 @@ Ansatz auch über 4–5 Jahre handhabbar.
   ```
 
 * **Archiving:** Trifft ein Call einen in Matomo noch **nicht archivierten**
-  Alt-Zeitraum, archiviert Matomo on-the-fly – bei großen Sites auf dem
+  Alt-Zeitraum, archiviert Matomo on-the-fly - bei großen Sites auf dem
   Matomo-Server spürbar. Historische Zeiträume sind i. d. R. längst archiviert;
   falls nicht, vorab beim Kunden `./console core:archive` laufen lassen.
 
@@ -162,7 +162,7 @@ Ansatz auch über 4–5 Jahre handhabbar.
 ## Wiederholbarkeit
 
 Der Import ist **idempotent**: ein erneuter Lauf für denselben Zeitraum ersetzt
-die betroffenen Tage (Bereichs-DELETE im Sink, dann INSERT) – die Zahlen werden
+die betroffenen Tage (Bereichs-DELETE im Sink, dann INSERT) - die Zahlen werden
 **nicht doppelt**, es entstehen keine Duplikate. Ein abgebrochener Lauf kann
 gefahrlos wiederholt werden.
 
@@ -180,7 +180,7 @@ statt mit veralteten Werten stehen zu bleiben.
 ## Fehlerbehandlung
 
 * Einzelne fehlschlagende Reports (HTTP-Fehler oder `"result":"error"`) werden zu
-  `{}` degradiert und mit `WARN` geloggt – der Import läuft weiter, die betroffene
+  `{}` degradiert und mit `WARN` geloggt - der Import läuft weiter, die betroffene
   Dimension bleibt für den Chunk leer. Mit `--json-dir` lassen sich die
   Rohantworten nachträglich inspizieren.
 * `--dry-run` zum Prüfen von Zugang/Token/Mapping ohne DB-Schreibzugriff.

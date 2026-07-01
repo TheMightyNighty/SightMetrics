@@ -2160,7 +2160,7 @@
             "license": [
                 "GPL-2.0-or-later"
             ],
-            "description": "SightMetrics – Zugriffsauswertung als TYPO3-Backend-Modul (read-only auf die Cube-DB)",
+            "description": "SightMetrics - Zugriffsauswertung als TYPO3-Backend-Modul (read-only auf die Cube-DB)",
             "transport-options": {
                 "relative": true
             }

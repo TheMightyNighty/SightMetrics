@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Matomo-Altdaten-Import (einmalig pro Kundensite).
+# SightMetrics - Matomo-Altdaten-Import (einmalig pro Kundensite).
 #
 # Zieht historische Reports aus Matomos Reporting-API (JSON) und schreibt sie
 # in dieselbe Cube-/Daily-/Meta-DB wie der taegliche Log-Import. Laeuft
-# unabhaengig neben load_cube.sh – der taegliche Log-Import bleibt der
+# unabhaengig neben load_cube.sh - der taegliche Log-Import bleibt der
 # fortlaufende Schreiber, dieser Import fuellt nur die Vergangenheit auf.
 #
 # Aggregat-basiert: skaliert auch fuer Sites mit Millionen Hits/Tag, da die

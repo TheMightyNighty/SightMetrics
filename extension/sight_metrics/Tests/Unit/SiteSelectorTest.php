@@ -96,12 +96,12 @@ final class SiteSelectorTest extends TestCase
         self::assertSame([5], SiteSelector::allowedSiteIds($finder));
     }
 
-    /** Die allowedSiteIds-Tests mocken TYPO3-Klassen – im TYPO3-freien Phar-Runner überspringen. */
+    /** Die allowedSiteIds-Tests mocken TYPO3-Klassen - im TYPO3-freien Phar-Runner überspringen. */
     protected function setUp(): void
     {
         parent::setUp();
         if (str_starts_with($this->name(), 'testAllowedSiteIds') && !class_exists(SiteFinder::class)) {
-            self::markTestSkipped('TYPO3 (SiteFinder/Site) im Unit-Runner nicht verfügbar – Abdeckung via CI/Functional.');
+            self::markTestSkipped('TYPO3 (SiteFinder/Site) im Unit-Runner nicht verfügbar - Abdeckung via CI/Functional.');
         }
     }
 

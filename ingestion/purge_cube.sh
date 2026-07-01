@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Retention/Purge: loescht Cube-Daten aelter als N Monate.
+# SightMetrics - Retention/Purge: loescht Cube-Daten aelter als N Monate.
 # Meta wird NICHT gepurgt; sie wird beim naechsten load_cube.sh-Lauf
 # automatisch aus den verbleibenden Daily-Daten neu berechnet.
 #
@@ -44,7 +44,7 @@ DSN="${CUBE_DSN:?Fehler: CUBE_DSN nicht gesetzt. Setze CUBE_DSN oder lege die Se
 CUTOFF=$(date -d "-${RETENTION_MONTHS} months" +%Y-%m-%d)
 echo ">> SightMetrics Purge: Daten vor ${CUTOFF} (RETENTION_MONTHS=${RETENTION_MONTHS})"
 echo ">> Tabellen: ${SM_TABLE_CUBE}, ${SM_TABLE_DAILY}"
-[ -n "$PURGE_DRY_RUN" ] && echo ">> DRY RUN – nur Zählung, kein Löschen."
+[ -n "$PURGE_DRY_RUN" ] && echo ">> DRY RUN - nur Zählung, kein Löschen."
 
 # ---- Vorher zählen ---------------------------------------------------------
 "$DUCKDB" <<SQL

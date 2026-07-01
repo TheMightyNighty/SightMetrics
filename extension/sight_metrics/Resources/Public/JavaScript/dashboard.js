@@ -1,4 +1,4 @@
-/* SightMetrics – TYPO3-Backend-Modul. Liest den CSP-sicheren JSON-Datenblock
+/* SightMetrics - TYPO3-Backend-Modul. Liest den CSP-sicheren JSON-Datenblock
    (read-only DBAL aus der Cube-DB) und rendert client-seitig. Matomo-nah:
    Barlisten mit Drill-down (Klick -> Subtabelle) + Choropleth-Weltkarte. */
 (function () {
@@ -103,7 +103,7 @@
   }
   function firstSeg(k) { var i = k.indexOf(SEP); return i < 0 ? k : k.slice(0, i); }
   function lastSeg(k) { var i = k.lastIndexOf(SEP); return i < 0 ? k : k.slice(i + 1); }
-  // Kind-Zeilen (volle Keys) einer Eltern-Kategorie – Eltern via SEP kodiert
+  // Kind-Zeilen (volle Keys) einer Eltern-Kategorie - Eltern via SEP kodiert
   function childrenOf(childDim, parentLabel, a, b, metric) {
     return agg(childDim, a, b, metric).filter(function (r) { return firstSeg(r.key) === parentLabel; });
   }
@@ -209,7 +209,7 @@
     $('k-visits').textContent = nf(visits);
     $('k-uniq').textContent = (full ? '' : '~') + nf(full ? (META.uniques_total || sum('uniques')) : sum('uniques'));
     $('k-pv').textContent = nf(sum('pageviews'));
-    $('k-bounce').textContent = visits ? bounceRate.toFixed(1) + ' %' : '–';
+    $('k-bounce').textContent = visits ? bounceRate.toFixed(1) + ' %' : '-';
     $('k-band').textContent = fmtBytes(sum('bytes'));
 
     // Perioden-Vergleich: Deltas gegen die unmittelbar vorausgehende Periode gleicher Länge.
@@ -332,7 +332,7 @@
       sel.onchange = function () { var u = new URL(location.href); u.searchParams.set('site', sel.value); location.href = u.toString(); };
       if (sites.length < 2) sel.style.display = 'none';   // bei nur einer Site keine Auswahl nötig
     }
-    // Server liefert nur ein Zeitfenster (DATA.window) – das begrenzt das Transfervolumen.
+    // Server liefert nur ein Zeitfenster (DATA.window) - das begrenzt das Transfervolumen.
     // Der Picker spannt aber den ganzen Datenbestand (meta.von/bis); Auswahl ausserhalb des
     // geladenen Fensters laedt das passende Fenster nach (Reload), innerhalb wird sofort gefiltert.
     var WIN = DATA.window || {von: META.von, bis: META.bis};
@@ -378,7 +378,7 @@
       else if (/^year:/.test(v)) { var y = +v.slice(5); setRange(ymd(y, 1, 1), ymd(y, 12, 31)); }
       // 'custom' -> keine Aktion (manuelle von/bis-Eingabe)
     }
-    // Custom-Eingaben (von/bis/Monat) nur im Modus „Benutzerdefiniert" zeigen –
+    // Custom-Eingaben (von/bis/Monat) nur im Modus „Benutzerdefiniert" zeigen -
     // sonst ist nur das eine Zeitraum-Dropdown sichtbar (nicht nebeneinander).
     function toggleCustom() { var c = $('w-custom'); if (c) c.hidden = ($('w-preset').value !== 'custom'); }
     function buildPresets() {

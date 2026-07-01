@@ -1,9 +1,9 @@
-# Paket A – Ingestion / Auswertung (DuckDB)  ·  der betriebliche Teil
+# Paket A - Ingestion / Auswertung (DuckDB)  ·  der betriebliche Teil
 
 Dies ist der **Schreib-Teil** von SightMetrics: Er liest Webserver-Logs, rechnet sie
 mit **[DuckDB](https://duckdb.org/)** zu Tages-Aggregaten herunter und schreibt diese
 in die MariaDB **Cube-DB** (`analytics`, Writer-User `cube_rw`). Paket A ist der
-**einzige Schreiber** der Cube-DB – die TYPO3-Extension (Paket B) liest nur.
+**einzige Schreiber** der Cube-DB - die TYPO3-Extension (Paket B) liest nur.
 → Gesamtüberblick: [Repo-README](../README.md).
 
 ---
@@ -19,9 +19,9 @@ DuckDB erledigt das gesamte „Heavy Lifting" in C (Parsen, GeoIP-Join,
 Sessionisierung, Aggregation) im Speicher und schreibt nur das fertige Ergebnis
 per `ATTACH` in die MariaDB. Pro Site landet das Ergebnis in drei Tabellen:
 
-- `cube(site_id, datum, dim, dimkey, pv, v)` – pro Tag/Dimension/Ausprägung Pageviews + Visits
-- `daily(site_id, datum, visits, pageviews, uniques, bounces, bytes)` – Tageskennzahlen
-- `meta(site_id, …)` – Gesamt-Metadaten je Site (Zeitraum, Summen)
+- `cube(site_id, datum, dim, dimkey, pv, v)` - pro Tag/Dimension/Ausprägung Pageviews + Visits
+- `daily(site_id, datum, visits, pageviews, uniques, bounces, bytes)` - Tageskennzahlen
+- `meta(site_id, …)` - Gesamt-Metadaten je Site (Zeitraum, Summen)
 
 Der Import ist **inkrementell** (Byte-Offset je Logdatei) und **idempotent pro Site**:
 Der Cube-Schreibteil ersetzt immer nur den verarbeiteten Datumsbereich, mehrfaches
@@ -56,7 +56,7 @@ Laufen verdoppelt nichts.
   oder `CUBE_DSN_FILE` (Docker-Secret-Pattern). Im Demo stellt der `demo/`-Stack das bereit.
 - Die mitgelieferte `bin/duckdb` (kein System-DuckDB nötig).
 - Logs im **Combined/Common Log Format** (Apache/nginx); andere Formate via
-  `SM_LOG_FORMAT` / eigener Regex – siehe Runbook.
+  `SM_LOG_FORMAT` / eigener Regex - siehe Runbook.
 
 ---
 
@@ -83,7 +83,7 @@ cd ../demo && docker compose --profile import run --rm ingestion
 Nächtlicher Wegwerf-Container, persistentes `STATE_DIR`-Volume (Offsets/Locks/Metriken),
 DSN als Laufzeit-Secret, Scheduling, Monitoring/Alarm, Retention, Log-Rotation, Recovery:
 
-- **[`scheduling/README_scheduling.md`](scheduling/README_scheduling.md)** – Scheduling-Vorlagen
-- **[Ingestion-Runbook](../docs/ingestion-runbook.md)** – vollständige Betriebsdoku
+- **[`scheduling/README_scheduling.md`](scheduling/README_scheduling.md)** - Scheduling-Vorlagen
+- **[Ingestion-Runbook](../docs/ingestion-runbook.md)** - vollständige Betriebsdoku
   (Cube-DB anlegen, Secrets, Log-Formate, Parallelisierung, Datenschutz/BSI, Rollback,
   wichtige ENV-Variablen).

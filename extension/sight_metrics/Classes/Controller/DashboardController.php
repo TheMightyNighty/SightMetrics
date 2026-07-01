@@ -20,7 +20,7 @@ use TYPO3\CMS\Core\Site\SiteFinder;
  *
  * Liest ausschliesslich (read-only) aus der Cube-DB und reicht die Daten als
  * JSON an das Frontend (ECharts) durch. Die teure Aggregation hat die DuckDB-
- * Pipeline schon erledigt – hier passiert nur SELECT + Rendering.
+ * Pipeline schon erledigt - hier passiert nur SELECT + Rendering.
  */
 final class DashboardController
 {

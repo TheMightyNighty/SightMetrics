@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Backup der Cube-DB (Rollback-Punkt, u. a. vor dem Purge).
+# SightMetrics - Backup der Cube-DB (Rollback-Punkt, u. a. vor dem Purge).
 #
 # Erstellt einen mysqldump der Cube-Tabellen, komprimiert ihn und haelt nur
 # die letzten N Dumps vor (Rotation). Dient als Rollback-Sicherung vor dem
@@ -45,7 +45,7 @@ BACKUP_EXTRA_ARGS="${BACKUP_EXTRA_ARGS:-}"
 BACKUP_DRY_RUN="${BACKUP_DRY_RUN:-}"
 STATE_DIR="${STATE_DIR:-${REPO}/state}"
 
-# An/aus konfigurierbar – sauberer No-op, wenn deaktiviert.
+# An/aus konfigurierbar - sauberer No-op, wenn deaktiviert.
 case "${BACKUP_ENABLED,,}" in
   0|false|no|off) echo ">> Backup deaktiviert (BACKUP_ENABLED=${BACKUP_ENABLED}). Uebersprungen."; exit 0 ;;
 esac
@@ -92,7 +92,7 @@ echo ">> DB ${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME} | Tabellen: ${BACKUP_TAB
 echo ">> Ziel: ${OUT} | Kompression: ${BACKUP_COMPRESS} | Retention: ${BACKUP_RETENTION}"
 
 if [ -n "$BACKUP_DRY_RUN" ]; then
-  echo ">> DRY RUN – kein Dump, keine Rotation."
+  echo ">> DRY RUN - kein Dump, keine Rotation."
   exit 0
 fi
 

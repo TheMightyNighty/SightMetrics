@@ -1,7 +1,7 @@
 {
     "name": "sightmetrics/sight-metrics",
     "type": "typo3-cms-extension",
-    "description": "SightMetrics – Zugriffsauswertung als TYPO3-Backend-Modul (read-only auf die Cube-DB)",
+    "description": "SightMetrics - Zugriffsauswertung als TYPO3-Backend-Modul (read-only auf die Cube-DB)",
     "license": "GPL-2.0-or-later",
     "require": {
         "php": "^8.2",

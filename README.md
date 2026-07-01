@@ -1,14 +1,14 @@
-# SightMetrics – datensparsame Webzugriffs-Auswertung
+# SightMetrics - datensparsame Webzugriffs-Auswertung
 
 SightMetrics wertet **Webserver-Logs** (Apache/nginx) aus und stellt die Ergebnisse
-als Dashboard in einem **TYPO3-Backend-Modul** dar – ohne JavaScript-Tracker, ohne
+als Dashboard in einem **TYPO3-Backend-Modul** dar - ohne JavaScript-Tracker, ohne
 Cookies, ohne dass Besucherdaten das eigene System verlassen.
 
 Statt jeden einzelnen Seitenaufruf über eine Tracking-API zu erfassen (wie z. B.
 Matomo es tut), liest SightMetrics die ohnehin vorhandenen Logdateien, rechnet sie
 **einmalig mit [DuckDB](https://duckdb.org/)** zu kompakten Tages-Aggregaten
 („Cubes") herunter und legt nur diese in einer Datenbank ab. Das ist schnell,
-ressourcenschonend und **datenschutzfreundlich** – ein Entwurf, der besonders für
+ressourcenschonend und **datenschutzfreundlich** - ein Entwurf, der besonders für
 Behörden und den öffentlichen Sektor (DSGVO/BSI) gedacht ist.
 
 ---
@@ -26,7 +26,7 @@ Behörden und den öffentlichen Sektor (DSGVO/BSI) gedacht ist.
 ```
 
 - **Paket A schreibt** den Cube (DB-User `cube_rw`), **Paket B liest nur** (`report_ro`, ausschließlich `SELECT`).
-- Die beiden Pakete teilen sich **keinen Code**, nur die Datenbank – eine bewusste Architektur-Grenze (Konzept §11).
+- Die beiden Pakete teilen sich **keinen Code**, nur die Datenbank - eine bewusste Architektur-Grenze (Konzept §11).
 
 ---
 
@@ -37,7 +37,7 @@ Behörden und den öffentlichen Sektor (DSGVO/BSI) gedacht ist.
 | **Cube** | Vorab aggregierte Auswertungsdaten in der MariaDB. Tabelle `cube(site_id, datum, dim, dimkey, pv, v)`: pro Tag, pro Dimension, pro Ausprägung die Pageviews (`pv`) und Visits (`v`). |
 | **Dimension (`dim`)** | Auswertungsachse, z. B. `url`, `country`, `browser`, `os`, `device`, `referrer_type`, `keyword`, `hour`, `entry`/`exit`, `download`, `status`, `method`. |
 | **`daily` / `meta`** | Tageskennzahlen (Visits, Pageviews, Unique Visitors, Bounces, Bytes) bzw. Gesamt-Metadaten je Site. |
-| **Sessionisierung** | Gruppierung von Einzel-Hits zu Besuchen (Visits) anhand von IP+User-Agent und 30-Minuten-Inaktivität – passiert in DuckDB, nicht in der DB. |
+| **Sessionisierung** | Gruppierung von Einzel-Hits zu Besuchen (Visits) anhand von IP+User-Agent und 30-Minuten-Inaktivität - passiert in DuckDB, nicht in der DB. |
 | **Site / `site_id`** | Eine ausgewertete Website. Mehrere Sites liegen mit unterschiedlicher `site_id` in **einer** Cube-DB (Multi-Site). |
 
 ---
@@ -46,8 +46,8 @@ Behörden und den öffentlichen Sektor (DSGVO/BSI) gedacht ist.
 
 | Pfad | Inhalt |
 |------|--------|
-| `ingestion/` | **Paket A – Ingestion/Auswertung (DuckDB)**, der betriebliche Teil. Log-Parser, Aggregations-SQL, Import-Skripte, GeoIP-Daten, das DuckDB-Binary. Einziger Schreiber der Cube-DB. → [`ingestion/README.md`](ingestion/README.md) |
-| `extension/` | **Paket B – TYPO3-Reporting-Extension** `sight_metrics`. Read-only-Backend-Modul, kein DuckDB. → [`extension/README.md`](extension/README.md) |
+| `ingestion/` | **Paket A - Ingestion/Auswertung (DuckDB)**, der betriebliche Teil. Log-Parser, Aggregations-SQL, Import-Skripte, GeoIP-Daten, das DuckDB-Binary. Einziger Schreiber der Cube-DB. → [`ingestion/README.md`](ingestion/README.md) |
+| `extension/` | **Paket B - TYPO3-Reporting-Extension** `sight_metrics`. Read-only-Backend-Modul, kein DuckDB. → [`extension/README.md`](extension/README.md) |
 | `demo/` | **Wegwerf-Stack** zum Ausprobieren: TYPO3 v13 + MariaDB (Cube-DB) per Docker Compose. Nicht für Produktion. |
 | `docs/` | Ausführliche Dokumentation: [Extension-Handbuch](docs/extension-handbuch.md) (Entwickler/Admin) · [Ingestion-Runbook](docs/ingestion-runbook.md) (Ops/Betrieb) · [Matomo-Import](docs/matomo-import.md). |
 | `logs/` | Beispiel-/Test-Logs. |
@@ -90,7 +90,7 @@ und das [Ingestion-Runbook](docs/ingestion-runbook.md).
 
 ## Altdaten aus Matomo übernehmen
 
-Wer von Matomo umsteigt, kann die **historischen Daten einmalig pro Site** übernehmen –
+Wer von Matomo umsteigt, kann die **historischen Daten einmalig pro Site** übernehmen -
 über Matomos Reporting-API, ohne Rohlogs. Funktioniert auch dann, wenn Matomos
 Roh-Trackingdaten längst gelöscht sind, und skaliert für Sites mit Millionen Hits/Tag:
 
@@ -140,5 +140,5 @@ extension/sync-to-demo.sh # Extension ins Wegwerf-TYPO3 deployen
 
 ## Technologie-Stack
 
-TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.4 (statisches Binary in `ingestion/bin/`) ·
+TYPO3 v13.4 LTS / v14 · PHP 8.2-8.4 · DuckDB 1.5.4 (statisches Binary in `ingestion/bin/`) ·
 MariaDB · [Apache ECharts](https://echarts.apache.org/) (Charts im Backend-Modul).

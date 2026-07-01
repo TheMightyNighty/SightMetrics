@@ -152,7 +152,7 @@ echo "${FILE_SIZE}:${CURRENT_INODE}" > "$STATE_FILE"
 echo ">> Offset gespeichert: ${FILE_SIZE} Byte (Inode ${CURRENT_INODE}, Site ${SITEID})"
 
 # ---- Metriken schreiben (für Monitoring / Alerting) -----------------------
-# site_N.last: letzter Lauf (Overwrite) – Status/Zeitstempel des letzten Imports.
+# site_N.last: letzter Lauf (Overwrite) - Status/Zeitstempel des letzten Imports.
 # metrics.log: kumulatives Append aller Läufe.
 METRICS_LAST="${STATE_DIR}/site_${SITEID}.last"
 METRICS_LOG="${STATE_DIR}/metrics.log"

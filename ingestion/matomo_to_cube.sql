@@ -1,5 +1,5 @@
 -- ===========================================================================
--- SightMetrics – Matomo-Altdaten-Import: Reporting-API-JSON -> cube_rows/daily_rows.
+-- SightMetrics - Matomo-Altdaten-Import: Reporting-API-JSON -> cube_rows/daily_rows.
 -- Compute-Teil des Matomo-Pfads (analog zu cube_to_mysql.sql beim Log-Pfad).
 -- Erzeugt dieselben TEMP-Tabellen daily_rows / cube_rows; der gemeinsame
 -- MariaDB-Sink (sink_mysql.sql) wird von matomo_import.sh angehaengt.

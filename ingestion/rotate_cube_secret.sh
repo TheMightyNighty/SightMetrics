@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Secrets-Rotation für den Cube-DB-Zugang.
+# SightMetrics - Secrets-Rotation für den Cube-DB-Zugang.
 #
 # Setzt das Passwort des DB-Users neu (ALTER USER) und schreibt die DSN-
 # Secret-Datei ATOMAR neu. Da load_cube.sh/run_all.sh/purge_cube.sh/backup_cube.sh
@@ -9,7 +9,7 @@
 #
 # Rotiert den Ingestion-User (Standard: der User aus dem aktuellen DSN, z. B. cube_rw).
 # Den read-only-Reporting-User (report_ro) rotiert man separat und passt dann die
-# TYPO3-Connection an (config/system/additional.php) – siehe Runbook §6.
+# TYPO3-Connection an (config/system/additional.php) - siehe Runbook §6.
 #
 # KONFIGURATION (Env):
 #   CUBE_DSN_FILE          Ziel-/Quell-Secret-Datei (Pflicht)
@@ -76,7 +76,7 @@ echo ">> Ziel-Secret: ${TARGET}  (Backups: ${KEEP})"
 echo ">> Neues DSN: $(sed -E 's/password=[^[:space:]]+/'"$MASK"'/' <<<"$NEW_DSN")"
 
 if [ -n "${ROTATE_DRY_RUN:-}" ]; then
-  echo ">> DRY RUN – keine DB-Änderung, keine Datei geschrieben."
+  echo ">> DRY RUN - keine DB-Änderung, keine Datei geschrieben."
   exit 0
 fi
 
@@ -100,7 +100,7 @@ if [ -z "${ROTATE_SKIP_DB:-}" ]; then
     | "$MYSQL" --defaults-extra-file="$ADMCNF"
   echo ">> DB-Passwort gesetzt."
 else
-  echo ">> ROTATE_SKIP_DB=1 – DB nicht geändert, nur Datei wird neu geschrieben."
+  echo ">> ROTATE_SKIP_DB=1 - DB nicht geändert, nur Datei wird neu geschrieben."
 fi
 
 # ---- Secret-Datei atomar ersetzen (mit Backup) -----------------------------
@@ -123,7 +123,7 @@ if [ -z "${ROTATE_SKIP_DB:-}" ]; then
   if echo 'SELECT 1;' | "$MYSQL" --defaults-extra-file="$VCNF" >/dev/null 2>&1; then
     echo ">> Verifikation OK: Login mit neuem Passwort erfolgreich."
   else
-    echo "WARN: Verifikation fehlgeschlagen – bitte Zugang prüfen." >&2
+    echo "WARN: Verifikation fehlgeschlagen - bitte Zugang prüfen." >&2
   fi
   rm -f "$VCNF"
 fi
