@@ -116,13 +116,19 @@ set +e
   --single-transaction --no-tablespaces --skip-lock-tables \
   $BACKUP_EXTRA_ARGS \
   "$DB_NAME" $BACKUP_TABLES | $COMP_CMD > "$OUT"
-rc=${PIPESTATUS[0]}
+rc=("${PIPESTATUS[@]}")   # atomar in EINEM Befehl sichern (sonst ueberschreibt
+rc_dump="${rc[0]}"        # das Auslesen von PIPESTATUS[0] bereits PIPESTATUS[1])
+rc_comp="${rc[1]}"
 set -e
 
-if [ "$rc" -ne 0 ]; then
-  echo "Fehler: mysqldump fehlgeschlagen (rc=${rc})." >&2
+# Beide Pipe-Stufen pruefen: mysqldump UND die Kompression (gzip/zstd) koennen
+# unabhaengig voneinander fehlschlagen (z. B. Platte voll waehrend gzip
+# schreibt) - nur mysqldump zu pruefen haette ein stillschweigend kaputtes/
+# abgeschnittenes Backup als Erfolg gemeldet.
+if [ "$rc_dump" -ne 0 ] || [ "$rc_comp" -ne 0 ]; then
+  echo "Fehler: Backup fehlgeschlagen (mysqldump rc=${rc_dump}, ${BACKUP_COMPRESS} rc=${rc_comp})." >&2
   rm -f "$OUT"
-  exit "$rc"
+  exit "$(( rc_dump != 0 ? rc_dump : rc_comp ))"
 fi
 
 SIZE=$(wc -c < "$OUT")
