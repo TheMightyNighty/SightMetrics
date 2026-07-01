@@ -197,13 +197,21 @@ while [ "$page" -lt "$max_pages" ]; do
   cursor=$((page_max_ts + 1))
   [ "$cursor" -gt "$END_NS" ] && break
 done
+# State-Obergrenze: im Normalfall END_NS (Fenster komplett geleert). Wird der
+# max_pages-Guard erreicht, ist das Fenster NICHT vollstaendig abgeholt -> State
+# nur bis zum zuletzt tatsaechlich verarbeiteten Zeitstempel (max_ts) fortschreiben,
+# sonst wuerden die nicht abgeholten restlichen Zeilen dieses Fensters fuer immer
+# uebersprungen (naechster Lauf faengt einfach dort weiter, wo aufgehoert wurde).
+STATE_NS="$END_NS"
 if [ "$page" -ge "$max_pages" ]; then
-  echo ">> Warnung: max_pages (${max_pages}) erreicht – evtl. mehr Daten im Fenster als geholt." >&2
+  echo ">> Warnung: max_pages (${max_pages}) erreicht – Fenster nicht vollstaendig abgeholt." >&2
+  echo "   Setze State nur bis zum letzten abgeholten Zeitstempel (${max_ts}), nicht bis Fensterende." >&2
+  STATE_NS="$max_ts"
 fi
 
 if [ "$total" -eq 0 ]; then
   echo ">> Keine neuen Zeilen im Fenster."
-  echo "$END_NS" > "$TS_FILE"
+  echo "$STATE_NS" > "$TS_FILE"
   exit 0
 fi
 echo ">> ${total} neue Zeile(n) geholt -> direkt an DuckDB gestreamt (keine Zwischendatei)."
@@ -246,5 +254,5 @@ printf 'ts=%s site_id=%s status=ok wall_s=%s new_lines=%s source=loki query=%s\n
   | tee "$METRICS_LAST" >> "$METRICS_LOG"
 
 # ---- State erst nach erfolgreichem Import fortschreiben ---------------------
-echo "$END_NS" > "$TS_FILE"
-echo ">> Loki-State aktualisiert (bis ${END_NS} ns)."
+echo "$STATE_NS" > "$TS_FILE"
+echo ">> Loki-State aktualisiert (bis ${STATE_NS} ns)."
