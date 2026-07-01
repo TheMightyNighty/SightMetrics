@@ -169,6 +169,12 @@ CURL_HEADERS=()
 echo ">> Hole neue Zeilen aus Loki: ${LOKI_QUERY}"
 LINES=""
 cursor="$START_NS"
+# Loki behandelt den Bereich als [start, end) - start inklusiv, end EXKLUSIV
+# (empirisch verifiziert). Damit eine Zeile mit Zeitstempel exakt END_NS nicht
+# dauerhaft verloren geht (naechster Lauf beginnt sonst bei END_NS+1, also
+# ebenfalls daran vorbei), wird mit END_NS+1 als 'end' abgefragt -> deckt das
+# gewuenschte inklusive Intervall [START_NS, END_NS] vollstaendig ab.
+QUERY_END_NS=$((END_NS + 1))
 total=0
 max_ts=0
 page=0
@@ -179,7 +185,7 @@ while [ "$page" -lt "$max_pages" ]; do
     "${CURL_HEADERS[@]}" \
     --data-urlencode "query=${LOKI_QUERY}" \
     --data-urlencode "start=${cursor}" \
-    --data-urlencode "end=${END_NS}" \
+    --data-urlencode "end=${QUERY_END_NS}" \
     --data-urlencode "limit=${LOKI_LIMIT}" \
     --data-urlencode "direction=forward")
 
