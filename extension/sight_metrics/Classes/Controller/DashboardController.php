@@ -80,10 +80,19 @@ final class DashboardController
         }
 
         // Erfolgsfall: Daten als CSP-sicherer JSON-Datenblock + Assets.
+        // JSON_INVALID_UTF8_SUBSTITUTE: url/referrer/ua stammen roh aus Webserver-Logs
+        // und koennen ungueltige UTF-8-Bytes enthalten (z. B. Bots) - ohne dieses Flag
+        // liefert json_encode() dann false, was hier NICHT mehr abgefangen wuerde
+        // (das try/catch oben ist zu diesem Zeitpunkt schon vorbei).
         $json = json_encode(
             $payload,
             JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+                | JSON_INVALID_UTF8_SUBSTITUTE
         );
+        if ($json === false) {
+            $view->assign('error', ErrorPage::resolve([], 'JSON-Encoding fehlgeschlagen: ' . json_last_error_msg()));
+            return $view->renderResponse('Dashboard/Index');
+        }
         $this->pageRenderer->addCssFile('EXT:sight_metrics/Resources/Public/Css/dashboard.css');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/echarts.min.js');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/world.js');
