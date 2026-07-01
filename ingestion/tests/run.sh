@@ -10,6 +10,7 @@ OUT=$(./bin/duckdb <<'SQL'
 SET VARIABLE logpath   = 'tests/fixture.log';
 SET VARIABLE geopath   = 'tests/geo_mini.csv';
 .read 'geo_sources/native.sql'
+.read 'log_formats/regex.sql'
 SET VARIABLE site_name = 'Test';
 SET VARIABLE tagessalt = 'testsalt';
 .read 'tests/pipeline_test.sql'
@@ -64,6 +65,7 @@ SET VARIABLE site_name = 'Test-VHost';
 SET VARIABLE tagessalt = 'testsalt';
 SET VARIABLE logregex  = '${VHOST_REGEX}';
 SET VARIABLE tsformat  = '%d/%b/%Y:%H:%M:%S %z';
+.read 'log_formats/regex.sql'
 .read 'tests/pipeline_test.sql'
 SQL
 )

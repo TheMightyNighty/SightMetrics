@@ -319,6 +319,7 @@ ENV-Variable `SM_LOG_FORMAT`. Standard ist `combined` (Apache/nginx Combined Log
 | `combined_vhost` | `HOST:PORT IP - - [ts] "METHOD URL PROTO" STATUS SIZE "REFERRER" "UA"` | nginx mit `$host:$server_port`-Präfix |
 | `common` | `IP - - [ts] "METHOD URL PROTO" STATUS SIZE` | Common Log Format (ohne Referrer/UA) |
 | `custom` | beliebig | Eigener Regex + Timestamp-Format |
+| `json_ecs` | strukturiertes JSON (eine Zeile pro Request) | ECS-ähnliches Schema, kein Regex – siehe unten |
 
 ### Verwendung
 
@@ -353,6 +354,40 @@ Der `tsformat`-Wert ist ein `strptime`-Format (DuckDB-Syntax). Häufige Formate:
 | `10/Jan/2026:10:00:00 +0000` (CLF, Standard) | `%d/%b/%Y:%H:%M:%S %z` |
 | `2026-01-10T10:00:00+00:00` (ISO 8601) | `%Y-%m-%dT%H:%M:%S%z` |
 | `2026-01-10 10:00:00` (ohne TZ, wird als UTC behandelt) | `%Y-%m-%d %H:%M:%S` |
+
+### JSON-Format (`json_ecs`)
+
+Für strukturierte JSON-Logs (eine Zeile pro Request, z. B. nginx `log_format ...
+escape=json`) statt Regex-Parsing. Die Feld-Extraktion sitzt in
+`log_formats/json_ecs.sql` (per `json_extract_string`, kein Regex, kein
+`read_ndjson`-Auto-Typing) und erwartet dieses Schema (Auszug):
+
+```json
+{"@timestamp":"2026-07-01T10:00:00+00:00",
+ "client":{"ip":"203.0.113.5"},
+ "http":{"request":{"method":"GET"},
+         "response":{"status_code":"200","bytes":"512"}},
+ "app":{"url_path":"/aktuelles","req":{"referer":"-"}},
+ "user_agent":{"original":"Mozilla/5.0 ..."}}
+```
+
+**Wichtig – Key-Kollision vermeiden:** Verwendet die Nginx-Config zusätzlich zur
+Protokoll-Ebene `"http"` (lowercase: version/request/response/tls) eine
+eigene App-Ebene mit URL/Referrer/Cookies etc., **darf dieser Key nicht
+`"HTTP"` (nur Groß-/Kleinschreibung anders) heißen** – DuckDBs JSON-Reader
+löst Spaltennamen case-insensitiv auf und benennt sonst intern um (`HTTP_1`,
+undokumentiertes Verhalten). `log_formats/json_ecs.sql` erwartet stattdessen
+`"app"` als Top-Level-Key für diese Felder – in der Nginx-Config entsprechend
+benennen.
+
+```bash
+CUBE_DSN="..." SM_LOG_FORMAT=json_ecs ./load_cube.sh /logs/access.json "Site" 1
+# oder über Loki (siehe README): SM_LOG_FORMAT=json_ecs ./fetch_loki_logs.sh ...
+```
+
+Abweichendes JSON-Schema: `log_formats/json_ecs.sql` direkt anpassen (die
+`json_extract_string(line, '$.pfad...')`-Aufrufe auf die 8 Zielfelder
+ip/tsraw/method/url/status/size/referrer/ua).
 
 ### ENV-Variable setzen
 
@@ -696,7 +731,7 @@ fehlerhafte Daten korrekt.
 |---|---|---|
 | `CUBE_DSN` | – | MariaDB-DSN (Pflicht, wenn `CUBE_DSN_FILE` nicht gesetzt) |
 | `CUBE_DSN_FILE` | `/run/secrets/cube_dsn` | Alternative: DSN aus Datei (K8s Secrets) |
-| `SM_LOG_FORMAT` | `combined` | Log-Format: `combined`, `combined_vhost`, `common`, `custom` |
+| `SM_LOG_FORMAT` | `combined` | Log-Format: `combined`, `combined_vhost`, `common`, `custom`, `json_ecs` |
 | `SM_LOG_REGEX_CUSTOM` | – | Regex für `SM_LOG_FORMAT=custom` (8 Capture-Groups) |
 | `SM_TS_FORMAT_CUSTOM` | – | strptime-Format für `SM_LOG_FORMAT=custom` |
 | `SM_GEO_SOURCE` | `native` | GeoIP-Quelle: `native`, `ip2location`, `dbip`, `maxmind` (siehe §3a) |

@@ -118,6 +118,7 @@ SET VARIABLE tagessalt = '$(date +%Y%m%d)-sightmetrics';
 SET VARIABLE logregex  = '${SM_LOG_REGEX}';
 SET VARIABLE tsformat  = '${SM_TS_FORMAT}';
 .read '${GEO_SOURCE_SQL}'
+.read '${LOG_FORMAT_SQL}'
 .read '${SQL_TMP}'
 SQL
 t1=$(date +%s.%N)

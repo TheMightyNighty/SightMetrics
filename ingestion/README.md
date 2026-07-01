@@ -47,6 +47,7 @@ Laufen verdoppelt nichts.
 | `generate_logs.py` | Testlog-Generator. |
 | `lib_geo.sh` / `lib_logformat.sh` / `lib_healthcheck.sh` | Gemeinsame Bausteine (source'd von `load_cube.sh` und `fetch_loki_logs.sh`): Geo-Quellen-Auswahl, Log-Format-Auswahl, Healthcheck-Heartbeat. |
 | `geo_sources/` | Geo-Join je Quelle: `native`, `ip2location`, `dbip`, `maxmind` (siehe Runbook §3a). |
+| `log_formats/` | Log-Parsing je Format: `regex` (Klartext, Standard) oder `json_ecs` (strukturiertes JSON, siehe Runbook §7). |
 | `bin/duckdb` (v1.5.4) · `geo/` | DuckDB-Engine (statisches Binary) + GeoIP-Daten. |
 | `sites.conf.example` | Vorlage für `sites.conf` (`site_id` TAB Logfile TAB Name). |
 | `scheduling/` | systemd/Cron-Vorlagen für den produktiven Betrieb. |

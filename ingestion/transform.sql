@@ -2,34 +2,23 @@
 -- SightMetrics – Auswertungslogik (sink-neutral). Parse -> Sessionisierung -> Cube.
 -- Erzeugt die TEMP-Tabellen cube_rows / daily_rows / meta_row.
 -- Genutzt von cube_to_mysql.sql (Import) UND tests/pipeline_test.sql.
--- Parameter (SET VARIABLE): logpath, site_name, tagessalt
+-- Parameter (SET VARIABLE): logpath, site_name, tagessalt, tsformat
 -- Geo: setzt voraus, dass die TEMP VIEW 'geo_ranges' (start,"end",cc) bereits
 --      existiert -> wird von load_cube.sh/tests via geo_sources/<quelle>.sql
 --      angelegt (SM_GEO_SOURCE: native, ip2location, dbip, maxmind).
+-- Log-Parsing: setzt voraus, dass die TEMP TABLE 'parsed_lines(g)' (g.ip/tsraw/
+--      method/url/status/size/referrer/ua, alle VARCHAR) bereits existiert -> wird
+--      von load_cube.sh/fetch_loki_logs.sh via log_formats/<format>.sql
+--      angelegt (SM_LOG_FORMAT: combined, combined_vhost, common, custom,
+--      json_ecs - siehe lib_logformat.sh).
 -- ===========================================================================
 
--- ---- Log-Format-Defaults (überschreibbar via SET VARIABLE in load_cube.sh) ----
--- logregex:  Regex mit genau 8 Capture-Groups (ip,tsraw,method,url,status,size,referrer,ua).
---            Fehlende optionale Gruppen (z.B. referrer/ua beim Common-Format) liefern ''.
--- tsformat:  strptime-Format für das Timestamp-Capture (Gruppe 2).
-SET VARIABLE logregex = COALESCE(
-  getvariable('logregex'),
-  '^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) [^"]*" (\d+) (\d+) "([^"]*)" "([^"]*)"'
-);
+-- tsformat: strptime-Format fuer den Timestamp-String g.tsraw (von log_formats/*.sql
+-- gesetzt; Default hier nur als Fallback, falls direkt ohne lib_logformat.sh genutzt).
 SET VARIABLE tsformat = COALESCE(getvariable('tsformat'), '%d/%b/%Y:%H:%M:%S %z');
 
 -- ---- 1) Parse + lesbare Dimensionen ---------------------------------------
 CREATE OR REPLACE TEMP TABLE hits AS
-WITH raw AS (
-  SELECT line FROM read_csv(getvariable('logpath'),
-       columns={'line':'VARCHAR'}, delim='\t', header=false, quote='', escape='', ignore_errors=true)
-),
-m AS (
-  SELECT regexp_extract(line,
-      getvariable('logregex'),
-      ['ip','tsraw','method','url','status','size','referrer','ua']) AS g
-  FROM raw
-)
 SELECT * FROM (
   SELECT
     timezone('UTC', strptime(g.tsraw, getvariable('tsformat'))) AS ts,
@@ -67,7 +56,7 @@ SELECT * FROM (
     regexp_replace(g.referrer,'^https?://([^/]+).*','\1') AS ref_host,
     CASE WHEN regexp_matches(g.referrer,'[?&]q=')
          THEN replace(regexp_extract(g.referrer,'[?&]q=([^&]+)',1),'+',' ') END AS keyword
-  FROM m
+  FROM parsed_lines
 ) WHERE ts IS NOT NULL AND status < 400
   AND url NOT SIMILAR TO '.*\.(css|js|png|jpg|jpeg|gif|svg|woff2?|ico|map)$';
 
