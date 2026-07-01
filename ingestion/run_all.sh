@@ -146,6 +146,16 @@ else
   done <<< "$results"
 fi
 
+# Verlorene Jobs abfangen: liefert ein Site-Job kein 'OK '/'FAIL '-Ergebnis
+# (z.B. extern gekillt: OOM-Killer, docker stop, Host-Reboot), zaehlt er
+# oben weder als PASS noch als FAIL -> ohne diese Pruefung koennte
+# PASS+FAIL < TOTAL sein und der Lauf trotzdem als Erfolg (Exit 0) durchgehen.
+MISSING=$((TOTAL - PASS - FAIL))
+if [ "$MISSING" -gt 0 ]; then
+  log "WARN: ${MISSING} Site(s) ohne Ergebnis-Meldung (Job vermutlich abgebrochen/gekillt) -> als FEHLER gewertet."
+  FAIL=$((FAIL + MISSING))
+fi
+
 # ---- Zusammenfassung -------------------------------------------------------
 log "=== Fertig: ${PASS} OK, ${FAIL} FEHLER von ${TOTAL} Sites ==="
 
