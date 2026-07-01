@@ -99,11 +99,32 @@ if [ -z "${ROTATE_SKIP_DB:-}" ]; then
     "$ROTATE_USER" "$ROTATE_USER_HOST" "$NEWPW" \
     | "$MYSQL" --defaults-extra-file="$ADMCNF"
   echo ">> DB-Passwort gesetzt."
+
+  # ---- Verifizieren (mit neuem Passwort verbinden) - VOR dem Ueberschreiben
+  # der Secret-Datei: schlaegt die Verifikation fehl, bleibt die noch gueltige
+  # alte Datei unangetastet und das Skript bricht hart ab (statt still Exit 0
+  # zu melden, waehrend die Datei bereits auf ein moeglicherweise kaputtes
+  # DSN zeigt).
+  echo ">> Verifiziere neues Passwort…"
+  VCNF=$(mktemp); chmod 600 "$VCNF"
+  { echo "[client]"; echo "host=${DB_HOST}"; echo "port=${DB_PORT}"; echo "user=${ROTATE_USER}"; echo "password=${NEWPW}"; } > "$VCNF"
+  if echo 'SELECT 1;' | "$MYSQL" --defaults-extra-file="$VCNF" >/dev/null 2>&1; then
+    echo ">> Verifikation OK: Login mit neuem Passwort erfolgreich."
+  else
+    rm -f "$VCNF"
+    echo "Fehler: Verifikation fehlgeschlagen - Secret-Datei wird NICHT geaendert." >&2
+    echo "        DB-Passwort wurde bereits per ALTER USER gesetzt (s.o.), aber der" >&2
+    echo "        Login damit schlaegt fehl - Zugang/ROTATE_USER_HOST/Grants pruefen." >&2
+    exit 1
+  fi
+  rm -f "$VCNF"
 else
   echo ">> ROTATE_SKIP_DB=1 – DB nicht geändert, nur Datei wird neu geschrieben."
 fi
 
 # ---- Secret-Datei atomar ersetzen (mit Backup) -----------------------------
+# Wird nur erreicht, wenn die Verifikation oben erfolgreich war (oder
+# ROTATE_SKIP_DB gesetzt ist).
 if [ -f "$TARGET" ]; then
   BK="${TARGET}.bak-$(date +%Y%m%d%H%M%S)"
   cp -p "$TARGET" "$BK"
@@ -115,18 +136,6 @@ if [ -f "$TARGET" ]; then chmod --reference="$TARGET" "$TMP" 2>/dev/null || chmo
 printf '%s%s\n' "$PREFIX" "$NEW_DSN" > "$TMP"
 mv -f "$TMP" "$TARGET"
 echo ">> Secret-Datei aktualisiert (atomar): ${TARGET}"
-
-# ---- Verifizieren (mit neuem Passwort verbinden) ---------------------------
-if [ -z "${ROTATE_SKIP_DB:-}" ]; then
-  VCNF=$(mktemp); chmod 600 "$VCNF"
-  { echo "[client]"; echo "host=${DB_HOST}"; echo "port=${DB_PORT}"; echo "user=${ROTATE_USER}"; echo "password=${NEWPW}"; } > "$VCNF"
-  if echo 'SELECT 1;' | "$MYSQL" --defaults-extra-file="$VCNF" >/dev/null 2>&1; then
-    echo ">> Verifikation OK: Login mit neuem Passwort erfolgreich."
-  else
-    echo "WARN: Verifikation fehlgeschlagen – bitte Zugang prüfen." >&2
-  fi
-  rm -f "$VCNF"
-fi
 
 # ---- Alte Backups rotieren -------------------------------------------------
 if [[ "$KEEP" =~ ^[0-9]+$ ]] && [ "$KEEP" -ge 0 ]; then
