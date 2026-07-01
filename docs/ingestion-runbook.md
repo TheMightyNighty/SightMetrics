@@ -513,6 +513,21 @@ ALERT_EMAIL=ops@example.org ./notify.sh CRIT "Testalarm"
 ALERT_WEBHOOK=https://hooks.slack.com/... ./notify.sh WARN "Testalarm"
 ```
 
+**1b. Heartbeat / ausbleibender Lauf:** `notify.sh` alarmiert nur bei einem *aktiven*
+Fehler innerhalb eines Laufs – merkt aber nichts, wenn der Scheduler den Lauf gar
+nicht erst startet (Cron/CronJob defekt, Container crasht vor dem Start, …). Dafür
+optional ein **Healthcheck-Ping** (z. B. [healthchecks.io](https://healthchecks.io/)
+oder selbstgehostet) in `run_all.sh` **und** `fetch_loki_logs.sh`: Start-, Erfolgs-
+und Fehler-Ping (mit Log-Auszug als Body). Bleibt der Ping aus, alarmiert
+healthchecks.io von selbst.
+
+```bash
+export HEALTHCHECK_URL="https://hc-ping.com/<uuid>"   # oder HEALTHCHECK_URL_FILE
+```
+
+Leer/nicht gesetzt = deaktiviert (No-op), Ping-Fehler brechen den Import nicht ab
+(nur Warnung auf stderr). Siehe `ingestion/lib_healthcheck.sh`.
+
 **2. Freshness (lief der Import überhaupt?):** aus der **dauerhaft laufenden** TYPO3-
 Instanz prüfen – `sightmetrics:health` prüft den Lesepfad der GUI (Cube erreichbar +
 Aktualität von `meta.bis` je Site):
@@ -697,3 +712,8 @@ fehlerhafte Daten korrekt.
 | `LOG_DIR` | `../logs/import-logs/` | Import-Logs |
 | `SITES_CONF` | `./sites.conf` | Pfad zur Site-Liste |
 | `ALERT_EMAIL` / `ALERT_WEBHOOK` | – | Alarm-Kanäle für `notify.sh` (inline in `run_all.sh`) |
+| `HEALTHCHECK_URL` / `_FILE` | – | Heartbeat-Ping (healthchecks.io o.ä.); leer = deaktiviert (§12) |
+| `LOKI_URL` / `LOKI_QUERY` | – | `fetch_loki_logs.sh`: Loki-Basis-URL + LogQL-Selector (Pflicht dort) |
+| `LOKI_NAMESPACE` | – | `fetch_loki_logs.sh`: Bequemlichkeits-Filter (Label-Matcher) |
+| `LOKI_ORG_ID` | – | `fetch_loki_logs.sh`: `X-Scope-OrgID` (Loki Multi-Tenant) |
+| `LOKI_LIMIT` / `LOKI_LOOKBACK_HOURS` / `LOKI_SAFETY_SECONDS` | `5000` / `24` / `30` | `fetch_loki_logs.sh`: Pagination/Erstlauf/Sicherheitsabstand |

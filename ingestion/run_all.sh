@@ -15,6 +15,10 @@
 #   PARALLEL     Parallele Jobs (Standard: 1)
 #   SITES_CONF   Pfad zur sites.conf (Standard: ./sites.conf)
 #   LOG_DIR      Import-Logverzeichnis (Standard: ../logs/import-logs/)
+#   HEALTHCHECK_URL / HEALTHCHECK_URL_FILE   Heartbeat-Ping (healthchecks.io
+#     o.ae., optional, siehe lib_healthcheck.sh) – meldet zusaetzlich zu
+#     notify.sh (aktive Fehler) auch einen AUSBLEIBENDEN Lauf (Scheduler
+#     defekt, Container startet nicht, ...).
 #
 # Cron-Beispiel (täglich 02:00 Uhr):
 #   0 2 * * * /opt/sightmetrics/ingestion/run_all.sh >> /var/log/sightmetrics/cron.log 2>&1
@@ -24,6 +28,22 @@
 set -euo pipefail
 export LC_ALL=C
 cd "$(dirname "$0")"
+
+# ---- Healthcheck-Heartbeat (healthchecks.io o.ae., optional) ---------------
+# Trap deckt ALLE Exit-Pfade ab (auch fruehe Config-Fehler): liest den
+# tatsaechlichen Exit-Code der Shell beim Beenden aus.
+source "$(pwd)/lib_healthcheck.sh"
+cleanup_and_ping() {
+  local rc=$?
+  [ -n "${SITES_TMP:-}" ] && rm -f "$SITES_TMP"
+  if [ "$rc" -eq 0 ]; then
+    hc_ping ""
+  else
+    hc_ping "/fail" "run_all.sh fehlgeschlagen (exit ${rc})$([ -n "${RUN_LOG:-}" ] && [ -f "${RUN_LOG:-}" ] && printf '\n\n%s' "$(tail -c 10000 "$RUN_LOG")")"
+  fi
+}
+trap cleanup_and_ping EXIT
+hc_ping "/start"
 
 # ---- Parameter -------------------------------------------------------------
 PARALLEL="${PARALLEL:-1}"
@@ -76,7 +96,6 @@ log "log:        ${RUN_LOG}"
 # ---- Sites laden -----------------------------------------------------------
 # Temporäre Datei mit bereinigten Zeilen (Kommentare/Leerzeilen entfernt)
 SITES_TMP=$(mktemp)
-trap 'rm -f "$SITES_TMP"' EXIT
 grep -v '^\s*#' "$SITES_CONF" | grep -v '^\s*$' > "$SITES_TMP" || true
 
 TOTAL=$(wc -l < "$SITES_TMP")
@@ -132,6 +151,7 @@ log "=== Fertig: ${PASS} OK, ${FAIL} FEHLER von ${TOTAL} Sites ==="
 
 # Inline-Alarmierung bei Fehlern: passt zum Wegwerf-Container (kein systemd/OnFailure).
 # notify.sh ist ein No-op, solange kein Kanal (ALERT_EMAIL/ALERT_WEBHOOK) gesetzt ist.
+# Healthcheck-Ping (Erfolg/Fehler) uebernimmt der EXIT-Trap oben (cleanup_and_ping).
 if [ "$FAIL" -gt 0 ]; then
   bash "$(dirname "$0")/notify.sh" CRIT "Import: ${FAIL} von ${TOTAL} Sites fehlgeschlagen (Log: ${RUN_LOG})" || true
 fi

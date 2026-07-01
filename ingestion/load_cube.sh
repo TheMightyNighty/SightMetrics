@@ -36,31 +36,7 @@ SITENAME="${2:-Musterbehörde}"
 SITEID="${3:-1}"
 
 # ---- Geo-Quelle -------------------------------------------------------------
-SM_GEO_SOURCE="${SM_GEO_SOURCE:-native}"
-case "$SM_GEO_SOURCE" in
-  native|ip2location|dbip|maxmind) ;;
-  *)
-    echo "Fehler: unbekanntes SM_GEO_SOURCE='${SM_GEO_SOURCE}'." >&2
-    echo "        Gültig: native (Standard), ip2location, dbip, maxmind" >&2
-    exit 1
-    ;;
-esac
-GEO_SOURCE_SQL="$(pwd)/geo_sources/${SM_GEO_SOURCE}.sql"
-GEO="${SM_GEO_PATH:-$(pwd)/geo/country-ipv4-num.csv}"
-GEO_LOC="${SM_GEO_LOC_PATH:-$(pwd)/geo/GeoLite2-Country-Locations-en.csv}"
-if [ ! -f "$GEO" ]; then
-  echo "Fehler: Geo-Datensatz fehlt unter '${GEO}'." >&2
-  echo "        TODO: Datei selbst beschaffen und ablegen (siehe" >&2
-  echo "        docs/ingestion-runbook.md -> Abschnitt 'GeoIP-Datensatz')." >&2
-  exit 1
-fi
-if [ "$SM_GEO_SOURCE" = "maxmind" ] && [ ! -f "$GEO_LOC" ]; then
-  echo "Fehler: MaxMind-Locations-Datei fehlt unter '${GEO_LOC}'." >&2
-  echo "        TODO: GeoLite2-Country-Locations-en.csv ablegen (siehe" >&2
-  echo "        docs/ingestion-runbook.md -> Abschnitt 'GeoIP-Datensatz')." >&2
-  exit 1
-fi
-echo ">> Geo-Quelle: ${SM_GEO_SOURCE} (${GEO})"
+source "$(pwd)/lib_geo.sh"
 
 # ---- Secrets ---------------------------------------------------------------
 if [ -z "${CUBE_DSN:-}" ] && [ -f "${CUBE_DSN_FILE:-/run/secrets/cube_dsn}" ]; then
@@ -75,40 +51,7 @@ SM_TABLE_META="${SM_TABLE_META:-meta}"
 export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META
 
 # ---- Log-Format ------------------------------------------------------------
-# SM_LOG_FORMAT: combined (Standard), combined_vhost, common, custom
-#   custom: SM_LOG_REGEX_CUSTOM (Regex, 8 Capture-Groups) + SM_TS_FORMAT_CUSTOM (strptime)
-SM_LOG_FORMAT="${SM_LOG_FORMAT:-combined}"
-case "$SM_LOG_FORMAT" in
-  combined)
-    # Apache/nginx Combined Log Format:
-    # IP - - [ts] "METHOD URL PROTO" STATUS SIZE "REFERRER" "UA"
-    SM_LOG_REGEX='^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) [^"]*" (\d+) (\d+) "([^"]*)" "([^"]*)"'
-    SM_TS_FORMAT='%d/%b/%Y:%H:%M:%S %z'
-    ;;
-  combined_vhost)
-    # nginx mit $host:$server_port-Präfix:
-    # HOST:PORT IP - - [ts] "METHOD URL PROTO" STATUS SIZE "REFERRER" "UA"
-    SM_LOG_REGEX='^\S+:\d+ (\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) [^"]*" (\d+) (\d+) "([^"]*)" "([^"]*)"'
-    SM_TS_FORMAT='%d/%b/%Y:%H:%M:%S %z'
-    ;;
-  common)
-    # Apache/nginx Common Log Format (ohne Referrer/UA):
-    # IP - - [ts] "METHOD URL PROTO" STATUS SIZE
-    # Gruppen 7+8 als leere Captures → referrer/ua bleiben ''
-    SM_LOG_REGEX='^(\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) [^"]*" (\d+) (\d+)()()'
-    SM_TS_FORMAT='%d/%b/%Y:%H:%M:%S %z'
-    ;;
-  custom)
-    SM_LOG_REGEX="${SM_LOG_REGEX_CUSTOM:?SM_LOG_FORMAT=custom erfordert SM_LOG_REGEX_CUSTOM (8 Capture-Groups: ip,ts,method,url,status,size,referrer,ua)}"
-    SM_TS_FORMAT="${SM_TS_FORMAT_CUSTOM:?SM_LOG_FORMAT=custom erfordert SM_TS_FORMAT_CUSTOM (strptime-Format)}"
-    ;;
-  *)
-    echo "Fehler: unbekanntes SM_LOG_FORMAT='${SM_LOG_FORMAT}'." >&2
-    echo "        Gültig: combined (Standard), combined_vhost, common, custom" >&2
-    exit 1
-    ;;
-esac
-echo ">> Log-Format: ${SM_LOG_FORMAT}"
+source "$(pwd)/lib_logformat.sh"
 
 # ---- Offset-Tracking -------------------------------------------------------
 STATE_DIR="${STATE_DIR:-${REPO}/state}"
