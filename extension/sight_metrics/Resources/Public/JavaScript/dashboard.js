@@ -358,8 +358,11 @@
     function ymd(y, m, d) { return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + d).slice(-2); }
     function monthRange(y, m) { return [ymd(y, m, 1), toStr(Date.UTC(y, m, 0))]; }  // m = 1..12
     // Anker für relative Zeiträume: heute, aber nie nach dem neuesten Datenstand.
+    // UTC (nicht lokale Browser-Zeit): das Backend speichert 'datum' konsequent in
+    // UTC (transform.sql: timezone('UTC', ...)) - lokale Zeit haette in Zeitzonen
+    // weit von UTC entfernt einen falschen Tag als "heute" ergeben.
     function anchor() {
-      var t = new Date(), today = ymd(t.getFullYear(), t.getMonth() + 1, t.getDate());
+      var t = new Date(), today = ymd(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
       return today < META.bis ? today : META.bis;
     }
     function applyPreset(v) {
