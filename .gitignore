@@ -5,7 +5,6 @@ demo/.env
 # ---- Große Datendateien (nicht ins Repo) ------------------------------------
 logs/
 ingestion/bin/
-ingestion/geo/
 
 # ---- Demo: generierte / installierte Verzeichnisse -------------------------
 demo/app/vendor/
