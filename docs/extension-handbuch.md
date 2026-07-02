@@ -409,16 +409,16 @@ dashboard.js                 ← Chart.js (Verlauf/Stunden), Leaflet (Choropleth
 
 ### Bekannte Grenzen: Skalierung & Caching
 
-Zwei bewusste Design-Entscheidungen, die bei sehr grossen Sites relevant werden koennen:
-
-**Kein serverseitiges Caching.** Jeder Modulaufruf fuehrt `sites()`, `meta()`, `daily()` und
-`cube()` frisch gegen die Cube-DB aus — kein Query- oder Response-Cache. Für ein Backend-Modul
-(kein Frontend-Traffic, Zugriffe durch eine ueberschaubare Zahl Redakteure/Admins) ist das
-vertretbar: Lesezugriffe sind guenstig (read-only DBAL-SELECTs, keine Aggregation in der DB),
-und ein Cache wuerde Aktualitaet gegen Komplexitaet (Invalidierung bei neuen Ingestion-Laeufen)
-eintauschen. Bei sehr vielen gleichzeitigen Backend-Nutzern auf derselben Site kann das die
-Cube-DB spuerbar belasten — dann TYPO3s Cache-Framework (`GLOBALS['TYPO3_CONF_VARS']['SYS']
-['caching']`) fuer `daily()`/`cube()` mit kurzer TTL (z. B. 60s) ergaenzen.
+**Serverseitiges Caching.** `daily()`/`cube()` (die beiden Reads, deren Volumen mit
+Zeitfenster/Kardinalitaet waechst) laufen ueber den TYPO3-Cache-Framework-Cache
+`sight_metrics` (`VariableFrontend` + `Typo3DatabaseBackend`, registriert in
+`ext_localconf.php`, Tabelle `cache_sight_metrics` wird von TYPO3 selbst per
+`extension:setup`/DB-Compare angelegt). TTL ueber die Extension-Konfiguration
+`cacheLifetime` (Default 60s, 0 = deaktiviert — jeder Aufruf liest dann wieder live).
+`sites()`/`meta()` bleiben bewusst ungecacht (kleine Einzelzeilen/Listen; eine neue Site
+oder ein frischer Ingestion-Lauf soll ohne Wartezeit sichtbar sein). Fehlt die
+Cache-Konfiguration (z. B. Unit-/Functional-Tests ohne geladenes `ext_localconf.php`),
+faellt `CubeRepository::cached()` fehlertolerant auf die Live-Query zurueck.
 
 **Keine serverseitige Kardinalitaets-Begrenzung.** `windowDays` begrenzt nur die Zeitachse
 (wie viele Tage geladen werden), nicht wie viele *unterschiedliche Werte* pro Dimension im

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace SightMetrics\Tests\Functional;
 
 use SightMetrics\Domain\Repository\CubeRepository;
+use TYPO3\CMS\Core\Cache\CacheManager;
+use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
 use TYPO3\CMS\Core\Database\Connection;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
@@ -48,7 +50,13 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
 
     private function repo(): CubeRepository
     {
-        return new CubeRepository(GeneralUtility::makeInstance(ConnectionPool::class));
+        // Cache "sight_metrics" ist ohne ext_localconf.php nicht registriert -> CubeRepository
+        // faellt fehlertolerant auf Live-Queries zurueck (siehe CubeRepository::cached()).
+        return new CubeRepository(
+            GeneralUtility::makeInstance(ConnectionPool::class),
+            GeneralUtility::makeInstance(CacheManager::class),
+            GeneralUtility::makeInstance(ExtensionConfiguration::class),
+        );
     }
 
     private function insertSite(int $siteId, string $siteName, array $cubeRows = []): void

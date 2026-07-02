@@ -9,3 +9,6 @@ showTechnical = 0
 
 # cat=leistung//10; type=int+; label=Zeitfenster in Tagen: nur dieses Fenster wird aus der Cube-DB geladen (begrenzt das Transfervolumen unabhaengig von der Retention). 0 = unbegrenzt.
 windowDays = 92
+
+# cat=leistung//20; type=int+; label=Cache-TTL in Sekunden fuer daily()/cube()-Reads aus der Cube-DB (TYPO3-Cache-Framework, Cache "sight_metrics"). 0 = kein Caching, jeder Aufruf liest frisch.
+cacheLifetime = 60
