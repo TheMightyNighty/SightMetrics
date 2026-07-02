@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace SightMetrics\Domain\Repository;
 
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\ParameterType;
 use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\Query\QueryBuilder;
@@ -38,7 +39,10 @@ final class CubeRepository
     {
         $qb = $this->qb('meta')->select('site_id', 'site')->from('meta')->orderBy('site');
         if ($allowedIds !== []) {
-            $qb->where($qb->expr()->in('site_id', array_map('intval', $allowedIds)));
+            $qb->where($qb->expr()->in(
+                'site_id',
+                $qb->createNamedParameter(array_map('intval', $allowedIds), ArrayParameterType::INTEGER)
+            ));
         }
         return $qb->executeQuery()->fetchAllAssociative();
     }

@@ -3,6 +3,7 @@
 #   2a) Unit (PHPUnit-Phar, kein TYPO3 nötig)
 #   2b) Functional (typo3/testing-framework, SQLite, Demo läuft)
 #   2c) Smoke (TYPO3-CLI gegen echte Cube-DB, Demo läuft)
+#   2d) JS-Smoke (Node + jsdom, kein Build-Prozess, kein TYPO3/Demo nötig)
 set -uo pipefail
 cd "$(dirname "$0")"          # extension/
 EXT="$(pwd)/sight_metrics"
@@ -31,5 +32,12 @@ fi
 
 echo; echo "== 2c: PHP Smoke (TYPO3 CLI, read-only Cube) =="
 docker exec sightmetrics-web php /var/www/html/vendor/bin/typo3 sightmetrics:smoke || fail=1
+
+echo; echo "== 2d: JS Smoke (dashboard.js, Node + jsdom) =="
+if command -v node >/dev/null 2>&1; then
+  ( cd "$EXT" && [ -d node_modules ] || npm install --silent ) && ( cd "$EXT" && npm test ) || fail=1
+else
+  echo "SKIP node nicht verfuegbar."
+fi
 
 exit $fail

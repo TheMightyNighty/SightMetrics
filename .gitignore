@@ -27,6 +27,9 @@ extension/sight_metrics/vendor/
 e2e/node_modules/
 e2e/package-lock.json
 
+# ---- Extension: JS-Smoke-Test-Tooling (node_modules, package-lock.json bleibt versioniert) --
+extension/sight_metrics/node_modules/
+
 # ---- Offset-State (laufzeitgeneriert) ----------------------------------------
 state/
 

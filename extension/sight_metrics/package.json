@@ -1,0 +1,13 @@
+{
+    "name": "sightmetrics-dashboard-js-tests",
+    "private": true,
+    "description": "Minimaler DOM-Smoke-Test fuer dashboard.js (kein Build-Prozess, nur Dev-Tooling fuer Tests). Wird nicht an TYPO3-Instanzen ausgeliefert.",
+    "type": "module",
+    "license": "GPL-2.0-or-later",
+    "scripts": {
+        "test": "node --test Tests/JavaScript/*.test.mjs"
+    },
+    "devDependencies": {
+        "jsdom": "29.1.1"
+    }
+}

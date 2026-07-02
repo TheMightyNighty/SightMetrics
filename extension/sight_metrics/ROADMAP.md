@@ -131,16 +131,32 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
 
 ## TYPO3-Pflege
 
-- **Keine Lokalisierung der UI**: Dashboard-Texte (`dashboard.js`, Template) sind hart
-  deutsch. Nur Modul-Labels liegen in `locallang_mod.xlf`. Fuer mehrsprachige Backends
-  (Bund) ein Pflegepunkt.
-- **Kein Build-Prozess / keine JS-Tests** fuer `dashboard.js` (~500 Zeilen IIFE). Die
-  Kartenfehler der letzten Iteration waeren durch einen minimalen DOM-Smoke-Test
-  (Modul laedt, Canvas/Map-Container vorhanden, keine Konsolenfehler) automatisiert
-  aufgefallen.
-- `CubeRepository::sites()` baut das `IN (...)` per `array_map('intval', ...)` statt
-  durchgaengig Named Parameters wie die uebrigen Queries — Stilbruch, keine
-  Sicherheitsluecke (Werte sind bereits `int`-gecastet).
+- ~~**Kein Build-Prozess / keine JS-Tests**~~ **[behoben]** fuer `dashboard.js`
+  (~500 Zeilen IIFE). Die Kartenfehler der letzten Iterationen (Invalid-GeoJSON-Crash,
+  falsches `outline`, keine Faerbung) waeren durch einen minimalen DOM-Smoke-Test
+  automatisiert aufgefallen.
+
+  **Fix:** `Tests/JavaScript/dashboard.smoke.test.mjs` ergaenzt — laedt das echte
+  Fluid-Template (nur der `<f:else>`-Zweig, keine TYPO3/Fluid-Engine noetig) und den
+  echten `dashboard.js`-Quelltext in [jsdom](https://github.com/jsdom/jsdom) (MIT), mit
+  Fake-Implementierungen fuer Chart.js/Leaflet statt der echten Bibliotheken (kein echtes
+  Canvas/WebGL noetig, sehr schnell). Zwei Faelle: (1) mit Daten + Fake-Libs — prueft
+  KPI-Rendering, dass genau ein Line- und ein Bar-Chart erzeugt werden, dass jedes an
+  `L.geoJSON` uebergebene Feature `type:"Feature"` hat (genau der Fehler, der zum
+  "Invalid GeoJSON object"-Crash fuehrte) und dass keine unbehandelten Exceptions
+  auftreten; (2) ohne Chart.js/Leaflet — Modul muss sauber fruehzeitig abbrechen statt zu
+  werfen. Verifiziert durch bewusst injizierten Bug (Test schlaegt fehl, nach Rueckbau
+  wieder gruen).
+
+  Kein Build-Prozess im engeren Sinne (kein Bundler/Transpiler) — nur `node:test` +
+  `jsdom` als Dev-Dependency (`package.json`, `package-lock.json` versioniert,
+  `node_modules/` ignoriert). Neue Stufe **2d** in `run-tests.sh` ergaenzt, laeuft ohne
+  TYPO3/Demo-Stack. `npm test` auch direkt in `extension/sight_metrics/` ausfuehrbar.
+
+- ~~`CubeRepository::sites()` baut das `IN (...)` per `array_map('intval', ...)` statt
+  durchgaengig Named Parameters wie die uebrigen Queries~~ **[behoben]** — Stilbruch, keine
+  Sicherheitsluecke (Werte waren bereits `int`-gecastet). Jetzt `createNamedParameter(...,
+  ArrayParameterType::INTEGER)` wie die uebrigen Methoden der Klasse.
 
 ## Architektur
 
