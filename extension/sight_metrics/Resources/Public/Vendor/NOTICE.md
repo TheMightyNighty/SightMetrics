@@ -27,6 +27,25 @@ siehe `REUSE.toml` (Extension-Root).
   Leaflet-Funktion referenziert (keine L.marker()-Nutzung), sind aber Teil des offiziellen
   Default-Icon-Sets und liegen zur Vollstaendigkeit bei, falls spaeter Marker verwendet werden.
 
+## Weltkarten-Geodaten (world.js)
+- Quelle der Kartendaten: [Natural Earth](https://www.naturalearthdata.com/), public domain
+  (keine Attribution noetig, siehe `LICENSES/LicenseRef-Public-Domain-NaturalEarth.txt`).
+- Bezogen als vorgefertigtes TopoJSON ueber [world-atlas](https://github.com/topojson/world-atlas)
+  (Redistribution/Build-Tooling von Michael Bostock, ISC-Lizenz, siehe `LICENSES/ISC.txt`),
+  Version 2.0.2, Datei `countries-50m.json` (Natural-Earth-Quelldaten Version 4.1.0 laut
+  world-atlas-Repo).
+- Bezogen von: https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-50m.json
+- SHA-256 (countries-50m.json, TopoJSON-Original vor Konvertierung):
+  04342cdc1e3016bcd7db1630de95684d67b79fe3c8c460321e87aef469502394
+- Lokal mit `topojson-client` (ISC) zu GeoJSON konvertiert, Koordinaten auf 2 Nachkommastellen
+  gerundet (~1,1 km Praezision am Aequator, fuer die Kartengroesse im Dashboard ausreichend,
+  reduziert die Dateigroesse von ~3,9 MB auf ~1,4 MB). 241 Laender/Territorien, inkl. kleiner
+  Staaten wie Singapur und Hongkong (in der 110m-Aufloesung von world-atlas nicht enthalten,
+  daher bewusst 50m statt 110m gewaehlt).
+- Ersetzt die urspruengliche `world.js` (ECharts-Weltkarten-Datensatz seit dem allerersten
+  Commit im Repo, Herkunft nicht mehr rekonstruierbar, Lizenzangabe war eine unverifizierte
+  Annahme statt einer belegten Quelle — siehe ROADMAP.md Finding 5).
+
 ## Hinweis fuer eine spaetere Uebernahme durch das GSB11-Team
 Diese Dateien wurden manuell per `curl` von jsDelivr bezogen (kein npm-Lockfile). Fuer eine
 produktive Uebernahme mit Supply-Chain-Anforderungen empfiehlt sich ein versionsgepinnter

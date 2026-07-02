@@ -84,9 +84,23 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
    `$GLOBALS['BE_USER']->isAdmin()` und blendet `technical` fuer Nicht-Admins aus, auch wenn
    `showTechnical` aktiv ist.
 
-5. **[Niedrig] Lizenz von world.js unverifiziert** — `REUSE.toml` deklariert CC0/Natural
-   Earth fuer `Resources/Public/Vendor/world.js` auf Annahme, nicht auf Verifikation. Muss vor
-   einer Uebergabe an das GSB11-Team bestaetigt werden (echte Quelle/Lizenz der Geodaten).
+5. ~~**[Niedrig] Lizenz von world.js unverifiziert**~~ **[behoben]** — die urspruengliche
+   `world.js` lag seit dem allerersten Commit im Repo, ohne rekonstruierbare Herkunft; die
+   REUSE.toml-Angabe (CC0/Natural Earth) war eine plausible, aber unverifizierte Annahme.
+
+   **Fix:** komplett durch eine nachvollziehbare Quelle ersetzt: Natural-Earth-Kartendaten
+   (public domain, keine Attribution noetig) ueber
+   [world-atlas](https://github.com/topojson/world-atlas) v2.0.2 (ISC-lizenzierte
+   Redistribution/Tooling von Michael Bostock), Datei `countries-50m.json`, lokal mit
+   `topojson-client` zu GeoJSON konvertiert (Koordinaten auf 2 Nachkommastellen gerundet,
+   ~1,4 MB statt ~3,9 MB unkomprimiert). 110m-Aufloesung bewusst verworfen, weil ihr u. a.
+   Singapur und Hongkong fehlen (kleine Staaten werden bei 110m aus Natural-Earth
+   ausgespart) — beides Laender mit realem Traffic in den Demo-Daten. `LICENSES/ISC.txt` und
+   `LICENSES/LicenseRef-Public-Domain-NaturalEarth.txt` ergaenzt, Herkunft/Version/SHA-256 in
+   `NOTICE.md` dokumentiert. `ISO2NAME`-Mapping in `dashboard.js` an drei Stellen angepasst
+   (US, KR, CZ heissen im neuen Datensatz anders als im alten), der Laufzeit-Patch fuer das
+   fehlende `type:"Feature"`-Feld (noetig fuer die alte Datei, siehe Leaflet-Migration) konnte
+   entfallen, da der neue Datensatz bereits korrektes GeoJSON liefert.
 
 6. ~~**[Niedrig] Fehlende Leaflet-Bildassets**~~ **[behoben]** — `leaflet.css` referenzierte
    `images/layers.png`, `images/layers-2x.png`, `images/marker-icon.png`, die nicht

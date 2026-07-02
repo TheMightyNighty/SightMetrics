@@ -21,13 +21,15 @@
   var DRILL = {referrer_type: 'referrer_name', referrer_name: 'referrer_url',
                browser: 'browser_version', os: 'os_version', device: 'device_model'};
   // ISO-2 -> Name in der ECharts-Weltkarte
-  var ISO2NAME = {US:'United States',CN:'China',JP:'Japan',KR:'Korea',DE:'Germany',GB:'United Kingdom',
+  // Namen muessen exakt zu properties.name in world.js passen (world-atlas/Natural Earth,
+  // siehe Vendor/NOTICE.md). US/KR/CZ weichen von der Alltagsbezeichnung ab.
+  var ISO2NAME = {US:'United States of America',CN:'China',JP:'Japan',KR:'South Korea',DE:'Germany',GB:'United Kingdom',
     FR:'France',IN:'India',BR:'Brazil',CA:'Canada',RU:'Russia',IT:'Italy',ES:'Spain',NL:'Netherlands',
     PL:'Poland',TR:'Turkey',SE:'Sweden',CH:'Switzerland',AT:'Austria',BE:'Belgium',AU:'Australia',
     MX:'Mexico',ID:'Indonesia',ZA:'South Africa',EG:'Egypt',NG:'Nigeria',AR:'Argentina',VN:'Vietnam',
     TH:'Thailand',UA:'Ukraine',RO:'Romania',GR:'Greece',PT:'Portugal',NO:'Norway',FI:'Finland',
     DK:'Denmark',IE:'Ireland',SG:'Singapore',MY:'Malaysia',PK:'Pakistan',BD:'Bangladesh',PH:'Philippines',
-    SA:'Saudi Arabia',AE:'United Arab Emirates',IL:'Israel',CZ:'Czech Rep.',HU:'Hungary',CL:'Chile',
+    SA:'Saudi Arabia',AE:'United Arab Emirates',IL:'Israel',CZ:'Czechia',HU:'Hungary',CL:'Chile',
     CO:'Colombia',NZ:'New Zealand',TW:'Taiwan',HK:'Hong Kong',KE:'Kenya',MA:'Morocco'};
   var LAND = {US:'USA',CN:'China',JP:'Japan',KR:'Südkorea',DE:'Deutschland',GB:'Großbritannien',
     FR:'Frankreich',PH:'Philippinen',IN:'Indien',BR:'Brasilien',CA:'Kanada',RU:'Russland',IT:'Italien',
@@ -184,10 +186,6 @@
   }
   function renderMap(a, b) {
     if (typeof window.SM_WORLD === 'undefined' || typeof L === 'undefined') return;
-    // world.js wurde urspruenglich fuer ECharts exportiert: den Features fehlt das
-    // GeoJSON-Pflichtfeld "type":"Feature" (ECharts' registerMap verlangte das nicht,
-    // Leaflet ist hier strikt GeoJSON-konform und wirft sonst "Invalid GeoJSON object").
-    window.SM_WORLD.features.forEach(function (f) { if (!f.type) f.type = 'Feature'; });
     var rows = agg('country', a, b, 'v').filter(function (r) { return r.key !== '??'; });
     var byName = {};
     rows.forEach(function (r) { byName[ISO2NAME[r.key] || r.key] = r.v; });
