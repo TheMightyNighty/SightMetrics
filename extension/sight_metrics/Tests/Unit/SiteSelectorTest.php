@@ -6,6 +6,7 @@ namespace SightMetrics\Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use SightMetrics\Support\SiteSelector;
+use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Site\Entity\Site;
 use TYPO3\CMS\Core\Site\SiteFinder;
 
@@ -51,49 +52,82 @@ final class SiteSelectorTest extends TestCase
         $finder = $this->createMock(SiteFinder::class);
         $finder->method('getAllSites')->willReturn([]);
 
-        self::assertSame([], SiteSelector::allowedSiteIds($finder));
+        self::assertSame([], SiteSelector::allowedSiteIds($finder, $this->beUser(false)));
     }
 
     public function testAllowedSiteIdsReturnsEmptyWhenNoneHaveMapping(): void
     {
-        $site = $this->makeSite([]);
+        $site = $this->makeSite([], 1);
         $finder = $this->createMock(SiteFinder::class);
         $finder->method('getAllSites')->willReturn([$site]);
 
-        self::assertSame([], SiteSelector::allowedSiteIds($finder));
+        self::assertSame([], SiteSelector::allowedSiteIds($finder, $this->beUser(false)));
     }
 
-    public function testAllowedSiteIdsExtractsMappedIds(): void
+    public function testAllowedSiteIdsExtractsMappedIdsForAdmin(): void
     {
         $finder = $this->createMock(SiteFinder::class);
         $finder->method('getAllSites')->willReturn([
-            $this->makeSite(['sightmetrics_site_id' => 3]),
-            $this->makeSite(['sightmetrics_site_id' => 7]),
+            $this->makeSite(['sightmetrics_site_id' => 3], 1),
+            $this->makeSite(['sightmetrics_site_id' => 7], 2),
         ]);
 
-        self::assertSame([3, 7], SiteSelector::allowedSiteIds($finder));
+        // Admin sieht alles, unabhaengig vom Webmount.
+        self::assertSame([3, 7], SiteSelector::allowedSiteIds($finder, $this->beUser(true)));
     }
 
-    public function testAllowedSiteIdsDeduplicates(): void
+    public function testAllowedSiteIdsDeduplicatesForAdmin(): void
     {
         $finder = $this->createMock(SiteFinder::class);
         $finder->method('getAllSites')->willReturn([
-            $this->makeSite(['sightmetrics_site_id' => 1]),
-            $this->makeSite(['sightmetrics_site_id' => 1]),
-            $this->makeSite(['sightmetrics_site_id' => 2]),
+            $this->makeSite(['sightmetrics_site_id' => 1], 1),
+            $this->makeSite(['sightmetrics_site_id' => 1], 1),
+            $this->makeSite(['sightmetrics_site_id' => 2], 2),
         ]);
 
-        self::assertSame([1, 2], SiteSelector::allowedSiteIds($finder));
+        self::assertSame([1, 2], SiteSelector::allowedSiteIds($finder, $this->beUser(true)));
     }
 
-    public function testAllowedSiteIdsConvertsStringToInt(): void
+    public function testAllowedSiteIdsConvertsStringToIntForAdmin(): void
     {
         $finder = $this->createMock(SiteFinder::class);
         $finder->method('getAllSites')->willReturn([
-            $this->makeSite(['sightmetrics_site_id' => '5']),
+            $this->makeSite(['sightmetrics_site_id' => '5'], 1),
         ]);
 
-        self::assertSame([5], SiteSelector::allowedSiteIds($finder));
+        self::assertSame([5], SiteSelector::allowedSiteIds($finder, $this->beUser(true)));
+    }
+
+    public function testAllowedSiteIdsFiltersByWebmountForNonAdmin(): void
+    {
+        $finder = $this->createMock(SiteFinder::class);
+        $finder->method('getAllSites')->willReturn([
+            $this->makeSite(['sightmetrics_site_id' => 3], 10),
+            $this->makeSite(['sightmetrics_site_id' => 7], 20),
+        ]);
+
+        // Nicht-Admin darf nur rootPageId 10 sehen (Webmount) -> nur Site 3 im Ergebnis.
+        $beUser = $this->createMock(BackendUserAuthentication::class);
+        $beUser->method('isAdmin')->willReturn(false);
+        $beUser->method('isInWebMount')->willReturnCallback(
+            static fn(int $pageId): ?int => $pageId === 10 ? 10 : null
+        );
+
+        self::assertSame([3], SiteSelector::allowedSiteIds($finder, $beUser));
+    }
+
+    public function testAllowedSiteIdsExcludesAllForNonAdminWithoutWebmountAccess(): void
+    {
+        $finder = $this->createMock(SiteFinder::class);
+        $finder->method('getAllSites')->willReturn([
+            $this->makeSite(['sightmetrics_site_id' => 3], 10),
+        ]);
+
+        $beUser = $this->createMock(BackendUserAuthentication::class);
+        $beUser->method('isAdmin')->willReturn(false);
+        $beUser->method('isInWebMount')->willReturn(null);
+
+        self::assertSame([], SiteSelector::allowedSiteIds($finder, $beUser));
     }
 
     /** Die allowedSiteIds-Tests mocken TYPO3-Klassen – im TYPO3-freien Phar-Runner überspringen. */
@@ -105,10 +139,18 @@ final class SiteSelectorTest extends TestCase
         }
     }
 
-    private function makeSite(array $config): Site
+    private function makeSite(array $config, int $rootPageId): Site
     {
         $site = $this->createMock(Site::class);
         $site->method('getConfiguration')->willReturn($config);
+        $site->method('getRootPageId')->willReturn($rootPageId);
         return $site;
+    }
+
+    private function beUser(bool $isAdmin): BackendUserAuthentication
+    {
+        $beUser = $this->createMock(BackendUserAuthentication::class);
+        $beUser->method('isAdmin')->willReturn($isAdmin);
+        return $beUser;
     }
 }

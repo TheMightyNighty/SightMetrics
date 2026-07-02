@@ -13,6 +13,7 @@ use SightMetrics\Support\ErrorPage;
 use SightMetrics\Support\SiteSelector;
 use SightMetrics\Support\WindowResolver;
 use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
+use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
 use TYPO3\CMS\Core\Page\PageRenderer;
 use TYPO3\CMS\Core\Site\SiteFinder;
@@ -45,7 +46,7 @@ final class DashboardController implements LoggerAwareInterface
         $payload = ['meta' => new \stdClass(), 'daily' => [], 'cube' => [], 'sites' => [], 'siteId' => 0, 'window' => null];
         try {
             $params = $request->getQueryParams();
-            $allowedIds = SiteSelector::allowedSiteIds($this->siteFinder);
+            $allowedIds = SiteSelector::allowedSiteIds($this->siteFinder, $this->beUser());
             $sites = $this->cubeRepository->sites($allowedIds);
             $siteId = SiteSelector::resolve($sites, (int)($params['site'] ?? 0));
             $meta = $this->cubeRepository->meta($siteId);
@@ -115,6 +116,21 @@ final class DashboardController implements LoggerAwareInterface
         $view->assign('payload', $json);
         $view->assign('error', null);
         return $view->renderResponse('Dashboard/Index');
+    }
+
+    /**
+     * Backend-Benutzer aus dem globalen TYPO3-Kontext. Fehlt er (sollte im Backend-Modul-
+     * Kontext praktisch nie vorkommen), wird das als Fehler behandelt statt stillschweigend
+     * "kein Zugriff" oder "voller Zugriff" anzunehmen – landet im bestehenden Catch-Block
+     * inkl. Logging und Fehlerseite.
+     */
+    private function beUser(): BackendUserAuthentication
+    {
+        $beUser = $GLOBALS['BE_USER'] ?? null;
+        if (!$beUser instanceof BackendUserAuthentication) {
+            throw new \RuntimeException('Kein Backend-Benutzer im Request-Kontext.');
+        }
+        return $beUser;
     }
 
     /**

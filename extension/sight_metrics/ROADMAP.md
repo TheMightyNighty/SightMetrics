@@ -12,13 +12,61 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
    CSV in Excel ausgefuehrt wird. **Fix:** Zellen, die mit `= + - @` beginnen, mit
    fuehrendem `'` (Apostroph) escapen, bevor sie gequotet werden.
 
-2. **[Hoch] Mandantentrennung nicht benutzerbezogen** — `Classes/Support/SiteSelector.php`,
-   `allowedSiteIds()`. Filtert global ueber alle Site-Configs, nicht pro Backend-Benutzer.
-   Leere Liste = alle Cube-Sites sichtbar. Jeder Benutzer mit Modulzugriff sieht Analytics
-   aller Mandanten, unabhaengig von seinen TYPO3-Seiten-/Site-Rechten. Fuer eine Multi-Mandanten-
-   Instanz (z. B. GSB11 mit mehreren Behoerden) ein Ausschlusskriterium. **Fix:** Sichtbare
-   Site-IDs aus den tatsaechlichen Benutzerrechten (`$BE_USER->getWebmounts()` /
-   Seitenbaum-Zugriff) statt aus einer globalen Konfigurationsliste ableiten.
+2. ~~**[Hoch] Mandantentrennung nicht benutzerbezogen**~~ **[behoben]** —
+   `Classes/Support/SiteSelector.php`, `allowedSiteIds()`. Filterte bisher global ueber alle
+   Site-Configs, nicht pro Backend-Benutzer. Leere Liste = alle Cube-Sites sichtbar. Jeder
+   Benutzer mit Modulzugriff sah Analytics aller Mandanten, unabhaengig von seinen TYPO3-
+   Seiten-/Site-Rechten.
+
+   **Umgesetzt (2026-07-02)** nach dem unten skizzierten Design: das generelle TYPO3-
+   Seitenbaum-/Webmount-Modell wird genutzt (kein separates Berechtigungskonzept).
+   `allowedSiteIds(SiteFinder, BackendUserAuthentication)` prueft pro Site
+   `isAdmin() || isInWebMount(rootPageId) !== null`; `DashboardController` uebergibt den
+   Backend-User ueber eine neue `beUser()`-Hilfsmethode (wirft bei fehlendem `BE_USER`, landet
+   im bestehenden Catch-/Logging-Pfad). Rueckwaertskompatibilitaet erhalten: ohne jegliches
+   `sightmetrics_site_id`-Mapping bleibt es filterlos. Unit-Tests fuer Admin-, Webmount- und
+   Kein-Zugriff-Fall ergaenzt (`Tests/Unit/SiteSelectorTest.php`).
+
+   **Bekannte Test-Luecke (nicht neu, betraf schon die alten 5 Tests):** die
+   `allowedSiteIds`-Tests mocken TYPO3-Klassen (`SiteFinder`, `BackendUserAuthentication`) und
+   laufen nur, wenn diese Klassen im Testprozess vorhanden sind. Der phar-basierte Unit-Runner
+   (`run-tests.sh` 2a) hat keinen TYPO3-Autoloader, dort werden sie uebersprungen; der
+   Functional-Runner (2b) deckt nur `Tests/Functional/` ab. Der Code laeuft damit aktuell nie
+   automatisiert gegen echte TYPO3-Klassen. **Fix-Vorschlag:** `Tests/Unit/SiteSelectorTest.php`
+   zusaetzlich in die Functional-Suite aufnehmen (oder eine dritte, TYPO3-testing-framework-
+   basierte Unit-Suite ergaenzen), damit diese Faelle tatsaechlich exekutiert werden.
+
+   ---
+
+   Ursprüngliche Design-Skizze (zur Nachvollziehbarkeit):
+   Die Extension hat bewusst keine TCA/eigene Berechtigungstabelle (Design-Prinzip: nur
+   lesender DBAL-Zugriff, kein Extbase). Ein sauberer Fix sollte dieses Prinzip nicht
+   durchbrechen, sondern TYPO3s vorhandenes Modell (Webmounts + Seitenrechte) wiederverwenden:
+
+   1. **Kopplung Site <-> Seitenbaum ist bereits da**: jede TYPO3-`Site`-Config hat einen
+      `rootPageId` und (per bestehender Konvention) ein `sightmetrics_site_id`-Feld. Diese
+      Zuordnung existiert schon, wird aber aktuell nicht mit Benutzerrechten verschnitten.
+   2. **`allowedSiteIds()` um den Backend-User erweitern** (Signatur z. B.
+      `allowedSiteIds(SiteFinder $siteFinder, BackendUserAuthentication $beUser)` —
+      Zugriff auf `$GLOBALS['BE_USER']` ist im Controller ohnehin schon Muster, siehe Fix zu
+      Finding 4). Fuer jede `Site` pruefen, ob der Benutzer Zugriff auf deren `rootPageId`
+      hat: `$beUser->isAdmin() || $beUser->isInWebMount($rootPageId) !== false`. Nur die
+      `sightmetrics_site_id`-Werte der zugaenglichen Sites zurueckgeben.
+   3. **Admin-Bypass beibehalten**: `isAdmin()` sieht weiterhin alles — konsistent mit dem
+      Finding-4-Fix und dem uebrigen TYPO3-Backend-Verhalten.
+   4. **Migrationsverhalten**: aktuell bedeutet "keine `sightmetrics_site_id` konfiguriert"
+      = kein Filter (Ruckwaertskompatibilitaet, siehe Docblock). Das sollte so bleiben, sonst
+      brechen bestehende Installationen ohne Site-Mapping. Nur *wenn* eine Zuordnung existiert,
+      greift die Webmount-Pruefung.
+   5. ~~Offene Frage fuer das GSB11-Team~~ **Geklaert (2026-07-02):** Webmount-/Seitenbaum-
+      Pruefung auf `rootPageId` reicht — kein zusaetzliches, seitenbaum-unabhaengiges
+      Berechtigungskonzept. Konsistent mit dem generellen TYPO3-Rechtemodell, das im Projekt
+      durchgaengig genutzt wird.
+
+   **Bewusst nicht vorgeschlagen:** eigene Berechtigungstabelle/TCA — würde das
+   "kein Extbase/keine TCA"-Designprinzip der Extension durchbrechen und zu einer
+   Parallelstruktur neben TYPO3s Seitenrechten fuehren (zwei Quellen der Wahrheit,
+   Wartungsrisiko).
 
 3. ~~**[Mittel] Kein Error-Logging**~~ **[behoben]** — `Classes/Controller/DashboardController.php`,
    `handleRequest()`. Faengt `\Throwable` global, zeigt nur die Fehlerseite. Kein

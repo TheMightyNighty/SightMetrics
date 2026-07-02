@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace SightMetrics\Support;
 
+use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Site\SiteFinder;
 
 final class SiteSelector
@@ -20,8 +21,15 @@ final class SiteSelector
     }
 
     /**
-     * Liest sightmetrics_site_id aus allen TYPO3-Site-Konfigurationen.
-     * Rückgabe leere Liste = kein Filter (alle Cube-Sites sichtbar).
+     * Liest sightmetrics_site_id aus allen TYPO3-Site-Konfigurationen, eingeschraenkt auf
+     * die Sites, deren Seitenbaum (rootPageId) der Backend-Benutzer sehen darf (allgemeines
+     * TYPO3-Seitenbaum-/Webmount-Modell, keine eigene Berechtigungsstruktur). Admins sehen
+     * immer alles.
+     *
+     * Rückgabe leere Liste = kein Filter (alle Cube-Sites sichtbar) – gilt weiterhin, wenn
+     * KEINE Site ein sightmetrics_site_id-Mapping hat (Rückwaertskompatibilitaet fuer
+     * Installationen ohne Site-Mapping). Sobald mindestens eine Site gemappt ist, greift die
+     * Seitenbaum-Pruefung pro Site.
      *
      * Konfiguration in config/sites/<identifier>/config.yaml:
      *   sightmetrics_site_id: 1
@@ -30,14 +38,18 @@ final class SiteSelector
      *
      * @return list<int>
      */
-    public static function allowedSiteIds(SiteFinder $siteFinder): array
+    public static function allowedSiteIds(SiteFinder $siteFinder, BackendUserAuthentication $beUser): array
     {
         $ids = [];
         foreach ($siteFinder->getAllSites() as $site) {
             $raw = $site->getConfiguration()['sightmetrics_site_id'] ?? null;
-            if ($raw !== null) {
-                $ids[] = (int)$raw;
+            if ($raw === null) {
+                continue;
             }
+            if (!$beUser->isAdmin() && $beUser->isInWebMount($site->getRootPageId()) === null) {
+                continue; // kein Seitenbaum-/Webmount-Zugriff auf diese Site
+            }
+            $ids[] = (int)$raw;
         }
         return array_values(array_unique($ids));
     }
