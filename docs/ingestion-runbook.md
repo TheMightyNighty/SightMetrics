@@ -159,10 +159,10 @@ einem kompatiblen JSON-Format. Pflichtfelder:
 ## 3a. GeoIP-Datensatz (TODO für Betreiber)
 
 **Die GeoIP-CSV ist nicht Teil des Repos** (`ingestion/geo/` ist in `.gitignore`) und
-muss von jedem Betreiber selbst beschafft und abgelegt werden — die genaue
-Lizenzlage lässt sich nicht pauschal für alle Betreiber klären, daher liefern wir
-keine Datei mit. Ohne diese Datei bricht der Import mit einer klaren Fehlermeldung
-ab (`load_cube.sh` prüft das Vorhandensein vor dem Lauf).
+muss von jedem Betreiber selbst beschafft und abgelegt werden — die Lizenzlage
+unterscheidet sich je nach Quelle, daher liegt keine Datei bei. Ohne diese Datei
+bricht der Import mit einer klaren Fehlermeldung ab (`load_cube.sh` prüft das
+Vorhandensein vor dem Lauf).
 
 Unterstützt werden drei frei verfügbare Quellen, auswählbar über `SM_GEO_SOURCE`:
 
@@ -190,8 +190,8 @@ Pfade sind konfigurierbar (Standard passt zu `native`):
 Das erwartete Rohformat je Quelle ist in `ingestion/geo_sources/<quelle>.sql`
 dokumentiert (dort auch die SQL-Umwandlung ins interne Schema `start,end,cc`).
 `native` ist das SightMetrics-eigene Format (kein Header, `start,end,cc` als
-Integer/Integer/ISO-2-Code) — z. B. wenn ihr euch selbst einen Datensatz aus
-RIR-Daten (APNIC/ARIN/RIPE) zusammenstellt.
+Integer/Integer/ISO-2-Code) — z. B. für einen selbst zusammengestellten
+Datensatz aus RIR-Daten (APNIC/ARIN/RIPE).
 
 ```bash
 # Beispiel: IP2Location LITE nutzen
@@ -371,14 +371,13 @@ escape=json`) statt Regex-Parsing. Die Feld-Extraktion sitzt in
  "user_agent":{"original":"Mozilla/5.0 ..."}}
 ```
 
-**Wichtig – Key-Kollision vermeiden:** Verwendet die Nginx-Config zusätzlich zur
-Protokoll-Ebene `"http"` (lowercase: version/request/response/tls) eine
-eigene App-Ebene mit URL/Referrer/Cookies etc., **darf dieser Key nicht
-`"HTTP"` (nur Groß-/Kleinschreibung anders) heißen** – DuckDBs JSON-Reader
-löst Spaltennamen case-insensitiv auf und benennt sonst intern um (`HTTP_1`,
-undokumentiertes Verhalten). `log_formats/json_ecs.sql` erwartet stattdessen
-`"app"` als Top-Level-Key für diese Felder – in der Nginx-Config entsprechend
-benennen.
+**Key-Kollision vermeiden:** Enthält die Nginx-Config zusätzlich zur
+Protokoll-Ebene `"http"` (lowercase: version/request/response/tls) eine eigene
+App-Ebene mit URL/Referrer/Cookies etc., darf dieser Key nicht `"HTTP"` heißen
+(nur Groß-/Kleinschreibung anders) — DuckDBs JSON-Reader löst Spaltennamen
+case-insensitiv auf und benennt sonst intern um (`HTTP_1`, undokumentiertes
+Verhalten). `log_formats/json_ecs.sql` erwartet `"app"` als Top-Level-Key für
+diese Felder.
 
 ```bash
 CUBE_DSN="..." SM_LOG_FORMAT=json_ecs ./load_cube.sh /logs/access.json "Site" 1

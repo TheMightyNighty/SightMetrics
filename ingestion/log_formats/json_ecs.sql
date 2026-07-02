@@ -10,14 +10,13 @@
 --    "app":{"url_path":"...","req":{"referer":"..."}},
 --    "user_agent":{"original":"..."}}
 --
--- WICHTIG: "app" (NICHT "HTTP") fuer die App-Ebene - ein zweiter Top-Level-Key,
+-- Die App-Ebene muss "app" heissen, nicht "HTTP": ein zweiter Top-Level-Key,
 -- der sich von "http" nur in Gross-/Kleinschreibung unterscheidet, kollidiert
--- mit DuckDBs (undokumentierter) case-insensitiver Spaltennamens-Aufloesung.
--- Deshalb bewusst per json_extract_string() auf reinen JSON-Pfaden gearbeitet
--- (kein struct-Zugriff/kein read_ndjson-Auto-Typing) - das umgeht sowohl die
--- Namenskollision als auch ungewollte automatische Typ-/Zeitzonen-Konvertierung
--- von "@timestamp" und haelt tsraw als reinen String, exakt wie beim
--- Regex-Pfad (-> gleiche strptime/tsformat-Logik in transform.sql).
+-- mit DuckDBs case-insensitiver Spaltennamens-Aufloesung. Extraktion erfolgt
+-- ueber json_extract_string() auf reinen JSON-Pfaden (kein struct-Zugriff,
+-- kein read_ndjson-Auto-Typing): das vermeidet die Namenskollision und haelt
+-- tsraw als reinen String, kompatibel mit der strptime/tsformat-Logik in
+-- transform.sql (wie beim Regex-Pfad).
 --
 -- Erzeugt TEMP TABLE parsed_lines(g) im selben Schema wie log_formats/regex.sql.
 -- Parameter (SET VARIABLE): logpath, tsformat (Standard siehe lib_logformat.sh)

@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
 # SightMetrics – alternativer Log-Weg: Zeilen aus Grafana Loki statt aus einer
-# Logdatei. Holt per LogQL-Range-Query nur die seit dem letzten Lauf neuen
-# Zeilen und verarbeitet sie DIREKT (kein Zwischenspeichern auf Platte): die
-# Zeilen bleiben im Speicher dieses Prozesses und werden per anonymer Pipe
-# (Prozess-Substitution) unmittelbar in DuckDB gestreamt. Parsing/
-# Sessionisierung/Aggregation sind exakt dieselbe Logik wie beim datei-
-# basierten Import (transform.sql) – nur die Quelle ist eine HTTP-API statt
-# einer Datei mit Byte-Offset.
+# Logdatei. Holt per LogQL-Range-Query die seit dem letzten Lauf neuen Zeilen
+# und verarbeitet sie ohne Zwischendatei: Zeilen bleiben im Prozessspeicher
+# und werden per Prozess-Substitution direkt in DuckDB gestreamt. Parsing,
+# Sessionisierung und Aggregation nutzen dieselbe Logik wie der dateibasierte
+# Import (transform.sql); die Quelle ist eine HTTP-API statt einer Datei mit
+# Byte-Offset.
 #
 # Voraussetzung: Loki-Log-Zeilen enthalten die vollstaendige Rohzeile
 # (Apache/nginx Combined o.ae.), z. B. weil Promtail access.log 1:1 scraped.
-# Fuer strukturierte/JSON-Loki-Zeilen: vorher per LogQL-Pipeline
-# (| line_format) auf eine Zeile im SM_LOG_FORMAT-kompatiblen Format bringen.
+# Fuer strukturierte/JSON-Loki-Zeilen vorher per LogQL-Pipeline (| line_format)
+# auf eine Zeile im SM_LOG_FORMAT-kompatiblen Format bringen.
 #
 # Nutzung:
 #   ./fetch_loki_logs.sh --url http://loki:3100 \
@@ -47,9 +46,9 @@
 #     damit auch ein AUSBLEIBENDER Lauf auffaellt (nicht nur aktive Fehler).
 #
 # Benoetigt: curl, jq (auf dem Host/Container, der dieses Skript ausfuehrt).
-# Achtung: die geholten Zeilen werden im Prozessspeicher gehalten (kein
-# Streaming von der Loki-Antwort selbst) – bei sehr grossen Batches
-# (--limit x viele Seiten) entsprechend RAM einplanen.
+# Die geholten Zeilen werden im Prozessspeicher gehalten, nicht von der
+# Loki-Antwort gestreamt – bei sehr grossen Batches (--limit x viele Seiten)
+# entsprechend RAM einplanen.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 export LC_ALL=C
@@ -101,8 +100,8 @@ command -v curl >/dev/null || { echo "Fehler: curl nicht gefunden." >&2; exit 1;
 command -v jq   >/dev/null || { echo "Fehler: jq nicht gefunden." >&2; exit 1; }
 
 # ---- Healthcheck-Heartbeat (healthchecks.io o.ae., optional) ---------------
-# Deckt ALLE Exit-Pfade ab (auch fruehe Fehler wie fehlendes CUBE_DSN/Geo-Datei):
-# Trap liest den tatsaechlichen Exit-Code der Shell beim Beenden aus.
+# Trap deckt alle Exit-Pfade ab, auch fruehe Fehler wie fehlendes CUBE_DSN
+# oder eine fehlende Geo-Datei, und liest den Exit-Code beim Beenden aus.
 source "$(pwd)/lib_healthcheck.sh"
 cleanup_and_ping() {
   local rc=$?
@@ -169,11 +168,10 @@ CURL_HEADERS=()
 echo ">> Hole neue Zeilen aus Loki: ${LOKI_QUERY}"
 LINES=""
 cursor="$START_NS"
-# Loki behandelt den Bereich als [start, end) - start inklusiv, end EXKLUSIV
-# (empirisch verifiziert). Damit eine Zeile mit Zeitstempel exakt END_NS nicht
-# dauerhaft verloren geht (naechster Lauf beginnt sonst bei END_NS+1, also
-# ebenfalls daran vorbei), wird mit END_NS+1 als 'end' abgefragt -> deckt das
-# gewuenschte inklusive Intervall [START_NS, END_NS] vollstaendig ab.
+# Loki behandelt den Bereich als [start, end) - start inklusiv, end exklusiv.
+# Abfrage mit end=END_NS+1, damit das Intervall [START_NS, END_NS] inklusive
+# abgedeckt ist (sonst wuerde eine Zeile mit Zeitstempel exakt END_NS weder in
+# diesem noch im naechsten Lauf abgeholt).
 QUERY_END_NS=$((END_NS + 1))
 total=0
 max_ts=0
@@ -203,11 +201,10 @@ while [ "$page" -lt "$max_pages" ]; do
   cursor=$((page_max_ts + 1))
   [ "$cursor" -gt "$END_NS" ] && break
 done
-# State-Obergrenze: im Normalfall END_NS (Fenster komplett geleert). Wird der
-# max_pages-Guard erreicht, ist das Fenster NICHT vollstaendig abgeholt -> State
-# nur bis zum zuletzt tatsaechlich verarbeiteten Zeitstempel (max_ts) fortschreiben,
-# sonst wuerden die nicht abgeholten restlichen Zeilen dieses Fensters fuer immer
-# uebersprungen (naechster Lauf faengt einfach dort weiter, wo aufgehoert wurde).
+# State-Obergrenze: im Normalfall END_NS (Fenster vollstaendig geleert). Wird
+# der max_pages-Guard erreicht, ist das Fenster nicht vollstaendig abgeholt -
+# State dann nur bis zum zuletzt verarbeiteten Zeitstempel (max_ts) fortschreiben,
+# damit der naechste Lauf dort weitermacht statt die restlichen Zeilen zu ueberspringen.
 STATE_NS="$END_NS"
 if [ "$page" -ge "$max_pages" ]; then
   echo ">> Warnung: max_pages (${max_pages}) erreicht – Fenster nicht vollstaendig abgeholt." >&2

@@ -81,9 +81,8 @@ final class DashboardController
 
         // Erfolgsfall: Daten als CSP-sicherer JSON-Datenblock + Assets.
         // JSON_INVALID_UTF8_SUBSTITUTE: url/referrer/ua stammen roh aus Webserver-Logs
-        // und koennen ungueltige UTF-8-Bytes enthalten (z. B. Bots) - ohne dieses Flag
-        // liefert json_encode() dann false, was hier NICHT mehr abgefangen wuerde
-        // (das try/catch oben ist zu diesem Zeitpunkt schon vorbei).
+        // und koennen ungueltige UTF-8-Bytes enthalten (z. B. Bots); ohne dieses Flag
+        // liefert json_encode() false, ausserhalb des obigen try/catch.
         $json = json_encode(
             $payload,
             JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT

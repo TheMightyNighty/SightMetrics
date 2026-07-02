@@ -100,11 +100,9 @@ if [ -z "${ROTATE_SKIP_DB:-}" ]; then
     | "$MYSQL" --defaults-extra-file="$ADMCNF"
   echo ">> DB-Passwort gesetzt."
 
-  # ---- Verifizieren (mit neuem Passwort verbinden) - VOR dem Ueberschreiben
-  # der Secret-Datei: schlaegt die Verifikation fehl, bleibt die noch gueltige
-  # alte Datei unangetastet und das Skript bricht hart ab (statt still Exit 0
-  # zu melden, waehrend die Datei bereits auf ein moeglicherweise kaputtes
-  # DSN zeigt).
+  # ---- Verifizieren (mit neuem Passwort verbinden), vor dem Ueberschreiben
+  # der Secret-Datei: schlaegt die Verifikation fehl, bleibt die alte Datei
+  # unangetastet und das Skript bricht mit Exit 1 ab.
   echo ">> Verifiziere neues Passwort…"
   VCNF=$(mktemp); chmod 600 "$VCNF"
   { echo "[client]"; echo "host=${DB_HOST}"; echo "port=${DB_PORT}"; echo "user=${ROTATE_USER}"; echo "password=${NEWPW}"; } > "$VCNF"

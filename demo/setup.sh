@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Einmaliges Setup des Wegwerf-Demo-Stacks. Holt/erzeugt alles, was NICHT im
+# Einmaliges Setup des Wegwerf-Demo-Stacks. Holt/erzeugt alles, was nicht im
 # Repo liegt (bewusst gitignored: große Binärdateien, generierte Installationen,
 # lizenzpflichtige Datensätze) und richtet TYPO3 nicht-interaktiv ein.
 #
