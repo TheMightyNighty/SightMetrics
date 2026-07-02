@@ -6,6 +6,8 @@ namespace SightMetrics\Controller;
 
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerAwareInterface;
+use Psr\Log\LoggerAwareTrait;
 use SightMetrics\Domain\Repository\CubeRepository;
 use SightMetrics\Support\ErrorPage;
 use SightMetrics\Support\SiteSelector;
@@ -22,8 +24,10 @@ use TYPO3\CMS\Core\Site\SiteFinder;
  * JSON an das Frontend (ECharts) durch. Die teure Aggregation hat die DuckDB-
  * Pipeline schon erledigt – hier passiert nur SELECT + Rendering.
  */
-final class DashboardController
+final class DashboardController implements LoggerAwareInterface
 {
+    use LoggerAwareTrait;
+
     public function __construct(
         private readonly ModuleTemplateFactory $moduleTemplateFactory,
         private readonly PageRenderer $pageRenderer,
@@ -66,6 +70,10 @@ final class DashboardController
             ];
         } catch (\Throwable $e) {
             $technical = $e->getMessage();
+            $this->logger?->error('SightMetrics: Dashboard-Aufbau fehlgeschlagen', [
+                'exception' => $e,
+                'siteParam' => $request->getQueryParams()['site'] ?? null,
+            ]);
         }
 
         // Fehlerfall: konfigurierbare Fehlerseite rendern (kein Dashboard/keine Assets).
@@ -75,7 +83,10 @@ final class DashboardController
                 $conf = $this->extensionConfiguration->get('sight_metrics');
             } catch (\Throwable) {
             }
-            $view->assign('error', ErrorPage::resolve($conf, $technical));
+            // Technische Meldung (kann DB-Host/User/Pfade enthalten) nur an Admins,
+            // auch wenn showTechnical fuer alle Modul-Nutzer aktiviert ist.
+            $isAdmin = ($GLOBALS['BE_USER'] ?? null)?->isAdmin() ?? false;
+            $view->assign('error', ErrorPage::resolve($conf, $technical, $isAdmin));
             return $view->renderResponse('Dashboard/Index');
         }
 
@@ -89,7 +100,9 @@ final class DashboardController
                 | JSON_INVALID_UTF8_SUBSTITUTE
         );
         if ($json === false) {
-            $view->assign('error', ErrorPage::resolve([], 'JSON-Encoding fehlgeschlagen: ' . json_last_error_msg()));
+            $this->logger?->error('SightMetrics: JSON-Encoding fehlgeschlagen', ['jsonError' => json_last_error_msg()]);
+            // conf=[] -> showTechnical greift hier ohnehin nicht, isAdmin-Wert daher irrelevant.
+            $view->assign('error', ErrorPage::resolve([], 'JSON-Encoding fehlgeschlagen: ' . json_last_error_msg(), false));
             return $view->renderResponse('Dashboard/Index');
         }
         $this->pageRenderer->addCssFile('EXT:sight_metrics/Resources/Public/Css/dashboard.css');

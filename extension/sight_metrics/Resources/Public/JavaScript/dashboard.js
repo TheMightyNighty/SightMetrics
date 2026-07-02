@@ -358,7 +358,14 @@
     ['keyword', 'Suchbegriffe', 'v'], ['url', 'Seiten', 'pv'], ['entry', 'Einstiegsseiten', 'v'],
     ['exit', 'Ausstiegsseiten', 'v'], ['download', 'Downloads', 'pv'], ['status', 'Statuscodes', 'pv'],
     ['method', 'HTTP-Methoden', 'pv'], ['hour', 'Besuchszeiten (Stunde)', 'pv']];
-  function csvCell(s) { s = String(s == null ? '' : s); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  // Fuehrende =/+/-/@ (Formel-Praefixe in Excel/LibreOffice/Sheets) mit Apostroph entschaerfen:
+  // url/referrer/keyword stammen roh aus Weblogs und sind angreiferkontrolliert
+  // (CSV-Injection, z.B. Referrer "=HYPERLINK(...)" wird sonst beim Oeffnen ausgefuehrt).
+  function csvCell(s) {
+    s = String(s == null ? '' : s);
+    if (/^[=+\-@]/.test(s)) s = "'" + s;
+    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
   function csvRow(arr) { return arr.map(csvCell).join(';'); }
   function buildCsv(a, b) {
     var L = [], days = DAILY.filter(function (d) { return inR(d.datum, a, b); });
