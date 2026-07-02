@@ -27,15 +27,20 @@ fuer Details zu abgeschlossenen Themen.
      strukturell anders als 1./2. (kein Top-N/Kind-Schema, sondern Pfadsegmente). **Bewusst
      nicht Teil dieses Tasks** — braucht ein eigenes Baum-Nachlade-Konzept.
 
-  **Blocker, der zuerst geklaert werden muss:** die Eltern-Kind-Kodierung der
-  Drill-down-Dimensionen nutzt `dimkey = Elternlabel + SEP + Kindlabel`; in `dashboard.js`
-  ist `SEP` aber ein **leerer String** (`var SEP = '';`). Unklar, ob das Absicht ist (echter
-  Trenner steckt schon in den dimkey-Werten aus der Ingestion) oder ein bestehender Bug, der
-  nur zufaellig funktioniert. Eine serverseitige Top-N-Query fuer Kind-Dimensionen muss
-  exakt das gleiche Praefix-Matching wie `firstSeg()`/`childrenOf()` nachbauen — das laesst
-  sich nicht sauber entwerfen, ohne das SEP-Verhalten vorher zu verstehen. **Erster Schritt
-  jeder Umsetzung: SEP-Kodierung in der Ingestion-Pipeline (`transform.sql` o. ae.) und in
-  `dashboard.js` nachvollziehen und dokumentieren.**
+  ~~**Blocker**~~ **Geklaert (2026-07-02):** `SEP` in `dashboard.js` (Zeile 6, `var SEP =
+  '\x1f';`) ist **kein leerer String**, sondern das ASCII-Steuerzeichen Unit Separator
+  (0x1F/`chr(31)`) — im Editor/Terminal unsichtbar, deshalb der urspruengliche Verdacht auf
+  einen leeren String. Per Hexdump verifiziert: `hexdump -C` auf die Quellzeile zeigt Byte
+  `1f` zwischen den Anfuehrungszeichen. Die Ingestion (`ingestion/transform.sql`, Zeilen
+  126/127/131/133/135) baut die Drill-down-`dimkey`-Werte exakt mit `chr(31)` als Trenner
+  (`ref_type||chr(31)||ref_name`, `browser||chr(31)||browser_version` usw.) — Client und
+  Ingestion sind konsistent, kein Bug, funktioniert nicht "zufaellig". Per jsdom-Repro
+  bestaetigt: `firstSeg()`/`lastSeg()`/`childrenOf()` verhalten sich fuer echte Werte wie
+  erwartet (z. B. `lastSeg('Firefox')` liefert `'Firefox'`, nicht `''`, weil `0x1f` in
+  `'Firefox'` nicht vorkommt und `indexOf`/`lastIndexOf` dann `-1` liefern, nicht 0).
+  Eine serverseitige Top-N-Query fuer Kind-Dimensionen kann also 1:1 mit `chr(31)` als
+  Trennzeichen bauen (z. B. `SUBSTRING_INDEX(dimkey, CHAR(31), 1)` fuer den Eltern-Praefix
+  in MySQL/MariaDB).
 
   **Grobskizze danach** (final zu entwerfen, nicht final):
   - `CubeRepository`: neue Methode `topKeys($siteId, $from, $bis, $dim, $metric, $limit)`
