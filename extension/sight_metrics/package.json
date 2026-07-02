@@ -1,13 +1,16 @@
 {
     "name": "sightmetrics-dashboard-js-tests",
     "private": true,
-    "description": "Minimaler DOM-Smoke-Test fuer dashboard.js (kein Build-Prozess, nur Dev-Tooling fuer Tests). Wird nicht an TYPO3-Instanzen ausgeliefert.",
+    "description": "Dev-Tooling: JS-Smoke-Test fuer dashboard.js sowie versionsgepinnter Bezug der Vendor-Assets (Chart.js/Leaflet) ueber npm. Weder node_modules noch dieses package.json werden an TYPO3-Instanzen ausgeliefert, nur die statischen Dateien unter Resources/Public/Vendor/.",
     "type": "module",
     "license": "GPL-2.0-or-later",
     "scripts": {
-        "test": "node --test Tests/JavaScript/*.test.mjs"
+        "test": "node --test Tests/JavaScript/*.test.mjs",
+        "vendor:update": "node scripts/update-vendor.mjs"
     },
     "devDependencies": {
-        "jsdom": "29.1.1"
+        "chart.js": "4.5.1",
+        "jsdom": "29.1.1",
+        "leaflet": "1.9.4"
     }
 }

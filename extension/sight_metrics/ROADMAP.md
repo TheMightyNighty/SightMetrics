@@ -62,8 +62,13 @@ fuer Details zu abgeschlossenen Themen.
   Cache-Tabelle wird von TYPO3 selbst angelegt (`extension:setup`/DB-Compare), keine eigene
   Migration noetig.
 
-## Vendor-Provenienz (aus vorheriger Pruefung, Kontext)
+## Vendor-Provenienz
 
-- Chart.js/Leaflet werden per Ad-hoc-`curl` bezogen (kein npm-Lockfile). Fuer eine
-  produktive Uebernahme mit Supply-Chain-Anforderungen: Bezug ueber Paketmanager mit
-  Versions-Pinning (siehe `Resources/Public/Vendor/NOTICE.md`).
+- ~~Chart.js/Leaflet werden per Ad-hoc-`curl` bezogen (kein npm-Lockfile)~~ **[behoben]** —
+  beide jetzt als `devDependencies` in `package.json`, versionsgepinnt via
+  `package-lock.json`. `npm run vendor:update` (`scripts/update-vendor.mjs`) kopiert die
+  Dist-Dateien aus `node_modules/` nach `Resources/Public/Vendor/` und gibt die
+  SHA-256-Summen aus. Verifiziert: alle kopierten Dateien sind byte-identisch mit den
+  zuvor per `curl` bezogenen (SHA-256 unveraendert). `world.js` (Natural-Earth-Geodaten)
+  bleibt bewusst aussen vor — einmaliger TopoJSON-zu-GeoJSON-Konvertierungsschritt, kein
+  1:1-Dateikopie. Details in `Resources/Public/Vendor/NOTICE.md`.
