@@ -66,4 +66,17 @@ final class WindowResolverTest extends TestCase
         self::assertSame(['1970-01-01', '1970-01-01'], WindowResolver::resolve(null, null, 92, null, null));
         self::assertSame(['1970-01-01', '1970-01-01'], WindowResolver::resolve('', '', 92, null, null));
     }
+
+    // iso() ist public, weil TopNAjaxController dieselbe Validierung nutzt.
+    public function testIsoAcceptsOnlyRealCalendarDates(): void
+    {
+        self::assertSame('2026-06-30', WindowResolver::iso('2026-06-30'));
+        self::assertSame('2024-02-29', WindowResolver::iso('2024-02-29'), 'Schaltjahr');
+        self::assertNull(WindowResolver::iso('2026-13-01'), 'Monat 13');
+        self::assertNull(WindowResolver::iso('2026-99-99'), 'Regex-konform, aber kein Datum');
+        self::assertNull(WindowResolver::iso('2023-02-29'), 'kein Schaltjahr');
+        self::assertNull(WindowResolver::iso('30.06.2026'), 'falsches Format');
+        self::assertNull(WindowResolver::iso(''));
+        self::assertNull(WindowResolver::iso(null));
+    }
 }

@@ -341,6 +341,34 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         self::assertSame(['Bürgeramt' . $sep . 'seite-a'], array_column($children, 'dimkey'));
     }
 
+    public function testTopNExcludesEmptyDimkeysAndReturnsIntTypes(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'keyword', 'dimkey' => 'rathaus', 'pv' => 5, 'v' => 3],
+            ['dim' => 'keyword', 'dimkey' => '', 'pv' => 99, 'v' => 99],
+        ]);
+
+        $top = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'keyword', 'v', 8);
+
+        self::assertSame(
+            [['dimkey' => 'rathaus', 'pv' => 5, 'v' => 3]],
+            $top,
+            'leerer dimkey ausgefiltert, pv/v als int (nicht als DB-String)'
+        );
+    }
+
+    public function testDimSummaryExcludesEmptyDimkeys(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'keyword', 'dimkey' => 'rathaus', 'pv' => 5, 'v' => 3],
+            ['dim' => 'keyword', 'dimkey' => '', 'pv' => 99, 'v' => 99],
+        ]);
+
+        $summary = $this->repo()->dimSummary(1, '2026-01-01', '2026-01-31', 'keyword');
+
+        self::assertSame(['pv' => 5, 'v' => 3, 'count' => 1], $summary, 'leerer dimkey zaehlt weder in Summen noch in count');
+    }
+
     public function testDimSummaryWithParentKeyOnlyCountsMatchingChildren(): void
     {
         $sep = "\x1f";

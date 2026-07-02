@@ -50,8 +50,11 @@ final class WindowResolver
         return [$from, $bis];
     }
 
-    /** Validiert ein ISO-Datum (YYYY-MM-DD); sonst null. */
-    private static function iso(?string $s): ?string
+    /**
+     * Validiert ein ISO-Datum (YYYY-MM-DD inkl. checkdate, z. B. kein 2026-99-99); sonst
+     * null. Public, weil auch TopNAjaxController dieselbe Validierung braucht.
+     */
+    public static function iso(?string $s): ?string
     {
         if ($s === null || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) {
             return null;

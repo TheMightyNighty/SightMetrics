@@ -46,20 +46,21 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
 
 ### Logik / Fehler (niedrig)
 
-3. **[Niedrig] Server-Top-N filtert `dimkey = ''` nicht** — das alte client-seitige
-   `agg()` uebersprang leere Keys. `transform.sql` schuetzt keyword/referrer per `WHERE`,
-   aber nicht alle Dims strukturell; eine leere Barlisten-Zeile waere moeglich und die
-   `dimSummary`-Prozentbasis zaehlt sie mit. **Fix:** `dimkey <> ''` in
-   `topN()`/`dimSummary()`.
+3. ~~**[Niedrig] Server-Top-N filtert `dimkey = ''` nicht**~~ **[behoben]** — das alte
+   client-seitige `agg()` uebersprang leere Keys; die Server-Queries taten das nicht
+   (leere Barlisten-Zeile moeglich, `dimSummary`-Prozentbasis zaehlte sie mit).
+   **Fix (2026-07-02):** `dimkey <> ''` in `topN()` und `dimSummary()` (schliesst per
+   SQL-Semantik auch NULL aus); Functional-Tests fuer beide Methoden ergaenzt.
 
-4. **[Niedrig] Ajax-Datumsvalidierung ohne `checkdate()`** — `TopNAjaxController` prueft
-   `from`/`to` nur per Regex (`2026-99-99` passiert; harmlos, 0 Zeilen, aber inkonsistent
-   zu `WindowResolver`). `offset` unbegrenzt (tiefe Pagination = teure Queries).
-   **Fix:** `checkdate()` ergaenzen (Helper aus WindowResolver wiederverwenden), `offset`
-   deckeln (z. B. 10000).
+4. ~~**[Niedrig] Ajax-Datumsvalidierung ohne `checkdate()`**~~ **[behoben]** —
+   `TopNAjaxController` nutzt jetzt `WindowResolver::iso()` (dafuer public gemacht statt
+   Regex-Duplikat): Format + `checkdate`, `2026-99-99` liefert 400. `offset` auf 10000
+   gedeckelt (tiefe Pagination = voller Sort pro Seite). Unit-Tests fuer `iso()` ergaenzt
+   (Schaltjahr, Monat 13, falsches Format).
 
-5. **[Nit] Ajax-Rows liefern `pv`/`v` als Strings** (mysqli-Verhalten); das JS toleriert
-   das nur durch implizite Koerzierung. **Fix:** `(int)`-Cast im Controller/Repository.
+5. ~~**[Nit] Ajax-Rows liefern `pv`/`v` als Strings**~~ **[behoben]** — `topN()` castet
+   die Aggregat-Summen jetzt explizit auf int (sauberer JSON-Vertrag statt impliziter
+   JS-Koerzierung); per Functional-Test auf identische Typen gesichert.
 
 ### Betrieb
 

@@ -220,13 +220,23 @@ final class CubeRepository
                     $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
+                    // Leere Keys nicht anzeigen (frueher client-seitig in agg() gefiltert);
+                    // '<>' schliesst NULL-dimkeys gleich mit aus.
+                    $qb->expr()->neq('dimkey', $qb->createNamedParameter('')),
                 );
             $this->applyParentPrefix($qb, $parentKey);
-            return $qb->groupBy('dimkey')
+            $rows = $qb->groupBy('dimkey')
                 ->orderBy($metric, 'DESC')
                 ->setMaxResults($limit)
                 ->setFirstResult($offset)
                 ->executeQuery()->fetchAllAssociative();
+            // mysqli liefert Aggregat-Summen als String -- fuer einen sauberen JSON-Vertrag
+            // (Client rechnet mit Zahlen) hier explizit casten.
+            return array_map(static fn(array $r): array => [
+                'dimkey' => (string)$r['dimkey'],
+                'pv' => (int)$r['pv'],
+                'v' => (int)$r['v'],
+            ], $rows);
         });
     }
 
@@ -253,6 +263,9 @@ final class CubeRepository
                     $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
+                    // Konsistent zu topN(): leere Keys zaehlen weder in die Prozentbasis
+                    // noch in "+ N weitere".
+                    $qb->expr()->neq('dimkey', $qb->createNamedParameter('')),
                 );
             $this->applyParentPrefix($qb, $parentKey);
             $row = $qb->executeQuery()->fetchAssociative();

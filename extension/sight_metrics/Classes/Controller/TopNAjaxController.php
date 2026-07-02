@@ -11,6 +11,7 @@ use Psr\Log\LoggerAwareTrait;
 use SightMetrics\Domain\Repository\CubeRepository;
 use SightMetrics\Support\SiteSelector;
 use SightMetrics\Support\TopNDims;
+use SightMetrics\Support\WindowResolver;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Http\JsonResponse;
 use TYPO3\CMS\Core\Site\SiteFinder;
@@ -58,14 +59,17 @@ final class TopNAjaxController implements LoggerAwareInterface
             return new JsonResponse(['error' => 'kein Zugriff auf diese Site'], 403);
         }
 
-        $from = (string)($params['from'] ?? '');
-        $to = (string)($params['to'] ?? '');
-        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $to)) {
+        // Gleiche Datumsvalidierung wie WindowResolver (Format + checkdate).
+        $from = WindowResolver::iso(isset($params['from']) ? (string)$params['from'] : null);
+        $to = WindowResolver::iso(isset($params['to']) ? (string)$params['to'] : null);
+        if ($from === null || $to === null) {
             return new JsonResponse(['error' => 'ungueltiger Zeitraum'], 400);
         }
 
         $limit = max(1, min(100, (int)($params['limit'] ?? TopNDims::DEFAULT_LIMIT)));
-        $offset = max(0, (int)($params['offset'] ?? 0));
+        // Offset deckeln: tiefe Pagination waere pro Seite ein voller Sort ueber die
+        // Dimension; jenseits von 10000 Zeilen ist die UI ohnehin nicht mehr sinnvoll.
+        $offset = max(0, min(10000, (int)($params['offset'] ?? 0)));
         $metric = $metricMap[$dim];
 
         try {
