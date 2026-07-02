@@ -404,8 +404,31 @@ MariaDB analytics            ← Tabellen: cube, daily, meta
 Fluid-Template Index.html    ← rendert alle Panels; Daten als JSON-Block im HTML
         │
         ▼
-dashboard.js                 ← ECharts-Initialisierung, Drill-down, Choropleth
+dashboard.js                 ← Chart.js (Verlauf/Stunden), Leaflet (Choropleth-Karte), Drill-down
 ```
+
+### Bekannte Grenzen: Skalierung & Caching
+
+Zwei bewusste Design-Entscheidungen, die bei sehr grossen Sites relevant werden koennen:
+
+**Kein serverseitiges Caching.** Jeder Modulaufruf fuehrt `sites()`, `meta()`, `daily()` und
+`cube()` frisch gegen die Cube-DB aus — kein Query- oder Response-Cache. Für ein Backend-Modul
+(kein Frontend-Traffic, Zugriffe durch eine ueberschaubare Zahl Redakteure/Admins) ist das
+vertretbar: Lesezugriffe sind guenstig (read-only DBAL-SELECTs, keine Aggregation in der DB),
+und ein Cache wuerde Aktualitaet gegen Komplexitaet (Invalidierung bei neuen Ingestion-Laeufen)
+eintauschen. Bei sehr vielen gleichzeitigen Backend-Nutzern auf derselben Site kann das die
+Cube-DB spuerbar belasten — dann TYPO3s Cache-Framework (`GLOBALS['TYPO3_CONF_VARS']['SYS']
+['caching']`) fuer `daily()`/`cube()` mit kurzer TTL (z. B. 60s) ergaenzen.
+
+**Keine serverseitige Kardinalitaets-Begrenzung.** `windowDays` begrenzt nur die Zeitachse
+(wie viele Tage geladen werden), nicht wie viele *unterschiedliche Werte* pro Dimension im
+Fenster existieren. `CubeRepository::cube()` liefert alle Zeilen des Fensters; Aggregation
+und Top-N-Anzeige (z. B. "Top 8 Laender") passiert clientseitig in `dashboard.js`. Bei einer
+Site mit z. B. 50.000 unterschiedlichen URLs/Referrern im Zeitfenster waechst die JSON-Payload
+entsprechend — unabhaengig von `windowDays`. Fuer die bisherigen Einsatzgroessen (einzelne
+Behoerden-Websites) unproblematisch; bei sehr grossen/vielbesuchten Sites (grosse Bundes-Portale)
+sollte vor dem Einsatz die tatsaechliche Kardinalitaet pro Dimension geprueft werden. Siehe
+`ROADMAP.md` fuer den Stand der Diskussion zu einer moeglichen serverseitigen Top-N-Begrenzung.
 
 ### Neue Dimension hinzufügen
 
@@ -437,6 +460,7 @@ extension/lint.sh       # nur Lint: PHPStan Level 6 + TYPO3 Coding Standards
 | **2a Unit** | `phpunit -c phpunit.xml.dist` | keiner |
 | **2b Functional** | `phpunit -c phpunit.functional.xml.dist` | kein Docker (SQLite) |
 | **2c Smoke** | `typo3 sightmetrics:smoke` | Demo-Stack läuft |
+| **2d JS Smoke** | `npm test` (in `sight_metrics/`) | Node.js, kein Docker |
 | **3 E2E** | `e2e/run.sh` | Demo-Stack läuft, Puppeteer |
 
 ### CI (GitHub Actions)

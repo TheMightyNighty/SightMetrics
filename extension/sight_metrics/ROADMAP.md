@@ -160,13 +160,25 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
 
 ## Architektur
 
-- **Skalierung ueber Kardinalitaet ungeloest**: rohe Cube-Zeilen gehen komplett an den
-  Browser, Aggregation passiert clientseitig. `windowDays` begrenzt nur die Zeitachse —
-  bei vielen unterschiedlichen URLs/Referrern im Fenster waechst die JSON-Payload
-  unbegrenzt. Fuer grosse Sites braucht es serverseitige Top-N-Begrenzung pro Dimension
-  oder Vor-Aggregation im Backend.
-- **Kein Caching**: jeder Modulaufruf feuert alle Queries neu. Fuer ein Backend-Modul
-  vertretbar, sollte aber dokumentiert sein (bewusste Entscheidung, kein Vergessen).
+- **Skalierung ueber Kardinalitaet ungeloest** — rohe Cube-Zeilen gehen komplett an den
+  Browser, Aggregation passiert clientseitig. `windowDays` begrenzt nur die Zeitachse; bei
+  vielen unterschiedlichen URLs/Referrern im Fenster waechst die JSON-Payload unbegrenzt.
+
+  **Status: dokumentiert (`docs/extension-handbuch.md` Abschnitt "Bekannte Grenzen"), noch
+  nicht geloest.** Eine Umsetzung ist keine mechanische Korrektur, sondern eine
+  Architektur-Entscheidung mit echtem Trade-off: der aktuelle Drill-down
+  (`childrenOf()`/`agg()` in `dashboard.js`) braucht fuer eine aufgeklappte Kategorie
+  saemtliche Kind-Zeilen, nicht nur die Top N — eine serverseitige Top-N-Begrenzung pro
+  Dimension wuerde Drill-down fuer alles ausserhalb der Top N unvollstaendig machen, sofern
+  nicht zusaetzlich eine Nachlade-Route pro aufgeklappter Kategorie eingefuehrt wird. Vor
+  einer Umsetzung klaeren: reicht ein harter Sicherheits-Deckel (z. B. `LIMIT` mit hohem
+  Default, verhindert nur das Worst-Case-Wachstum) oder wird echtes Top-N + Nachladen
+  gebraucht (mehr Aufwand, aendert die Drill-down-API)?
+
+- ~~**Kein Caching**~~ **[dokumentiert]** — jeder Modulaufruf feuert alle Queries neu.
+  Bewusste Entscheidung (kein Frontend-Traffic, guenstige read-only Selects), nicht
+  vergessen. In `docs/extension-handbuch.md` Abschnitt "Bekannte Grenzen" mit Empfehlung
+  fuer den Fall vieler gleichzeitiger Nutzer (TYPO3-Cache-Framework, kurze TTL) dokumentiert.
 
 ## Betrieb
 
