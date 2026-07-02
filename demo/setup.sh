@@ -106,8 +106,10 @@ fi
 echo ">> Starte kompletten Stack..."
 docker compose up -d
 
-echo ">> Deploye Extension (sight_metrics) ins Demo-TYPO3..."
-"${REPO}/extension/sync-to-demo.sh"
+# Extension-Quelle ist per Bind-Mount live eingebunden (siehe docker-compose.yml,
+# ../extension/sight_metrics -> packages/sight_metrics) - kein Sync-/Kopierschritt
+# noetig. Nur den Cache leeren, damit ein frischer Erstinstall sie sofort sieht.
+docker compose exec -T web php vendor/bin/typo3 cache:flush >/dev/null 2>&1 || true
 
 cat <<EOF
 

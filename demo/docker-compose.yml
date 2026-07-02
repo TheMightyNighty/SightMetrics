@@ -34,6 +34,9 @@ services:
       CUBE_RO_PASSWORD: "${CUBE_RO_PASSWORD:-report_ro}"
     volumes:
       - ./app:/var/www/html
+      # Extension-Quelle live gemountet: Aenderungen an extension/sight_metrics/
+      # sind sofort im Container sichtbar, kein Sync-Skript/Kopierschritt noetig.
+      - ../extension/sight_metrics:/var/www/html/packages/sight_metrics:ro
     ports:
       - "8091:80"
     working_dir: /var/www/html

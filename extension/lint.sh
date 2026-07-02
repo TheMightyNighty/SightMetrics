@@ -3,7 +3,6 @@
 # Laeuft im Demo-Container (nutzt dessen Tools + TYPO3-Autoloader).
 set -uo pipefail
 cd "$(dirname "$0")"
-bash ./sync-to-demo.sh >/dev/null 2>&1
 P=packages/sight_metrics
 fail=0
 

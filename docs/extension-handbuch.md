@@ -28,7 +28,6 @@ Cube-DB (MariaDB, User `report_ro`); kein DuckDB, kein Schreiben.
 extension/
 ├── lint.sh                         Linting-Runner: PHPStan + TYPO3 Coding Standards
 ├── run-tests.sh                    Lokaler Test-Runner (Suite 2a Unit, 2b Functional, 2c Smoke)
-├── sync-to-demo.sh                 Sync extension/sight_metrics/ → demo/app/packages/sight_metrics/
 │
 └── sight_metrics/                  Composer-Paket sightmetrics/sight-metrics
     ├── composer.json               Paket-Metadaten + require-dev (phpstan, testing-framework …)
@@ -134,15 +133,14 @@ vendor/bin/typo3 extension:activate sight_metrics
 ### 3b. Lokale Entwicklung (Demo-Stack)
 
 ```bash
-# Extension in das Demo-TYPO3 synchronisieren (Demo-Stack muss laufen):
-extension/sync-to-demo.sh
-
-# Oder automatisch bei Änderungen (Demo):
 cd demo && docker compose up -d
 ```
 
-Die Demo nutzt einen `path`-Repository-Eintrag in `demo/app/composer.json`, sodass
-`sync-to-demo.sh` genügt – kein `composer update` für Klassen-Änderungen nötig.
+Der `web`-Service bindet `extension/sight_metrics/` per Bind-Mount direkt als
+`packages/sight_metrics` ein (siehe `demo/docker-compose.yml`). Zusammen mit dem
+`path`-Repository-Eintrag in `demo/app/composer.json` sind Änderungen am
+Extension-Code sofort im Container sichtbar – kein Sync-/Kopierschritt und kein
+`composer update` für Klassen-Änderungen nötig.
 
 ---
 

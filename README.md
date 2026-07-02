@@ -145,8 +145,11 @@ TYPO3-Instanz mit mehreren Sites in einem Namespace (Cube in derselben MariaDB).
 ```bash
 ./run-tests.sh            # Lint + alle Testsuiten (Ingestion-Pipeline + Extension)
 extension/lint.sh         # nur Lint: PHPStan 2 + TYPO3 Coding Standards
-extension/sync-to-demo.sh # Extension ins Wegwerf-TYPO3 deployen
 ```
+
+Die Extension-Quelle (`extension/sight_metrics/`) ist im Demo-Stack per Bind-Mount
+live eingebunden (siehe `demo/docker-compose.yml`) – Änderungen sind ohne
+Kopier-/Sync-Schritt sofort im laufenden Container sichtbar.
 
 ---
 
