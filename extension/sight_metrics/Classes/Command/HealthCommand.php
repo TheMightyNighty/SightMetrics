@@ -42,6 +42,16 @@ final class HealthCommand extends Command
         $critH = (int)$input->getOption('crit-hours');
         $asJson = (bool)$input->getOption('json');
 
+        if ($critH < $warnH) {
+            return $this->emit(
+                $output,
+                $asJson,
+                3,
+                sprintf('Ungueltige Schwellenwerte: --crit-hours (%d) muss >= --warn-hours (%d) sein', $critH, $warnH),
+                []
+            );
+        }
+
         try {
             $sites = $this->repo->sites();
         } catch (\Throwable $e) {

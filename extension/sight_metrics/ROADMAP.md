@@ -211,9 +211,10 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
 
 ## Betrieb
 
-- `sightmetrics:health` validiert nicht `--crit-hours >= --warn-hours`; vertauschte Werte
-  ergeben stumm unsinnige Schwellenwert-Ergebnisse. **Fix:** Validierung + Fehlermeldung
-  bei `critH < warnH`.
+- ~~`sightmetrics:health` validiert nicht `--crit-hours >= --warn-hours`~~ **[behoben]** —
+  vertauschte Werte ergaben stumm unsinnige Schwellenwert-Ergebnisse. Validiert jetzt vor der
+  DB-Abfrage, Exit-Code 3 (UNKNOWN) bei `critH < warnH`. Manuell per CLI verifiziert (kein
+  bestehender Testrahmen fuer diesen Command).
 
 ## Vendor-Provenienz (aus vorheriger Pruefung, Kontext)
 
