@@ -35,6 +35,23 @@ LOGFILE="${1:-${REPO}/logs/example_1k.log}"
 SITENAME="${2:-Musterbehörde}"
 SITEID="${3:-1}"
 
+# ---- Offset-Tracking -------------------------------------------------------
+STATE_DIR="${STATE_DIR:-${REPO}/state}"
+mkdir -p "$STATE_DIR"
+
+# ---- Per-Site-Lock: kein paralleler Doppelimport derselben Site -----------
+# Schützt die Offset-/Meta-Konsistenz, falls sich zwei Läufe für dieselbe Site
+# überschneiden (z. B. manuell + geplanter Lauf). Laeuft VOR Geo/Secrets/
+# Log-Format-Validierung, damit ein Lock-Konflikt sofort und ressourcenfrei
+# abbricht, statt an fehlenden Voraussetzungen zu scheitern, die fuer diesen
+# Lauf gar nicht mehr gebraucht werden.
+SITE_LOCK="${STATE_DIR}/site_${SITEID}.lock"
+exec 9>"$SITE_LOCK"
+if ! flock -n 9; then
+  echo ">> Site ${SITEID} wird bereits importiert (Lock ${SITE_LOCK}). Übersprungen."
+  exit 0
+fi
+
 # ---- Geo-Quelle -------------------------------------------------------------
 source "$(pwd)/lib_geo.sh"
 
@@ -52,20 +69,6 @@ export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META
 
 # ---- Log-Format ------------------------------------------------------------
 source "$(pwd)/lib_logformat.sh"
-
-# ---- Offset-Tracking -------------------------------------------------------
-STATE_DIR="${STATE_DIR:-${REPO}/state}"
-mkdir -p "$STATE_DIR"
-
-# ---- Per-Site-Lock: kein paralleler Doppelimport derselben Site -----------
-# Schützt die Offset-/Meta-Konsistenz, falls sich zwei Läufe für dieselbe Site
-# überschneiden (z. B. manuell + geplanter Lauf).
-SITE_LOCK="${STATE_DIR}/site_${SITEID}.lock"
-exec 9>"$SITE_LOCK"
-if ! flock -n 9; then
-  echo ">> Site ${SITEID} wird bereits importiert (Lock ${SITE_LOCK}). Übersprungen."
-  exit 0
-fi
 
 # State-Key: md5(site_id:absoluter_log-Pfad) → kollisionsfreier Dateiname
 STATE_KEY=$(printf '%s:%s' "$SITEID" "$(realpath "$LOGFILE")" | md5sum | cut -c1-16)
