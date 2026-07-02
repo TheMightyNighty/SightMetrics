@@ -1,0 +1,26 @@
+version = 1
+
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "SightMetrics"
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+[[annotations]]
+path = "Resources/Public/Vendor/chart.umd.min.js"
+SPDX-FileCopyrightText = "2014-2025 Chart.js Contributors"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = "Resources/Public/Vendor/leaflet.js"
+SPDX-FileCopyrightText = "2010-2023 Vladimir Agafonkin, 2010-2011 CloudMade"
+SPDX-License-Identifier = "BSD-2-Clause"
+
+[[annotations]]
+path = "Resources/Public/Vendor/leaflet.css"
+SPDX-FileCopyrightText = "2010-2023 Vladimir Agafonkin, 2010-2011 CloudMade"
+SPDX-License-Identifier = "BSD-2-Clause"
+
+[[annotations]]
+path = "Resources/Public/Vendor/world.js"
+SPDX-FileCopyrightText = "Natural Earth (public domain map data, aufbereitet fuer SightMetrics)"
+SPDX-License-Identifier = "CC0-1.0"

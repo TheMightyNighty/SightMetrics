@@ -31,6 +31,9 @@
 #sightmetrics .bl-sub .bl-val{font-weight:400}
 #sightmetrics .sm-hint{font-weight:400;text-transform:none;letter-spacing:0;color:var(--w-muted);font-size:10px}
 #sightmetrics .sm-chart.map{height:420px}
+#sightmetrics .sm-map-legend{background:var(--w-card);border:1px solid var(--w-line);border-radius:6px;padding:6px 8px;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+#sightmetrics .sm-map-legend-bar{width:110px;height:8px;border-radius:3px}
+#sightmetrics .sm-map-legend-lbl{display:flex;justify-content:space-between;font-size:10px;color:var(--w-muted);margin-top:3px}
 #sightmetrics .sm-kpi{background:var(--w-card);border:1px solid var(--w-line);border-radius:10px;padding:14px 16px}
 #sightmetrics .sm-kpi .v{font-size:30px;font-weight:700;line-height:1}
 #sightmetrics .sm-kpi .l{color:var(--w-muted);font-size:12px;margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
@@ -40,7 +43,7 @@
 #sightmetrics .sm-g23{grid-template-columns:1.3fr 1fr}
 #sightmetrics .sm-card{background:var(--w-card);border:1px solid var(--w-line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
 #sightmetrics .sm-card :is(h2,h3){font-size:13px;margin:0 0 10px;color:var(--w-muted);text-transform:uppercase;letter-spacing:.04em}
-#sightmetrics .sm-chart{height:300px}
+#sightmetrics .sm-chart{height:300px;position:relative}
 #sightmetrics .sm-chart.sm{height:230px}
 #sightmetrics table{width:100%;border-collapse:collapse;font-size:13px}
 #sightmetrics th,#sightmetrics td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--w-line)}

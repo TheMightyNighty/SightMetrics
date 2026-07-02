@@ -81,4 +81,6 @@ Versionsmatrix, Architektur, Troubleshooting – steht im
 ```
 
 Die Extension ist offen für **TYPO3 v13.4 LTS und v14**, PHP 8.2–8.4. Im Backend-Modul
-kommt [Apache ECharts](https://echarts.apache.org/) für die Diagramme zum Einsatz.
+kommt [Chart.js](https://www.chartjs.org/) (MIT-Lizenz) für Verlaufs-/Balkendiagramme und
+[Leaflet](https://leafletjs.com/) (BSD-2-Clause) für die Besucherkarte (Choropleth via
+`L.geoJSON`) zum Einsatz.

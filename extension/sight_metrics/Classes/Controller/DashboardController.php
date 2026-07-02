@@ -93,7 +93,9 @@ final class DashboardController
             return $view->renderResponse('Dashboard/Index');
         }
         $this->pageRenderer->addCssFile('EXT:sight_metrics/Resources/Public/Css/dashboard.css');
-        $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/echarts.min.js');
+        $this->pageRenderer->addCssFile('EXT:sight_metrics/Resources/Public/Vendor/leaflet.css');
+        $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/chart.umd.min.js');
+        $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/leaflet.js');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/world.js');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/JavaScript/dashboard.js');
 

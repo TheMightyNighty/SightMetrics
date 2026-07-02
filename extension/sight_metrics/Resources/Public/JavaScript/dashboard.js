@@ -35,12 +35,17 @@
     AU:'Australien',TW:'Taiwan',HK:'Hongkong','??':'Unbekannt'};
 
   var PAL = ['#15508c', '#2f8f5b', '#b9851d'];
-  var charts = {}, mapReg = false;
+  var charts = {};
   var $ = function (id) { return document.getElementById(id); };
   var nf = function (n) { return Number(n).toLocaleString('de-DE'); };
   var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); };
   var landName = function (c) { return LAND[c] || c; };
-  function ec(id) { if (!charts[id]) charts[id] = echarts.init($(id)); return charts[id]; }
+  // Chart.js-Instanz (neu-)erzeugen: einfacher als partielles Update, Datenmenge ist klein.
+  function setChart(id, config) {
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart($(id).getContext('2d'), config);
+    return charts[id];
+  }
   // Dark Mode: TYPO3-Backend-Schema (data-color-scheme an html/body, ggf. im Eltern-Dokument)
   // bevorzugt, sonst OS-Einstellung (prefers-color-scheme).
   function isDark() {
@@ -56,11 +61,21 @@
     } catch (e) { /* Cross-Origin: ignorieren, Fallback unten */ }
     return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   }
-  // Achsen-/Textfarben fuer ECharts je nach Schema (Default-Dunkelgrau waere auf Dark unlesbar).
+  // Achsen-/Textfarben fuer Chart.js je nach Schema (Default-Dunkelgrau waere auf Dark unlesbar).
+  // Setzt zusaetzlich Chart.defaults, damit auch Elemente ohne explizite Farbangabe
+  // (z.B. die Farbskala-Legende der Weltkarte) dem Theme folgen statt Chart.js-Default (schwarz).
   function chartColors() {
-    return isDark()
-      ? {text: '#c7d0db', line: '#3a4250', mapArea: '#323a45', mapBorder: '#475063'}
-      : {text: '#1d2733', line: '#e3e8ef', mapArea: '#f4f6f9', mapBorder: '#cdd6e0'};
+    var cc = isDark()
+      ? {text: '#c7d0db', line: '#3a4250', mapArea: '#323a45', mapBorder: '#475063', tooltipBg: '#1a1f27'}
+      : {text: '#1d2733', line: '#e3e8ef', mapArea: '#f4f6f9', mapBorder: '#cdd6e0', tooltipBg: '#1d2733'};
+    if (typeof Chart !== 'undefined') {
+      Chart.defaults.color = cc.text;
+      Chart.defaults.borderColor = cc.line;
+      Chart.defaults.plugins.tooltip.backgroundColor = cc.tooltipBg;
+      Chart.defaults.plugins.tooltip.titleColor = '#fff';
+      Chart.defaults.plugins.tooltip.bodyColor = '#fff';
+    }
+    return cc;
   }
   function inR(d, a, b) { return d >= a && d <= b; }
   function fmtBytes(b) { return b >= 1e9 ? (b/1e9).toFixed(2)+' GB' : b >= 1e6 ? (b/1e6).toFixed(1)+' MB' : b >= 1e3 ? (b/1e3).toFixed(0)+' KB' : b+' B'; }
@@ -155,22 +170,73 @@
     renderInto(cont, dim, agg(dim, a, b, metric), a, b, metric, opts.fmt || esc, opts.limit || 8);
   }
 
+  // Leaflet-Karte + GeoJSON-Layer bleiben ueber Renders hinweg bestehen (nur restylen/neu binden),
+  // Chart.js-Choropleth-Plugin (chartjs-chart-geo) hat sich als zu unausgereift erwiesen
+  // (Laender wurden nicht eingefaerbt, kein Mouseover, ohne erkennbaren JS-Fehler).
+  var leafletMap = null, mapLayer = null, mapLegend = null;
+  // Hex -> [r,g,b] und linear interpoliert; kontinuierliche Skala statt fester Stufen,
+  // damit die Faerbung tatsaechlich proportional zur Besuchszahl wirkt.
+  function hex2rgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function lerpColor(c0, c1, t) {
+    var a = hex2rgb(c0), b = hex2rgb(c1);
+    var rgb = [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); });
+    return 'rgb(' + rgb.join(',') + ')';
+  }
   function renderMap(a, b) {
-    if (typeof window.SM_WORLD === 'undefined') return;
-    if (!mapReg) { echarts.registerMap('world', window.SM_WORLD); mapReg = true; }
+    if (typeof window.SM_WORLD === 'undefined' || typeof L === 'undefined') return;
+    // world.js wurde urspruenglich fuer ECharts exportiert: den Features fehlt das
+    // GeoJSON-Pflichtfeld "type":"Feature" (ECharts' registerMap verlangte das nicht,
+    // Leaflet ist hier strikt GeoJSON-konform und wirft sonst "Invalid GeoJSON object").
+    window.SM_WORLD.features.forEach(function (f) { if (!f.type) f.type = 'Feature'; });
     var rows = agg('country', a, b, 'v').filter(function (r) { return r.key !== '??'; });
-    var data = rows.map(function (r) { return {name: ISO2NAME[r.key] || r.key, value: r.v}; });
-    var max = data.reduce(function (m, d) { return Math.max(m, d.value); }, 1);
+    var byName = {};
+    rows.forEach(function (r) { byName[ISO2NAME[r.key] || r.key] = r.v; });
+    var max = rows.reduce(function (m, r) { return Math.max(m, r.v); }, 1);
     var cc = chartColors();
-    ec('w-map').setOption({
-      tooltip: {trigger: 'item', formatter: function (p) { return p.name + ': ' + (p.value || 0) + ' Besuche'; }},
-      visualMap: {min: 0, max: max, left: 8, bottom: 8, calculable: true,
-        inRange: {color: ['#eaf1f8', '#9cc0e0', '#15508c']}, text: ['viele', '0'], textStyle: {fontSize: 10, color: cc.text}},
-      series: [{type: 'map', map: 'world', roam: false, zoom: 1.15, scaleLimit: {min: 1, max: 6},
-        itemStyle: {areaColor: cc.mapArea, borderColor: cc.mapBorder},
-        emphasis: {itemStyle: {areaColor: '#b9851d'}, label: {show: false}},
-        select: {disabled: true}, data: data}]
-    }, true);
+    // Verlauf ans Theme angepasst: im Dark Mode ist ein fuer Light-Mode gedachter
+    // Blauton auf dunklem Kartenhintergrund zu kontrastarm, daher eigene, hellere Stufen.
+    var LO = isDark() ? '#3a5a80' : '#9cc0e0', HI = isDark() ? '#8fc4ff' : '#0d3b6b';
+    // Wurzel-Skalierung: bei stark dominierenden Einzellaendern (z.B. ein Land = 50%+
+    // aller Besuche) blieben sonst fast alle anderen Laender in der hellsten Stufe haengen.
+    function fillFor(v) {
+      if (!v) return cc.mapArea;
+      var t = max ? Math.sqrt(v / max) : 0;
+      return lerpColor(LO, HI, Math.max(0, Math.min(1, t)));
+    }
+    function valueFor(f) {
+      var name = f.properties && (f.properties.name || f.properties.NAME) || '';
+      return byName[name] || 0;
+    }
+    if (!leafletMap) {
+      leafletMap = L.map('w-map', {zoomControl: true, attributionControl: false, minZoom: 1, maxZoom: 6, worldCopyJump: true})
+        .setView([20, 12], 1.4);
+    }
+    if (mapLayer) { leafletMap.removeLayer(mapLayer); }
+    mapLayer = L.geoJSON(window.SM_WORLD, {
+      style: function (f) {
+        return {fillColor: fillFor(valueFor(f)), fillOpacity: 1, color: cc.mapBorder, weight: .5};
+      },
+      onEachFeature: function (f, layer) {
+        var name = (f.properties && (f.properties.name || f.properties.NAME)) || '';
+        var v = valueFor(f);
+        layer.bindTooltip(esc(name) + ': ' + nf(v) + ' Besuche', {sticky: true});
+        layer.on('mouseover', function () { layer.setStyle({weight: 1.5, color: '#b9851d'}); });
+        layer.on('mouseout', function () { layer.setStyle({weight: .5, color: cc.mapBorder}); });
+      }
+    }).addTo(leafletMap);
+
+    if (mapLegend) { leafletMap.removeControl(mapLegend); }
+    mapLegend = L.control({position: 'bottomright'});
+    mapLegend.onAdd = function () {
+      var div = L.DomUtil.create('div', 'sm-map-legend');
+      var steps = 5, grad = [];
+      for (var i = 0; i <= steps; i++) grad.push(lerpColor(LO, HI, i / steps));
+      div.innerHTML = '<div class="sm-map-legend-bar" style="background:linear-gradient(90deg,' + grad.join(',') + ')"></div>'
+        + '<div class="sm-map-legend-lbl"><span>0</span><span>' + nf(max) + '</span></div>';
+      return div;
+    };
+    mapLegend.addTo(leafletMap);
+    leafletMap.invalidateSize();
   }
 
   function buildTree(rows) {
@@ -226,33 +292,42 @@
       ['d-visits', 'd-uniq', 'd-pv', 'd-bounce', 'd-band'].forEach(function (id) { setDelta(id, 0, null); });
     }
 
-    var tSeries = [
-      {name: 'Seitenaufrufe', type: 'line', smooth: true, areaStyle: {opacity: .08}, data: days.map(function (d) { return d.pageviews; }), itemStyle: {color: PAL[0]}},
-      {name: 'Besuche', type: 'line', smooth: true, data: days.map(function (d) { return d.visits; }), itemStyle: {color: PAL[1]}},
-      {name: 'Eind. Besucher', type: 'line', smooth: true, data: days.map(function (d) { return d.uniques; }), itemStyle: {color: PAL[2]}}];
-    var tLegend = ['Seitenaufrufe', 'Besuche', 'Eind. Besucher'];
+    var tDatasets = [
+      {label: 'Seitenaufrufe', data: days.map(function (d) { return d.pageviews; }), borderColor: PAL[0], backgroundColor: PAL[0] + '14', fill: true, tension: .3, pointRadius: 0},
+      {label: 'Besuche', data: days.map(function (d) { return d.visits; }), borderColor: PAL[1], fill: false, tension: .3, pointRadius: 0},
+      {label: 'Eind. Besucher', data: days.map(function (d) { return d.uniques; }), borderColor: PAL[2], fill: false, tension: .3, pointRadius: 0}];
     if (cmp) {
       // Vorperiode positionsweise (Tag 1 zu Tag 1) als gestrichelte Referenz der Seitenaufrufe.
       var pdays = DAILY.filter(function (d) { return inR(d.datum, cmp[0], cmp[1]); });
-      tSeries.push({name: 'Seitenaufrufe (Vorperiode)', type: 'line', smooth: true, lineStyle: {type: 'dashed', width: 1.5},
-        data: days.map(function (_, i) { return pdays[i] ? pdays[i].pageviews : null; }), itemStyle: {color: '#9aa7b6'}});
-      tLegend.push('Seitenaufrufe (Vorperiode)');
+      tDatasets.push({label: 'Seitenaufrufe (Vorperiode)', borderColor: '#9aa7b6', borderDash: [4, 3], fill: false, tension: .3, pointRadius: 0,
+        data: days.map(function (_, i) { return pdays[i] ? pdays[i].pageviews : null; })});
     }
     var cc = chartColors();
-    ec('w-time').setOption({textStyle: {color: cc.text}, tooltip: {trigger: 'axis'},
-      legend: {bottom: 0, data: tLegend, textStyle: {color: cc.text}},
-      grid: {left: 8, right: 18, top: 14, bottom: 34, containLabel: true},
-      xAxis: {type: 'category', data: days.map(function (d) { return d.datum; }), axisLine: {lineStyle: {color: cc.line}}},
-      yAxis: {type: 'value', splitLine: {lineStyle: {color: cc.line}}},
-      series: tSeries}, true);
+    setChart('w-time', {
+      type: 'line',
+      data: {labels: days.map(function (d) { return d.datum; }), datasets: tDatasets},
+      options: {responsive: true, maintainAspectRatio: false, interaction: {mode: 'index', intersect: false},
+        plugins: {legend: {position: 'bottom', labels: {color: cc.text}}, tooltip: {mode: 'index', intersect: false}},
+        scales: {
+          x: {grid: {color: cc.line}, ticks: {color: cc.text}},
+          y: {beginAtZero: true, grid: {color: cc.line}, ticks: {color: cc.text}}
+        }
+      }
+    });
 
     var hours = agg('hour', a, b, 'pv'), hmap = {}; hours.forEach(function (r) { hmap[r.key] = r.pv; });
     var hx = []; for (var i = 0; i < 24; i++) hx.push(('0' + i).slice(-2));
-    ec('w-hour').setOption({textStyle: {color: cc.text}, tooltip: {trigger: 'axis'},
-      grid: {left: 8, right: 12, top: 10, bottom: 24, containLabel: true},
-      xAxis: {type: 'category', data: hx, axisLine: {lineStyle: {color: cc.line}}},
-      yAxis: {type: 'value', splitLine: {lineStyle: {color: cc.line}}},
-      series: [{type: 'bar', data: hx.map(function (k) { return hmap[k] || 0; }), itemStyle: {color: PAL[0], borderRadius: 2}}]}, true);
+    setChart('w-hour', {
+      type: 'bar',
+      data: {labels: hx, datasets: [{label: 'Seitenaufrufe', data: hx.map(function (k) { return hmap[k] || 0; }), backgroundColor: PAL[0], borderRadius: 2}]},
+      options: {responsive: true, maintainAspectRatio: false,
+        plugins: {legend: {display: false}, tooltip: {mode: 'index', intersect: false}},
+        scales: {
+          x: {grid: {color: cc.line}, ticks: {color: cc.text}},
+          y: {beginAtZero: true, grid: {color: cc.line}, ticks: {color: cc.text}}
+        }
+      }
+    });
 
     renderMap(a, b);
 
@@ -319,7 +394,7 @@
   }
 
   function init() {
-    if (typeof echarts === 'undefined') return;
+    if (typeof Chart === 'undefined') return;
     if (isDark()) { var rootEl = document.getElementById('sightmetrics'); if (rootEl) rootEl.classList.add('sm-dark'); }
     $('w-site').textContent = META.site || 'SightMetrics';
     $('w-gen').textContent = META.erzeugt ? 'Stand: ' + META.erzeugt : '';
@@ -417,12 +492,16 @@
     buildPresets();
     if ($('w-cmp')) $('w-cmp').onchange = render;
     if ($('w-csv')) $('w-csv').onclick = exportCsv;
+    function resizeAll() {
+      Object.keys(charts).forEach(function (k) { charts[k].resize(); });
+      if (leafletMap) leafletMap.invalidateSize();
+    }
     if ($('w-pdf')) $('w-pdf').onclick = function () {
       // Charts vor dem Druck neu zeichnen, damit die Canvas-Größe passt; dann Browser-Druckdialog.
-      Object.keys(charts).forEach(function (k) { charts[k].resize(); });
+      resizeAll();
       window.print();
     };
-    window.addEventListener('resize', function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); });
+    window.addEventListener('resize', resizeAll);
     render();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
