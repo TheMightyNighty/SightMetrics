@@ -501,6 +501,27 @@ seltener Scheduler-Job (z. B. monatlich), nicht im nächtlichen Import.
 
 **Rollback**: Siehe [§17 Rollback](#17-rollback).
 
+### TYPO3-seitig: Cache-Tabelle `cache_sight_metrics` aufräumen
+
+Neben der Cube-DB gibt es einen zweiten wachsenden Datenbestand — auf der **TYPO3-DB**
+(nicht der Cube-DB): die Extension cached ihre Lese-Queries kurzlebig (60 s TTL) in der
+Tabelle `cache_sight_metrics`. TYPO3s Datenbank-Cache-Backend löscht abgelaufene Einträge
+**nicht** von selbst; ohne Aufräumen wächst die Tabelle im Betrieb unbegrenzt (die
+Cache-Keys sind hochkardinal: jede Kombination aus Zeitraum, Dimension und Drill-down-
+Aufklappung erzeugt einen eigenen Eintrag).
+
+```bash
+# Variante 1: TYPO3-Scheduler-Task "Caching framework garbage collection"
+#             (falls EXT:scheduler im Einsatz), Cache "sight_metrics" anhaken, z. B. täglich.
+
+# Variante 2: täglicher Cron direkt auf der TYPO3-DB (nicht der Cube-DB!)
+mysql -h <typo3-db-host> -u <user> -p <typo3-db> \
+  -e "DELETE FROM cache_sight_metrics WHERE expires < UNIX_TIMESTAMP();"
+```
+
+Details und Hintergrund: Extension-Handbuch, Abschnitt „Bekannte Grenzen:
+Skalierung & Caching".
+
 ### Backup als Rollback-Punkt (vor dem Purge)
 
 `backup_cube.sh` erstellt einen `mysqldump` der Cube-Tabellen mit Rotation. Empfehlung:

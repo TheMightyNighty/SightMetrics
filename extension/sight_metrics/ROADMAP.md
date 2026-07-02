@@ -64,13 +64,22 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
 
 ### Betrieb
 
-6. **[Mittel] `cache_sight_metrics` waechst unbegrenzt** — `Typo3DatabaseBackend` loescht
-   abgelaufene Eintraege nicht selbst; dafuer braucht es den Scheduler-Task "Caching
-   framework garbage collection". Die Cache-Keys sind hochkardinal (jede
-   from/to/offset/parentKey-Kombination = eigene Zeile, TTL 60s) — ohne GC-Task sammeln
-   sich tote Zeilen unbegrenzt an. Nirgends dokumentiert. **Fix:** Doku-Abschnitt im
-   Handbuch (Betrieb/Produktions-Haertung) + Runbook; alternativ/ergaenzend pruefen, ob
-   ein Backend mit automatischer Verdraengung sinnvoller ist.
+6. ~~**[Mittel] `cache_sight_metrics` waechst unbegrenzt**~~ **[behoben — Dokumentation]** —
+   `Typo3DatabaseBackend` loescht abgelaufene Eintraege nicht selbst; die Cache-Keys sind
+   hochkardinal (jede from/to/offset/parentKey-Kombination = eigene Zeile, TTL 60s).
+   Real beobachtet: die Demo-Tabelle hatte nach wenigen Test-Sessions bereits 78
+   abgelaufene Zeilen angesammelt.
+
+   **Fix (2026-07-02):** dokumentiert in `docs/extension-handbuch.md` ("Bekannte Grenzen"
+   neuer Absatz "Cache-Aufraeumen ist Betreiber-Pflicht" + Bullet in "Produktions-
+   Haertung") und `docs/ingestion-runbook.md` (§11, neuer Abschnitt "TYPO3-seitig:
+   Cache-Tabelle aufraeumen"). Beide Wege beschrieben: Scheduler-Task "Caching framework
+   garbage collection" (falls EXT:scheduler im Einsatz — im Demo-Stack nicht installiert)
+   oder taeglicher Cron mit `DELETE ... WHERE expires < UNIX_TIMESTAMP()`; das SQL gegen
+   das echte Tabellenschema verifiziert (78 abgelaufene Zeilen korrekt entfernt, Tags-
+   Tabelle bleibt mangels Cache-Tags leer). Ein Backend mit automatischer Verdraengung
+   (z. B. Redis mit maxmemory-policy) bleibt eine Option fuer grosse Installationen,
+   ist aber fuer die Zielumgebung (eine Backend-Handvoll Nutzer) nicht noetig.
 
 ### Dokumentation
 

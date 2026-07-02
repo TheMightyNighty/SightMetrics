@@ -193,6 +193,10 @@ nicht unverändert in Produktion landen:**
   `CREATE USER 'report_ro'@'10.0.1.0/255.255.255.0' ...` bzw. bei fester IP
   `'report_ro'@'10.0.1.42'`. Zusätzlich per Netzwerksegmentierung/Firewall absichern, MySQL-
   Host-Grants allein sind kein vollwertiger Netzwerkschutz.
+- **Cache-Garbage-Collection einrichten**: die Tabelle `cache_sight_metrics` (TYPO3-DB)
+  wächst ohne Aufräumen unbegrenzt — Scheduler-Task „Caching framework garbage collection"
+  oder täglicher Cron mit `DELETE FROM cache_sight_metrics WHERE expires < UNIX_TIMESTAMP();`
+  einrichten. Details in §10 „Bekannte Grenzen: Skalierung & Caching".
 
 ---
 
@@ -415,16 +419,37 @@ dashboard.js                 ← Chart.js (Verlauf/Stunden), Leaflet (Choropleth
 
 ### Bekannte Grenzen: Skalierung & Caching
 
-**Serverseitiges Caching.** `daily()`/`cube()` (die beiden Reads, deren Volumen mit
-Zeitfenster/Kardinalitaet waechst) laufen ueber den TYPO3-Cache-Framework-Cache
-`sight_metrics` (`VariableFrontend` + `Typo3DatabaseBackend`, registriert in
-`ext_localconf.php`, Tabelle `cache_sight_metrics` wird von TYPO3 selbst per
+**Serverseitiges Caching.** `daily()`/`cube()`/`topN()`/`dimSummary()` (die Reads, deren
+Volumen bzw. Aufrufhaeufigkeit mit Zeitfenster/Kardinalitaet waechst) laufen ueber den
+TYPO3-Cache-Framework-Cache `sight_metrics` (`VariableFrontend` + `Typo3DatabaseBackend`,
+registriert in `ext_localconf.php`, Tabelle `cache_sight_metrics` wird von TYPO3 selbst per
 `extension:setup`/DB-Compare angelegt). TTL ueber die Extension-Konfiguration
 `cacheLifetime` (Default 60s, 0 = deaktiviert — jeder Aufruf liest dann wieder live).
 `sites()`/`meta()` bleiben bewusst ungecacht (kleine Einzelzeilen/Listen; eine neue Site
 oder ein frischer Ingestion-Lauf soll ohne Wartezeit sichtbar sein). Fehlt die
 Cache-Konfiguration (z. B. Unit-/Functional-Tests ohne geladenes `ext_localconf.php`),
 faellt `CubeRepository::cached()` fehlertolerant auf die Live-Query zurueck.
+
+**Cache-Aufraeumen ist Betreiber-Pflicht.** Das `Typo3DatabaseBackend` loescht abgelaufene
+Eintraege **nicht** von selbst — sie bleiben als tote Zeilen in `cache_sight_metrics`
+liegen, bis eine Garbage Collection laeuft. Die Cache-Keys sind hochkardinal (jede
+Kombination aus Zeitraum, Dimension, Offset und Drill-down-Elternkategorie erzeugt einen
+eigenen Eintrag mit nur 60 s TTL), die Tabelle waechst daher im Betrieb stetig. Zwei Wege:
+
+- **Mit EXT:scheduler:** den Core-Task „Caching framework garbage collection" einrichten
+  (z. B. taeglich) und dabei den Cache `sight_metrics` mit anhaken.
+- **Ohne Scheduler (Cron/SQL):** abgelaufene Zeilen direkt auf der TYPO3-DB loeschen, z. B.
+  taeglich per Cron:
+
+  ```sql
+  DELETE FROM cache_sight_metrics WHERE expires < UNIX_TIMESTAMP();
+  ```
+
+  (Die zugehoerige `cache_sight_metrics_tags`-Tabelle bleibt leer — die Extension setzt
+  keine Cache-Tags — und braucht kein eigenes Aufraeumen.)
+
+Ein `vendor/bin/typo3 cache:flush` leert die Tabelle ebenfalls (holzschnittartig, aber
+unschaedlich — der Cache fuellt sich beim naechsten Modulaufruf neu).
 
 **Serverseitige Kardinalitaets-Begrenzung.** `windowDays` begrenzt nur die Zeitachse (wie
 viele Tage geladen werden). Fuer alle Dimensionen mit potenziell unbegrenzt vielen
