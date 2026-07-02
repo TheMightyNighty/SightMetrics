@@ -19,18 +19,18 @@ docker compose -f "$DEMO/docker-compose.yml" run --rm --no-deps \
 echo; echo "== 2b: PHP Functional (typo3/testing-framework, SQLite) =="
 bash ./sync-to-demo.sh >/dev/null 2>&1
 # Prüfen ob testing-framework installiert ist (erst nach: composer update in demo/app/)
-if docker exec weg3-web test -f /var/www/html/vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php; then
-  docker exec weg3-web bash -c \
+if docker exec sightmetrics-web test -f /var/www/html/vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php; then
+  docker exec sightmetrics-web bash -c \
     "cd /var/www/html && php vendor/bin/phpunit \
       -c packages/sight_metrics/phpunit.functional.xml.dist \
       --bootstrap vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php" \
     || fail=1
 else
   echo "SKIP typo3/testing-framework nicht installiert."
-  echo "     → docker exec weg3-web composer update --no-interaction"
+  echo "     → docker exec sightmetrics-web composer update --no-interaction"
 fi
 
 echo; echo "== 2c: PHP Smoke (TYPO3 CLI, read-only Cube) =="
-docker exec weg3-web php /var/www/html/vendor/bin/typo3 sightmetrics:smoke || fail=1
+docker exec sightmetrics-web php /var/www/html/vendor/bin/typo3 sightmetrics:smoke || fail=1
 
 exit $fail

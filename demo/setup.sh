@@ -69,17 +69,24 @@ fi
 
 echo
 echo "== 5/5: TYPO3 installieren + Extension deployen =="
-if [ -f app/vendor/bin/typo3 ] && [ -f app/public/index.php ]; then
-  echo ">> TYPO3 bereits installiert (app/vendor + app/public vorhanden) – überspringe."
-else
-  echo ">> Starte MariaDB..."
-  docker compose up -d db
-  echo -n ">> Warte auf MariaDB"
-  until [ "$(docker inspect -f '{{.State.Health.Status}}' weg3-db 2>/dev/null)" = "healthy" ]; do
-    echo -n "."; sleep 2
-  done
-  echo " OK"
+echo ">> Starte MariaDB..."
+docker compose up -d db
+echo -n ">> Warte auf MariaDB"
+until [ "$(docker inspect -f '{{.State.Health.Status}}' sightmetrics-db 2>/dev/null)" = "healthy" ]; do
+  echo -n "."; sleep 2
+done
+echo " OK"
 
+# TYPO3 gilt nur als installiert, wenn sowohl die Dateien (app/vendor,
+# app/public) ALS AUCH das Datenbankschema vorhanden sind - ein frisches
+# DB-Volume bei vorhandenen Dateien wuerde sonst uebersprungen und mit
+# leerem Schema laufen (HTTP 500).
+SCHEMA_EXISTS=$(docker compose exec -T db mariadb -uroot -p"${MARIADB_ROOT_PASSWORD:-root}" -N \
+  -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='t3' AND table_name='be_users';" 2>/dev/null || echo 0)
+
+if [ -f app/vendor/bin/typo3 ] && [ -f app/public/index.php ] && [ "$SCHEMA_EXISTS" = "1" ]; then
+  echo ">> TYPO3 bereits installiert (Dateien + DB-Schema vorhanden) – überspringe."
+else
   echo ">> composer install (im web-Container, kein lokales PHP/Composer nötig)..."
   docker compose run --rm --no-deps -w /var/www/html web composer install --no-interaction
 
@@ -88,7 +95,7 @@ else
     --driver=mysqli \
     --host=db --port=3306 \
     --dbname=t3 --username=t3 --password="${MARIADB_T3_PASSWORD:-t3}" \
-    --admin-username=admin --admin-user-password='Weg3-Admin-2026!' \
+    --admin-username=admin --admin-user-password='SightMetrics-Admin-2026!' \
     --admin-email=demo@example.org \
     --project-name="SightMetrics Demo" \
     --create-site="http://localhost:8091/" \
@@ -105,7 +112,7 @@ echo ">> Deploye Extension (sight_metrics) ins Demo-TYPO3..."
 cat <<EOF
 
 >> Demo-Setup abgeschlossen.
-   Backend:  http://localhost:8091/typo3/   (admin / Weg3-Admin-2026!)
+   Backend:  http://localhost:8091/typo3/   (admin / SightMetrics-Admin-2026!)
    Nächster Schritt (Beispiel-Log importieren):
      cd ingestion && ./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1
 EOF

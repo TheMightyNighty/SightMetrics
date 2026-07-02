@@ -37,7 +37,7 @@ docker run --rm \
   -e STATE_DIR=/state -e PARALLEL=auto \
   -e CUBE_DSN_FILE=/run/secrets/cube_dsn \
   -e ALERT_WEBHOOK="https://hooks.slack.com/…" \
-  weg3-ingestion run_all.sh
+  sightmetrics-ingestion run_all.sh
 ```
 
 ```yaml
@@ -52,7 +52,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: import
-              image: weg3-ingestion
+              image: sightmetrics-ingestion
               args: ["run_all.sh"]
               env:
                 - { name: STATE_DIR, value: /state }

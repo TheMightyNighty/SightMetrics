@@ -34,14 +34,21 @@ liest nur.
 
 ```
 ingestion/
-├── load_cube.sh                Einzel-Site-Import: Log → DuckDB → MariaDB
+├── load_cube.sh                Einzel-Site-Import (Datei): Log → DuckDB → MariaDB
+├── fetch_loki_logs.sh          Einzel-Site-Import (Grafana Loki, alternativ zur Datei)
 ├── run_all.sh                  Multi-Site-Orchestrator (flock-geschützt, xargs -P)
 ├── purge_cube.sh               Retention-Purge: löscht Cube-Daten älter als RETENTION_MONTHS
 ├── backup_cube.sh              Backup der Cube-DB (mysqldump + Rotation, Rollback-Punkt)
 ├── notify.sh                   Alarmierung (E-Mail und/oder Webhook), konfigurierbar
 ├── rotate_cube_secret.sh       Secrets-Rotation: DB-Passwort + DSN-Datei atomar erneuern
-├── cube_to_mysql.sql           Kern-Logik: Parse → Sessionisierung → Cube → MariaDB-INSERT
-├── transform.sql               DuckDB-interne Transformation (wird von cube_to_mysql.sql geladen)
+├── matomo_import.sh            Matomo-Altdaten-Import über die Reporting-API (siehe docs/matomo-import.md)
+├── lib_geo.sh                  Geo-Quellen-Auswahl (source'd von load_cube.sh/fetch_loki_logs.sh)
+├── lib_logformat.sh            Log-Format-Auswahl (source'd von load_cube.sh/fetch_loki_logs.sh)
+├── lib_healthcheck.sh          Healthcheck-Heartbeat (source'd von run_all.sh/fetch_loki_logs.sh)
+├── cube_to_mysql.sql           Compute-Treiber Log-Pfad (liest transform.sql)
+├── matomo_to_cube.sql          Compute-Treiber Matomo-Pfad (liest transform.sql-Aequivalent)
+├── transform.sql               Parse → Sessionisierung → Aggregation (sink-neutral)
+├── sink_mysql.sql              Gemeinsamer MariaDB-Sink (Log- und Matomo-Pfad)
 ├── sites.conf.example          Vorlage für sites.conf (site_id TAB logfile TAB name)
 ├── generate_logs.py            Testlog-Generator (session-basiert, öffentliche IPs)
 │
@@ -53,6 +60,10 @@ ingestion/
 │   ├── ip2location.sql          Geo-Join: IP2Location LITE DB1
 │   ├── dbip.sql                 Geo-Join: DB-IP Country-Lite
 │   └── maxmind.sql              Geo-Join: MaxMind GeoLite2 Country
+│
+├── log_formats/
+│   ├── regex.sql                Log-Parsing: Klartext-Zeilen (combined/combined_vhost/common/custom)
+│   └── json_ecs.sql             Log-Parsing: strukturiertes JSON (ECS-Schema)
 │
 ├── geo/                         NICHT im Repo (.gitignore) – TODO: siehe §3a
 │   └── country-ipv4-num.csv   GeoIP-Datensatz (IPv4 → Land-Code, numerisch)
@@ -71,11 +82,15 @@ ingestion/
 
 ```
 /opt/sightmetrics/ingestion/       Repo-Deployment / Installationsverzeichnis
-  load_cube.sh                     Einzel-Site-Import
+  load_cube.sh                     Einzel-Site-Import (Datei)
+  fetch_loki_logs.sh               Einzel-Site-Import (Grafana Loki, optional)
   run_all.sh                       Orchestrator (Multi-Site, flock)
   purge_cube.sh                    Retention-Purge
-  transform.sql                    DuckDB-Kernlogik
+  lib_geo.sh / lib_logformat.sh /
+  lib_healthcheck.sh               gemeinsame Bausteine (Pflicht für load_cube.sh/fetch_loki_logs.sh)
+  transform.sql / sink_mysql.sql   DuckDB-Kernlogik + MariaDB-Sink
   cube_to_mysql.sql                DuckDB-MariaDB-Brücke
+  geo_sources/ · log_formats/      Geo-Join- bzw. Log-Parsing-Varianten (Pflicht)
   sites.conf                       Site-Liste (aus sites.conf.example erstellen)
   bin/duckdb                       DuckDB-Binary
   geo/country-ipv4-num.csv         GeoIP-Datensatz
@@ -427,7 +442,7 @@ oder Host-Cron) startet den Ingestion-Container nachts kurz; er importiert alle 
 # Host-Cron-Alternative (eine Zeile, startet den Container)
 15 2 * * * docker run --rm -v sightmetrics_state:/state -v /var/log/access:/logs:ro \
   -e STATE_DIR=/state -e PARALLEL=auto -e CUBE_DSN_FILE=/run/secrets/cube_dsn \
-  weg3-ingestion run_all.sh >> /var/log/sightmetrics/cron.log 2>&1
+  sightmetrics-ingestion run_all.sh >> /var/log/sightmetrics/cron.log 2>&1
 ```
 
 **Pflicht:** `STATE_DIR` auf ein **persistentes Volume** legen – sonst Voll-Reimport je Lauf.

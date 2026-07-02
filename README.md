@@ -77,7 +77,7 @@ cd ingestion && ./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1 && cd
 #                (multi-site-fähig, idempotent pro Site)
 
 # 3) Im Backend ansehen:
-#    http://localhost:8091/typo3/   (admin / Weg3-Admin-2026!)
+#    http://localhost:8091/typo3/   (admin / SightMetrics-Admin-2026!)
 #    -> Modul  Web > "Logauswertung"
 
 # Weitere Terminal-Sessions (Stack schon eingerichtet): nur noch

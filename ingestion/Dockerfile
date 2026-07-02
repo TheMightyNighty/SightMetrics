@@ -15,11 +15,14 @@ COPY bin/ ./bin/
 COPY geo/ ./geo/
 
 # SQL-Logik
-COPY transform.sql cube_to_mysql.sql ./
+COPY transform.sql cube_to_mysql.sql matomo_to_cube.sql sink_mysql.sql ./
+COPY geo_sources/ ./geo_sources/
+COPY log_formats/ ./log_formats/
 
 # Betriebs-Skripte (Orchestrator + Einzelimport + Wartung/Alarm)
-COPY run_all.sh load_cube.sh purge_cube.sh backup_cube.sh \
-     notify.sh rotate_cube_secret.sh generate_logs.py ./
+COPY run_all.sh load_cube.sh fetch_loki_logs.sh purge_cube.sh backup_cube.sh \
+     notify.sh rotate_cube_secret.sh matomo_import.sh generate_logs.py \
+     lib_geo.sh lib_logformat.sh lib_healthcheck.sh ./
 
 # Vorlage (eigentliche sites.conf wird zur Laufzeit gemountet/übergeben)
 COPY sites.conf.example ./
@@ -34,6 +37,6 @@ VOLUME ["/state"]
 
 # Kein Secret im Image: CUBE_DSN/CUBE_DSN_FILE wird zur Laufzeit injiziert.
 # Standard-Lauf importiert alle Sites; für Einzelimport:
-#   docker run --rm … weg3-ingestion load_cube.sh /logs/x.log "Site" 1
+#   docker run --rm … sightmetrics-ingestion load_cube.sh /logs/x.log "Site" 1
 ENTRYPOINT ["bash"]
 CMD ["run_all.sh"]

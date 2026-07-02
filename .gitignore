@@ -14,6 +14,8 @@ demo/app/public/
 demo/app/packages/
 # TYPO3 erzeugt settings.php beim Erstinstall (enthält DB-Hash/Passwörter)
 demo/app/config/system/settings.php
+# TYPO3 --create-site erzeugt die Site-Konfiguration beim Erstinstall
+demo/app/config/sites/
 # Symlinks, die TYPO3 erzeugt (außerhalb config/)
 demo/app/sites/
 demo/app/system/

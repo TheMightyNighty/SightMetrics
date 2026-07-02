@@ -1,1 +1,1 @@
-{ "name": "weg3-e2e", "private": true, "dependencies": { "puppeteer-core": "^23" } }
+{ "name": "sightmetrics-e2e", "private": true, "dependencies": { "puppeteer-core": "^23" } }

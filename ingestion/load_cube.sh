@@ -106,7 +106,7 @@ echo ">> Verarbeite $((NEW_BYTES / 1024 + 1)) KB neue Daten (~$(wc -l < "$TMPLOG
 # ---- Import ----------------------------------------------------------------
 echo ">> SightMetrics-Ingestion -> MariaDB (Cube-DB): ${LOGFILE}"
 t0=$(date +%s.%N)
-/usr/bin/time -v -o /tmp/weg3_my.time "$DUCKDB" <<SQL
+/usr/bin/time -v -o /tmp/sm_my.time "$DUCKDB" <<SQL
 INSTALL mysql; LOAD mysql;
 ATTACH '${DSN}' AS m (TYPE mysql);
 SET VARIABLE logpath   = '${TMPLOG}';
@@ -123,9 +123,9 @@ SET VARIABLE tsformat  = '${SM_TS_FORMAT}';
 SQL
 t1=$(date +%s.%N)
 WALL=$(awk "BEGIN{printf \"%.2f\", $t1-$t0}")
-CPU=$(awk -F': ' '/User time/{u=$2}/System time/{s=$2} END{printf "%.2f", u+s}' /tmp/weg3_my.time)
+CPU=$(awk -F': ' '/User time/{u=$2}/System time/{s=$2} END{printf "%.2f", u+s}' /tmp/sm_my.time)
 echo ">> Ingestion -> MariaDB fertig. Wall=${WALL}s CPU=${CPU}s"
-printf '%s %s\n' "$WALL" "$CPU" > /tmp/weg3_my_metrics.txt
+printf '%s %s\n' "$WALL" "$CPU" > /tmp/sm_my_metrics.txt
 
 # ---- Offset aktualisieren (nur nach erfolgreichem Import) ------------------
 echo "${FILE_SIZE}:${CURRENT_INODE}" > "$STATE_FILE"

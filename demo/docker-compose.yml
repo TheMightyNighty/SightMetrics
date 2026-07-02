@@ -1,9 +1,9 @@
-name: weg3-typo3   # Projektname gepinnt -> bestehendes Volume weg3-typo3_dbdata bleibt erhalten
+name: sightmetrics   # Projektname gepinnt -> bestehendes Volume sightmetrics_dbdata bleibt erhalten
 
 services:
   db:
     image: mariadb:11.4
-    container_name: weg3-db
+    container_name: sightmetrics-db
     environment:
       MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD:-root}"
       MARIADB_DATABASE: t3
@@ -24,7 +24,7 @@ services:
 
   web:
     build: .
-    container_name: weg3-web
+    container_name: sightmetrics-web
     depends_on:
       db:
         condition: service_healthy
@@ -47,7 +47,7 @@ services:
   #   Einzelimport:            docker compose --profile import run --rm ingestion load_cube.sh /logs/<datei> "Site-Name" <id>
   ingestion:
     build: ../ingestion
-    image: weg3-ingestion
+    image: sightmetrics-ingestion
     profiles: ["import"]
     depends_on:
       db:

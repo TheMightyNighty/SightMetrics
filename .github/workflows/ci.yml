@@ -121,6 +121,6 @@ jobs:
         run: vendor/bin/phpunit -c phpunit.functional.xml.dist
 
   # ---- Skipped in CI (brauchen laufenden Docker-Stack) ----------------------
-  # Suite 2 Smoke  → docker exec weg3-web php vendor/bin/typo3 sightmetrics:smoke
+  # Suite 2 Smoke  → docker exec sightmetrics-web php vendor/bin/typo3 sightmetrics:smoke
   # Suite 3 E2E    → Puppeteer gegen http://localhost:8091
   # Lokal ausführen via: bash extension/run-tests.sh

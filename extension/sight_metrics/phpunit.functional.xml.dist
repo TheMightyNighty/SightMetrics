@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Functional-Tests.
      CI:          cd extension/sight_metrics && php vendor/bin/phpunit -c phpunit.functional.xml.dist
-     Demo-Docker: docker exec weg3-web bash -c "cd /var/www/html && php vendor/bin/phpunit \
+     Demo-Docker: docker exec sightmetrics-web bash -c "cd /var/www/html && php vendor/bin/phpunit \
                     -c packages/sight_metrics/phpunit.functional.xml.dist \
                     (Bootstrap: vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php)"
 -->

@@ -4,7 +4,7 @@ const puppeteer = require('puppeteer-core');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8091';
 const USER = process.env.BE_USER || 'admin';
-const PASS = process.env.BE_PASS || 'Weg3-Admin-2026!';
+const PASS = process.env.BE_PASS || 'SightMetrics-Admin-2026!';
 const CHROME = process.env.CHROME_BIN || '/usr/bin/chromium';
 
 let failed = 0;
