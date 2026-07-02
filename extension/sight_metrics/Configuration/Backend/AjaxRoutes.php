@@ -10,10 +10,17 @@ use SightMetrics\Controller\TopNAjaxController;
  * (Pfad) -- siehe AbstractServiceProvider::checkAndFilterExtensionRoutes(). Der
  * Routenname aus Sicht von UriBuilder::buildUriFromRoute() ist also
  * "ajax_sightmetrics_topn", erreichbar unter /typo3/ajax/sightmetrics/topn.
+ *
+ * inheritAccessFromModule: die Route erbt die Zugriffspruefung des Backend-Moduls
+ * (BackendModuleValidator antwortet 403, wenn dem Benutzer web_sightmetrics fehlt) --
+ * ohne diese Option koennte jeder eingeloggte Backend-Benutzer den Endpunkt aufrufen,
+ * in Installationen ohne Site-Mapping (filterloser Kompatibilitaetsmodus) ganz ohne
+ * weitere Pruefung. Siehe TYPO3-Changelog #106983.
  */
 return [
     'sightmetrics_topn' => [
         'path' => '/sightmetrics/topn',
         'target' => TopNAjaxController::class . '::handleRequest',
+        'inheritAccessFromModule' => 'web_sightmetrics',
     ],
 ];

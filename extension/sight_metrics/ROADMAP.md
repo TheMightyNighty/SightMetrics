@@ -31,13 +31,18 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
    Phar-Runner ueberspringt sie). Handbuch §5 um die Verhaltens-Tabelle ("leeres Dashboard,
    bewusst kein Rueckfall auf alle Sites") und einen Multi-Mandanten-Warnhinweis ergaenzt.
 
-2. **[Mittel] Ajax-Route erbt keine Modul-Berechtigung** —
-   `Configuration/Backend/AjaxRoutes.php` nutzt nicht
+2. ~~**[Mittel] Ajax-Route erbt keine Modul-Berechtigung**~~ **[behoben]** —
+   `Configuration/Backend/AjaxRoutes.php` nutzte nicht
    `'inheritAccessFromModule' => 'web_sightmetrics'` (TYPO3 12.4+, Changelog #106983).
-   Jeder authentifizierte Backend-Benutzer — auch ohne Rechte am SightMetrics-Modul — kann
-   `/typo3/ajax/sightmetrics/topn` aufrufen. In einer Installation ohne Site-Mapping
-   (Rueckwaertskompatibilitaetsmodus) gibt es dann gar keine Zugriffspruefung mehr.
-   **Fix:** Einzeiler in AjaxRoutes.php.
+   Jeder authentifizierte Backend-Benutzer — auch ohne Rechte am SightMetrics-Modul —
+   konnte `/typo3/ajax/sightmetrics/topn` aufrufen; in einer Installation ohne Site-Mapping
+   (Rueckwaertskompatibilitaetsmodus) ganz ohne weitere Zugriffspruefung.
+
+   **Fix (2026-07-02):** Option ergaenzt; `BackendModuleValidator` (Middleware, laeuft vor
+   dem CSRF-Token-Check) antwortet jetzt 403, wenn dem Benutzer das Modul fehlt.
+   Verifiziert im Demo-Stack mit einem eigens angelegten Backend-Benutzer ohne
+   Modulrechte: eingeloggt + Ajax-Aufruf -> 403; Admin ueber das Modul (mit Token) ->
+   200 mit korrekten Daten (keine Aussperrung des regulaeren Pfads).
 
 ### Logik / Fehler (niedrig)
 
