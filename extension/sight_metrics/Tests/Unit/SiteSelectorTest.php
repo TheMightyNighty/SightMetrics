@@ -47,21 +47,22 @@ final class SiteSelectorTest extends TestCase
 
     // ---- allowedSiteIds -------------------------------------------------------
 
-    public function testAllowedSiteIdsReturnsEmptyWhenNoSitesConfigured(): void
+    public function testAllowedSiteIdsReturnsNullWhenNoSitesConfigured(): void
     {
         $finder = $this->createMock(SiteFinder::class);
         $finder->method('getAllSites')->willReturn([]);
 
-        self::assertSame([], SiteSelector::allowedSiteIds($finder, $this->beUser(false)));
+        // null = kein Mapping -> Aufrufer duerfen filterlos arbeiten (Rueckwaertskompat.).
+        self::assertNull(SiteSelector::allowedSiteIds($finder, $this->beUser(false)));
     }
 
-    public function testAllowedSiteIdsReturnsEmptyWhenNoneHaveMapping(): void
+    public function testAllowedSiteIdsReturnsNullWhenNoneHaveMapping(): void
     {
         $site = $this->makeSite([], 1);
         $finder = $this->createMock(SiteFinder::class);
         $finder->method('getAllSites')->willReturn([$site]);
 
-        self::assertSame([], SiteSelector::allowedSiteIds($finder, $this->beUser(false)));
+        self::assertNull(SiteSelector::allowedSiteIds($finder, $this->beUser(false)));
     }
 
     public function testAllowedSiteIdsExtractsMappedIdsForAdmin(): void
@@ -127,6 +128,8 @@ final class SiteSelectorTest extends TestCase
         $beUser->method('isAdmin')->willReturn(false);
         $beUser->method('isInWebMount')->willReturn(null);
 
+        // [] (nicht null!): Mapping existiert, Benutzer darf nichts sehen. Aufrufer muessen
+        // das als "keine Sites" behandeln, NICHT als "kein Filter" (Mandantentrennung).
         self::assertSame([], SiteSelector::allowedSiteIds($finder, $beUser));
     }
 

@@ -20,9 +20,7 @@ namespace SightMetrics\Support;
  */
 final class TopNDims
 {
-    private function __construct()
-    {
-    }
+    private function __construct() {}
 
     /** Root-dim => Metrik ('pv' oder 'v'). */
     public const ROOT_METRIC_BY_DIM = [

@@ -226,8 +226,14 @@ sightmetrics_site_id: 2
 | Zustand | Modul-Verhalten |
 |---|---|
 | **Kein** `sightmetrics_site_id` in keiner TYPO3-Site | Alle Cube-Sites im Dropdown (Rückwärtskompatibilität) |
-| **Eine** TYPO3-Site mit Mapping | Nur diese site_id sichtbar, automatisch ausgewählt |
-| **Mehrere** TYPO3-Sites mit Mapping | Dropdown zeigt nur die zugeordneten Sites |
+| **Eine** TYPO3-Site mit Mapping | Nur diese site_id sichtbar, automatisch ausgewählt (sofern Webmount-Zugriff) |
+| **Mehrere** TYPO3-Sites mit Mapping | Dropdown zeigt nur die Sites, auf deren Seitenbaum (rootPageId) der Benutzer Webmount-Zugriff hat; Admins sehen alle gemappten |
+| Mapping vorhanden, Benutzer hat auf **keine** gemappte Site Webmount-Zugriff | **Leeres Dashboard** — bewusst kein Rückfall auf "alle Sites" (Mandantentrennung) |
+
+> **Wichtig für Multi-Mandanten-Betrieb:** Die Mandantentrennung greift nur, wenn die
+> Sites gemappt sind. Ohne jedes Mapping (erste Zeile) sieht **jeder** Benutzer mit
+> Modulzugriff **alle** Cube-Sites — in einer Multi-Mandanten-Installation daher immer
+> alle Sites mit `sightmetrics_site_id` versehen.
 
 ### Importer-Zuordnung (Kubernetes/Namespace)
 

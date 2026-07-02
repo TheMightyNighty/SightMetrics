@@ -49,10 +49,15 @@ final class DashboardController implements LoggerAwareInterface
         $payload = ['meta' => new \stdClass(), 'daily' => [], 'cube' => [], 'sites' => [], 'siteId' => 0, 'window' => null];
         try {
             $params = $request->getQueryParams();
+            // null = kein Site-Mapping konfiguriert -> filterlos (Rueckwaertskompatibilitaet).
+            // [] = Mappings existieren, Benutzer darf nichts sehen -> leere Site-Liste
+            // (NICHT filterlos, sonst Mandantentrennungs-Bypass, siehe SiteSelector).
             $allowedIds = SiteSelector::allowedSiteIds($this->siteFinder, $this->beUser());
-            $sites = $this->cubeRepository->sites($allowedIds);
+            $sites = $allowedIds === [] ? [] : $this->cubeRepository->sites($allowedIds ?? []);
             $siteId = SiteSelector::resolve($sites, (int)($params['site'] ?? 0));
-            $meta = $this->cubeRepository->meta($siteId);
+            // Leere Site-Liste (kein Zugriff oder Cube leer): meta(0) nicht abfragen,
+            // damit ein Cube mit tatsaechlicher site_id 0 nicht doch durchsickert.
+            $meta = $sites === [] ? [] : $this->cubeRepository->meta($siteId);
 
             // Serverseitiges Zeitfenster: nur dieses Fenster wird aus dem Cube gelesen,
             // damit das Transfervolumen nicht mit der Retention waechst.

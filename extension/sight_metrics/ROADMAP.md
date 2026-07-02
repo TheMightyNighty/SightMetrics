@@ -3,6 +3,99 @@
 Offene Punkte (Stand 2026-07-02). Behobene Findings wurden entfernt, siehe Git-Historie
 fuer Details zu abgeschlossenen Themen.
 
+## Pruefung vom 2026-07-02 (zweiter Durchgang)
+
+Sicht: TYPO3-Entwickler (Einbindung/Pflege), Softwarearchitekt, Betrieb.
+Sortiert nach Schwere; Sicherheits-Findings zuerst.
+
+### Sicherheit
+
+1. ~~**[Hoch] Mandantentrennung-Bypass bei "kein Webmount-Zugriff"**~~ **[behoben]** —
+   `Classes/Support/SiteSelector.php`, `allowedSiteIds()`. Gab in zwei voellig
+   verschiedenen Situationen dieselbe leere Liste zurueck: (a) keine Site hat ein
+   `sightmetrics_site_id`-Mapping (gewollte Rueckwaertskompatibilitaet) und (b) Mappings
+   existieren, aber der Benutzer hat auf KEINE gemappte Site Webmount-Zugriff. Downstream
+   bedeutete `[]` aber "kein Filter": `CubeRepository::sites([])` lieferte ALLE Sites. Ein
+   Nicht-Admin mit Modulzugriff, dessen Webmounts nur auf einem nicht gemappten Seitenbaum
+   liegen, sah die Analytics aller Mandanten. Der Unit-Test
+   `testAllowedSiteIdsExcludesAllForNonAdminWithoutWebmountAccess` asserted `[]` und
+   zementierte das Fehlverhalten sogar.
+
+   **Fix (2026-07-02):** Rueckgabe disambiguiert — `null` = "kein Mapping konfiguriert"
+   (weiterhin filterlos, Rueckwaertskompatibilitaet) vs. `[]` = "nichts erlaubt".
+   `DashboardController` zeigt bei `[]` ein leeres Dashboard (und fragt `meta(0)` gar nicht
+   erst ab, damit ein Cube mit tatsaechlicher site_id 0 nicht durchsickert; das
+   1970-Sentinel-Fenster des `WindowResolver` blockt die uebrigen Queries datumsseitig).
+   `TopNAjaxController` antwortet bei `[]` mit 403. Unit-Tests angepasst (No-Mapping-Faelle
+   erwarten `null`) und explizit im Container gegen echte TYPO3-Klassen ausgefuehrt (der
+   Phar-Runner ueberspringt sie). Handbuch §5 um die Verhaltens-Tabelle ("leeres Dashboard,
+   bewusst kein Rueckfall auf alle Sites") und einen Multi-Mandanten-Warnhinweis ergaenzt.
+
+2. **[Mittel] Ajax-Route erbt keine Modul-Berechtigung** —
+   `Configuration/Backend/AjaxRoutes.php` nutzt nicht
+   `'inheritAccessFromModule' => 'web_sightmetrics'` (TYPO3 12.4+, Changelog #106983).
+   Jeder authentifizierte Backend-Benutzer — auch ohne Rechte am SightMetrics-Modul — kann
+   `/typo3/ajax/sightmetrics/topn` aufrufen. In einer Installation ohne Site-Mapping
+   (Rueckwaertskompatibilitaetsmodus) gibt es dann gar keine Zugriffspruefung mehr.
+   **Fix:** Einzeiler in AjaxRoutes.php.
+
+### Logik / Fehler (niedrig)
+
+3. **[Niedrig] Server-Top-N filtert `dimkey = ''` nicht** — das alte client-seitige
+   `agg()` uebersprang leere Keys. `transform.sql` schuetzt keyword/referrer per `WHERE`,
+   aber nicht alle Dims strukturell; eine leere Barlisten-Zeile waere moeglich und die
+   `dimSummary`-Prozentbasis zaehlt sie mit. **Fix:** `dimkey <> ''` in
+   `topN()`/`dimSummary()`.
+
+4. **[Niedrig] Ajax-Datumsvalidierung ohne `checkdate()`** — `TopNAjaxController` prueft
+   `from`/`to` nur per Regex (`2026-99-99` passiert; harmlos, 0 Zeilen, aber inkonsistent
+   zu `WindowResolver`). `offset` unbegrenzt (tiefe Pagination = teure Queries).
+   **Fix:** `checkdate()` ergaenzen (Helper aus WindowResolver wiederverwenden), `offset`
+   deckeln (z. B. 10000).
+
+5. **[Nit] Ajax-Rows liefern `pv`/`v` als Strings** (mysqli-Verhalten); das JS toleriert
+   das nur durch implizite Koerzierung. **Fix:** `(int)`-Cast im Controller/Repository.
+
+### Betrieb
+
+6. **[Mittel] `cache_sight_metrics` waechst unbegrenzt** — `Typo3DatabaseBackend` loescht
+   abgelaufene Eintraege nicht selbst; dafuer braucht es den Scheduler-Task "Caching
+   framework garbage collection". Die Cache-Keys sind hochkardinal (jede
+   from/to/offset/parentKey-Kombination = eigene Zeile, TTL 60s) — ohne GC-Task sammeln
+   sich tote Zeilen unbegrenzt an. Nirgends dokumentiert. **Fix:** Doku-Abschnitt im
+   Handbuch (Betrieb/Produktions-Haertung) + Runbook; alternativ/ergaenzend pruefen, ob
+   ein Backend mit automatischer Verdraengung sinnvoller ist.
+
+### Dokumentation
+
+7. **Verzeichnisstruktur (Handbuch §2) stark veraltet** — listet `echarts.min.js`
+   (existiert nicht mehr; heute `chart.umd.min.js`, `leaflet.js`, `leaflet.css`,
+   `images/`); es fehlen `TopNAjaxController`, `TopNDims`, `HealthCommand`,
+   `WindowResolver`, `AjaxRoutes.php`, `ext_localconf.php`, `Tests/JavaScript/`,
+   `WindowResolverTest`, `package.json`, `scripts/`; "10 Tests" stimmt nicht mehr (23
+   functional); die `Commands.php`-Zeile nennt nur `smoke`, nicht `health`.
+
+8. **ECharts-Verweise an 7 Stellen nicht nachgezogen** (Chart.js/Leaflet-Migration):
+   Handbuch Zeilen 75/77/78/330/525/529, `README.md:159`, `DashboardController.php:27`
+   (Docblock), `dashboard.js:173` (Kommentar). Der CSP-Troubleshooting-Abschnitt empfiehlt
+   sogar, "ECharts zu verschieben".
+
+9. **§ "Neue Dimension hinzufuegen" faktisch falsch** — Schritt 2 verweist auf
+   Fluid-`<f:for>` ueber `{cubeByDim...}` (Template ist laengst JSON-getrieben), und
+   "Kein PHP-Code muss geaendert werden" stimmt seit Top-N nicht mehr: eine hochkardinale
+   neue Dimension gehoert in die `TopNDims`-Whitelist, sonst geht sie ungebremst in den
+   Payload bzw. der Ajax-Endpunkt antwortet 400. Wer der Anleitung folgt, scheitert.
+
+10. **`cacheLifetime` fehlt in der Konfigurationstabelle §6** (steht nur versteckt in
+    "Bekannte Grenzen").
+
+11. **Troubleshooting "Datums-Picker: Standard ist der aktuelle Monat" falsch** —
+    Standard ist das geladene Fenster (`windowDays`, 92 Tage).
+
+12. **`ext_emconf.php` Version 1.2.0 nicht angehoben** trotz Caching, Top-N,
+    Drill-down-Nachladen und neuer Ajax-Route — fuer Pflege-/Upgrade-Nachvollziehbarkeit
+    sollte die Version mitwachsen.
+
 ## Architektur
 
 - **Skalierung ueber Kardinalitaet ungeloest** — rohe Cube-Zeilen gehen komplett an den

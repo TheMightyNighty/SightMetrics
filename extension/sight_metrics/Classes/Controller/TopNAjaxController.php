@@ -49,10 +49,12 @@ final class TopNAjaxController implements LoggerAwareInterface
         }
 
         $siteId = (int)($params['site'] ?? 0);
-        // Gleiche Pruefung wie DashboardController: leere Liste = kein Filter
-        // (Rueckwaertskompatibilitaet), sonst muss $siteId in der erlaubten Menge sein.
+        // Gleiche Pruefung wie DashboardController: null = kein Site-Mapping konfiguriert
+        // -> kein Filter (Rueckwaertskompatibilitaet); sonst muss $siteId in der erlaubten
+        // Menge sein -- auch bei leerer Menge (Benutzer ohne Webmount auf gemappte Sites
+        // darf NICHTS abfragen, siehe SiteSelector::allowedSiteIds()).
         $allowedIds = SiteSelector::allowedSiteIds($this->siteFinder, $beUser);
-        if ($allowedIds !== [] && !in_array($siteId, $allowedIds, true)) {
+        if ($allowedIds !== null && !in_array($siteId, $allowedIds, true)) {
             return new JsonResponse(['error' => 'kein Zugriff auf diese Site'], 403);
         }
 

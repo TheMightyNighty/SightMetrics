@@ -26,31 +26,37 @@ final class SiteSelector
      * TYPO3-Seitenbaum-/Webmount-Modell, keine eigene Berechtigungsstruktur). Admins sehen
      * immer alles.
      *
-     * Rückgabe leere Liste = kein Filter (alle Cube-Sites sichtbar) – gilt weiterhin, wenn
-     * KEINE Site ein sightmetrics_site_id-Mapping hat (Rückwaertskompatibilitaet fuer
-     * Installationen ohne Site-Mapping). Sobald mindestens eine Site gemappt ist, greift die
-     * Seitenbaum-Pruefung pro Site.
+     * Rueckgabe-Semantik (bewusst dreiwertig, NICHT zusammenfallen lassen):
+     *   - null = KEINE Site hat ein sightmetrics_site_id-Mapping -> kein Filter, alle
+     *     Cube-Sites sichtbar (Rueckwaertskompatibilitaet fuer Installationen ohne Mapping).
+     *   - []   = Mappings existieren, aber der Benutzer hat auf keine gemappte Site
+     *     Webmount-Zugriff -> NICHTS sichtbar. Darf von Aufrufern nicht als "kein Filter"
+     *     interpretiert werden (sonst Mandantentrennungs-Bypass: ein Benutzer ohne
+     *     passenden Webmount saehe alle Mandanten).
+     *   - [ids] = nur diese Cube-Site-IDs sichtbar.
      *
      * Konfiguration in config/sites/<identifier>/config.yaml:
      *   sightmetrics_site_id: 1
      * Oder mehrere Sites auf dieselbe cube_site_id:
      *   sightmetrics_site_id: 1
      *
-     * @return list<int>
+     * @return list<int>|null
      */
-    public static function allowedSiteIds(SiteFinder $siteFinder, BackendUserAuthentication $beUser): array
+    public static function allowedSiteIds(SiteFinder $siteFinder, BackendUserAuthentication $beUser): ?array
     {
+        $mappingExists = false;
         $ids = [];
         foreach ($siteFinder->getAllSites() as $site) {
             $raw = $site->getConfiguration()['sightmetrics_site_id'] ?? null;
             if ($raw === null) {
                 continue;
             }
+            $mappingExists = true;
             if (!$beUser->isAdmin() && $beUser->isInWebMount($site->getRootPageId()) === null) {
                 continue; // kein Seitenbaum-/Webmount-Zugriff auf diese Site
             }
             $ids[] = (int)$raw;
         }
-        return array_values(array_unique($ids));
+        return $mappingExists ? array_values(array_unique($ids)) : null;
     }
 }
