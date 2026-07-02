@@ -88,18 +88,32 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
    Earth fuer `Resources/Public/Vendor/world.js` auf Annahme, nicht auf Verifikation. Muss vor
    einer Uebergabe an das GSB11-Team bestaetigt werden (echte Quelle/Lizenz der Geodaten).
 
-6. **[Niedrig] Fehlende Leaflet-Bildassets** — `leaflet.css` referenziert
+6. ~~**[Niedrig] Fehlende Leaflet-Bildassets**~~ **[behoben]** — `leaflet.css` referenzierte
    `images/layers.png`, `images/layers-2x.png`, `images/marker-icon.png`, die nicht
-   mitgeliefert werden. Aktuell ungenutzt (keine Marker/Layer-Control aktiv), fuehrt aber zu
-   404s, sobald die Karte um Marker/Layer-Steuerung erweitert wird. **Fix:** Assets ergaenzen
-   oder ungenutzte Leaflet-Controls per CSS/Option explizit deaktivieren.
+   mitgeliefert wurden. Aktuell ungenutzt (keine Marker/Layer-Control aktiv), haette aber zu
+   404s gefuehrt, sobald die Karte um Marker/Layer-Steuerung erweitert wird. **Fix:** die
+   5 offiziellen Leaflet-1.9.4-Bilddateien (`layers.png`, `layers-2x.png`, `marker-icon.png`,
+   `marker-icon-2x.png`, `marker-shadow.png`) nach `Resources/Public/Vendor/images/` ergaenzt,
+   Quelle/Version/SHA-256 in `NOTICE.md` und `REUSE.toml` dokumentiert.
 
-7. **[Niedrig] Betriebs-Vorlagen mit unsicheren Defaults** —
-   `demo/app/config/system/additional.php` setzt `trustedHostsPattern = ".*"` (Host-Header-
-   Injection-Risiko) und `demo/initdb/01-analytics.sh` grantet `report_ro'@'%'` (Host-Wildcard).
-   Als Demo kommentiert, aber diese Dateien sind die Vorlage, die Betreiber kopieren werden.
-   **Fix:** Produktions-Beispielkonfiguration separat dokumentieren mit explizitem Hostnamen/
-   IP-Range statt Wildcard, deutlicher Warnhinweis im Kommentar.
+7. ~~**[Niedrig] Betriebs-Vorlagen mit unsicheren Defaults**~~ **[behoben — Dokumentation, s.
+   Einschraenkung unten]** — `demo/app/config/system/additional.php` setzt
+   `trustedHostsPattern = ".*"` (Host-Header-Injection-Risiko) und
+   `demo/initdb/01-analytics.sh` grantet `report_ro'@'%'` (Host-Wildcard). Als Demo
+   kommentiert, aber diese Dateien sind die Vorlage, die Betreiber kopieren werden.
+
+   **Fix:** Kommentare in beiden Dateien zu unmissverstaendlichen Warnungen ("ACHTUNG NUR FUER
+   DIESE LOKALE DEMO, NICHT PRODUKTIV UEBERNEHMEN") ausgebaut, mit konkreter Anleitung, worauf
+   in Produktion umzustellen ist. Neuer Abschnitt "Produktions-Haertung" in
+   `docs/extension-handbuch.md` (nach "Verbindung testen") mit den konkreten Produktivwerten
+   fuer beide Punkte.
+
+   **Bewusste Einschraenkung:** die Demo-Defaults selbst (`.*` bzw. `'%'`) wurden *nicht*
+   geaendert — der lokale Docker-Compose-Stack braucht das, weil Container-IPs im Bridge-
+   Netzwerk nicht statisch sind. Eine echte Produktions-Beispieldatei mit hartcodierten
+   Werten wuerde nur fuer eine konkrete Infrastruktur passen und waere selbst wieder eine
+   Kopiervorlage mit falschen Annahmen; die Doku-Anleitung ist hier der robustere Weg als
+   eine zweite Vorlagendatei.
 
 ## TYPO3-Pflege
 

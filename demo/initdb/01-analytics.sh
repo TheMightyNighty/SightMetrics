@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Cube-DB anlegen + User mit konfigurierbaren Passwörtern erstellen.
 # Ersetzt 01-analytics.sql; liest Passwörter aus Umgebungsvariablen.
-# Für Produktion: CUBE_RW_PASSWORD und CUBE_RO_PASSWORD in demo/.env setzen.
+#
+# ACHTUNG NUR FUER DIESE LOKALE DEMO, NICHT PRODUKTIV UEBERNEHMEN:
+# Die Grants unten nutzen 'user'@'%' (jeder Host darf sich verbinden), damit der lokale
+# Docker-Compose-Stack ohne feste Container-IP funktioniert. Produktiv den Host auf das
+# tatsaechliche Web-Subnetz/den Web-Host einschraenken (z. B. 'report_ro'@'10.0.1.0/255.255.255.0'
+# oder eine feste IP) und zusaetzlich per Netzwerksegmentierung/Firewall absichern — siehe
+# docs/extension-handbuch.md Abschnitt "Produktions-Haertung".
 set -euo pipefail
 
 RW="${CUBE_RW_PASSWORD:-cube_rw}"

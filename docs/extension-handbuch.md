@@ -176,6 +176,24 @@ vendor/bin/typo3 sightmetrics:smoke
 
 Prüft: Connection `cube` existiert, Tabellen `cube`, `daily`, `meta` erreichbar.
 
+### Produktions-Härtung: von den Demo-Defaults abweichen
+
+Die Demo-Umgebung (`demo/`) ist bewusst permissiv konfiguriert, damit der lokale
+Docker-Compose-Stack ohne feste IPs/Hostnamen funktioniert. **Diese beiden Defaults dürfen
+nicht unverändert in Produktion landen:**
+
+- **`trustedHostsPattern`**: `demo/app/config/system/additional.php` setzt
+  `$GLOBALS['TYPO3_CONF_VARS']['SYS']['trustedHostsPattern'] = '.*'` (jeder Host-Header wird
+  akzeptiert → Host-Header-Injection-Risiko). Produktiv immer auf den tatsächlichen
+  Domain-Namen einschränken, z. B. `'^(www\.)?meine-behoerde\.de$'` (siehe
+  [TYPO3-Doku zu `trustedHostsPattern`](https://docs.typo3.org/permalink/t3coreapi:trustedhostspattern)).
+- **DB-Grant-Host für `report_ro`**: `demo/initdb/01-analytics.sh` legt den Cube-DB-User mit
+  `'report_ro'@'%'` an (jeder Host darf sich mit diesem Benutzer verbinden). Produktiv den
+  Grant auf das tatsächliche Web-Subnetz/den Web-Host einschränken, z. B.
+  `CREATE USER 'report_ro'@'10.0.1.0/255.255.255.0' ...` bzw. bei fester IP
+  `'report_ro'@'10.0.1.42'`. Zusätzlich per Netzwerksegmentierung/Firewall absichern, MySQL-
+  Host-Grants allein sind kein vollwertiger Netzwerkschutz.
+
 ---
 
 ## 5. TYPO3-Site ↔ Cube-Site zuordnen
