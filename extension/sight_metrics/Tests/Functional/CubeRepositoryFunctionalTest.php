@@ -223,4 +223,76 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
 
         self::assertCount(2, $this->repo()->sites([]));
     }
+
+    public function testCubeExcludesGovernedDims(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'browser', 'dimkey' => 'Chrome', 'pv' => 5, 'v' => 3],
+            ['dim' => 'keyword', 'dimkey' => 'rathaus', 'pv' => 2, 'v' => 1],
+        ]);
+
+        $cube = $this->repo()->cube(1, '2026-01-01', '2026-01-31', ['keyword', 'entry']);
+
+        $dims = array_column($cube, 'dim');
+        self::assertContains('browser', $dims);
+        self::assertNotContains('keyword', $dims, 'per excludeDims ausgeschlossene Dimension darf nicht mitkommen');
+    }
+
+    public function testTopNOrdersByMetricDescendingAndRespectsLimitOffset(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'keyword', 'dimkey' => 'a', 'pv' => 1, 'v' => 1],
+            ['dim' => 'keyword', 'dimkey' => 'b', 'pv' => 1, 'v' => 5],
+            ['dim' => 'keyword', 'dimkey' => 'c', 'pv' => 1, 'v' => 3],
+        ]);
+
+        $top = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'keyword', 'v', 2);
+        self::assertSame(['b', 'c'], array_column($top, 'dimkey'), 'absteigend nach v sortiert, auf 2 begrenzt');
+
+        $page2 = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'keyword', 'v', 2, 2);
+        self::assertSame(['a'], array_column($page2, 'dimkey'), 'Offset 2 liefert die verbleibende dritte Zeile');
+    }
+
+    public function testTopNAggregatesAcrossMultipleDays(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'keyword', 'dimkey' => 'rathaus', 'pv' => 3, 'v' => 2],
+        ]);
+        $this->cubeConn()->insert('cube', [
+            'site_id' => 1, 'datum' => '2026-01-02', 'dim' => 'keyword', 'dimkey' => 'rathaus', 'pv' => 4, 'v' => 1,
+        ]);
+
+        $top = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'keyword', 'v', 8);
+
+        self::assertCount(1, $top);
+        self::assertSame(7, (int)$top[0]['pv']);
+        self::assertSame(3, (int)$top[0]['v']);
+    }
+
+    public function testTopNRejectsInvalidMetric(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'keyword', 'DROP TABLE cube; --', 8);
+    }
+
+    public function testDimSummaryReturnsTotalsAndDistinctCount(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'keyword', 'dimkey' => 'a', 'pv' => 1, 'v' => 2],
+            ['dim' => 'keyword', 'dimkey' => 'b', 'pv' => 3, 'v' => 4],
+        ]);
+
+        $summary = $this->repo()->dimSummary(1, '2026-01-01', '2026-01-31', 'keyword');
+
+        self::assertSame(['pv' => 4, 'v' => 6, 'count' => 2], $summary);
+    }
+
+    public function testDimSummaryIsZeroForUnknownDim(): void
+    {
+        $this->insertSite(1, 'Site-1');
+
+        $summary = $this->repo()->dimSummary(1, '2026-01-01', '2026-01-31', 'keyword');
+
+        self::assertSame(['pv' => 0, 'v' => 0, 'count' => 0], $summary);
+    }
 }

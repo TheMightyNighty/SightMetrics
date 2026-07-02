@@ -22,6 +22,9 @@
 #sightmetrics .bl-pct{width:50px;text-align:right;color:var(--w-muted);font-variant-numeric:tabular-nums}
 #sightmetrics .bl-row:hover .bl-bar{background:var(--w-bar-h)}
 #sightmetrics .bl-more{color:var(--w-muted);font-size:11px;padding:4px 7px}
+/* Top-N-Nachladen (serverseitig gekappte Barlisten, siehe TopNDims) */
+#sightmetrics .bl-more-click{cursor:pointer}
+#sightmetrics .bl-more-click:hover{color:var(--w-accent)}
 /* Drill-down */
 #sightmetrics .bl-drill .bl-label{cursor:pointer}
 #sightmetrics .bl-drill .bl-label:hover .bl-text{color:var(--w-accent)}

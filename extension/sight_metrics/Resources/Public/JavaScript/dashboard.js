@@ -17,6 +17,92 @@
     return {datum: r.datum, dim: r.dim, key: r.dimkey, pv: +r.pv || 0, v: +r.v || 0};
   });
 
+  // Dimensionen ohne Drill-down-Kind, serverseitig auf Top-N begrenzt (ROADMAP.md
+  // "Top-N + Nachladen"). Land bleibt bewusst aussen vor (Choropleth-Karte braucht alle
+  // Laender), Browser/OS/Geraet/Referrer-Typ auch (haben ein DRILL-Kind).
+  var TOPN_DIM_ID = {keyword: 'bl-keyword', entry: 'bl-entry', exit: 'bl-exit',
+    download: 'bl-download', status: 'bl-status', method: 'bl-method'};
+  var TOPN_URL = DATA.topNUrl || null;
+  var TOPN_LIMIT = DATA.topNLimit || 8;
+  var TOPN_WIN = DATA.window || {von: META.von, bis: META.bis};
+  var TOPN = {}; // dim -> {rows, total:{pv,v,count}, metric, from, to, loading}
+  Object.keys(TOPN_DIM_ID).forEach(function (dim) {
+    var t = (DATA.topN && DATA.topN[dim]) || {};
+    TOPN[dim] = {
+      rows: (t.rows || []).slice(),
+      total: t.total || {pv: 0, v: 0, count: 0},
+      metric: t.metric || 'v',
+      from: TOPN_WIN.von, to: TOPN_WIN.bis, loading: false,
+    };
+  });
+
+  function topNFetch(dim, a, b, offset) {
+    if (!TOPN_URL) return Promise.resolve({rows: [], total: {pv: 0, v: 0, count: 0}});
+    var u = new URL(TOPN_URL, location.href);
+    u.searchParams.set('dim', dim);
+    u.searchParams.set('from', a);
+    u.searchParams.set('to', b);
+    u.searchParams.set('limit', TOPN_LIMIT);
+    u.searchParams.set('offset', offset);
+    if (DATA.siteId) u.searchParams.set('site', DATA.siteId);
+    return fetch(u.toString(), {credentials: 'same-origin'}).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  // Rendert eine Top-N-Barliste aus dem aktuellen TOPN[dim]-Stand (kein Drill-down,
+  // daher rowEl() immer mit drillable=false). "+ N weitere" laedt bei Klick per Ajax nach.
+  function renderTopN(dim, fmt) {
+    var id = TOPN_DIM_ID[dim], cont = $(id); if (!cont) return;
+    var st = TOPN[dim], rows = st.rows, metric = st.metric;
+    cont.innerHTML = '';
+    if (!rows.length && !st.loading) { cont.innerHTML = '<div class="bl-more">keine Daten</div>'; return; }
+    var total = st.total[metric] || 1, max = rows.length ? rows[0][metric] : 1;
+    rows.forEach(function (r) {
+      cont.appendChild(rowEl(r.dimkey, r[metric], total, max, fmt || esc, false));
+    });
+    var remaining = st.total.count - rows.length;
+    if (st.loading) {
+      var l = document.createElement('div'); l.className = 'bl-more'; l.textContent = 'lädt …'; cont.appendChild(l);
+    } else if (remaining > 0) {
+      var m = document.createElement('div'); m.className = 'bl-more bl-more-click';
+      m.textContent = '+ ' + nf(remaining) + ' weitere';
+      m.setAttribute('role', 'button'); m.tabIndex = 0;
+      var loadMore = function () {
+        st.loading = true; renderTopN(dim, fmt);
+        topNFetch(dim, st.from, st.to, st.rows.length).then(function (res) {
+          st.rows = st.rows.concat(res.rows || []); st.total = res.total || st.total; st.loading = false;
+          renderTopN(dim, fmt);
+        }).catch(function () { st.loading = false; renderTopN(dim, fmt); });
+      };
+      m.onclick = loadMore;
+      m.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadMore(); } };
+      cont.appendChild(m);
+    }
+  }
+
+  // Bei Datumsaenderung: aktuellen Stand sofort zeigen, bei abweichendem Zeitraum die
+  // Top-N-Liste per Ajax fuer [a,b] neu laden (offset 0). Race-Guard ueber st.from/st.to,
+  // falls waehrend eines laufenden Fetches erneut der Zeitraum gewechselt wird.
+  function reloadTopNAll(a, b) {
+    Object.keys(TOPN_DIM_ID).forEach(function (dim) {
+      var st = TOPN[dim];
+      renderTopN(dim);
+      if (st.from === a && st.to === b) return;
+      st.loading = true; st.from = a; st.to = b;
+      renderTopN(dim);
+      topNFetch(dim, a, b, 0).then(function (res) {
+        if (st.from !== a || st.to !== b) return; // ueberholt durch neueren Zeitraumwechsel
+        st.rows = res.rows || []; st.total = res.total || {pv: 0, v: 0, count: 0}; st.loading = false;
+        renderTopN(dim);
+      }).catch(function () {
+        if (st.from !== a || st.to !== b) return;
+        st.loading = false; renderTopN(dim);
+      });
+    });
+  }
+
   // Eltern-Dimension -> Kind-Dimension (Drill-down)
   var DRILL = {referrer_type: 'referrer_name', referrer_name: 'referrer_url',
                browser: 'browser_version', os: 'os_version', device: 'device_model'};
@@ -340,12 +426,7 @@
     barlist('bl-device', 'device', a, b, 'v');
     barlist('bl-reftype', 'referrer_type', a, b, 'v');
     barlist('bl-refurl', 'referrer_url', a, b, 'v', {limit: 10});
-    barlist('bl-keyword', 'keyword', a, b, 'v');
-    barlist('bl-entry', 'entry', a, b, 'v');
-    barlist('bl-exit', 'exit', a, b, 'v');
-    barlist('bl-download', 'download', a, b, 'pv');
-    barlist('bl-status', 'status', a, b, 'pv');
-    barlist('bl-method', 'method', a, b, 'pv');
+    reloadTopNAll(a, b); // Keyword/Entry/Exit/Download/Status/Methode: serverseitiges Top-N
   }
 
   // --- Export -------------------------------------------------------------
@@ -376,11 +457,20 @@
     L.push(csvRow(['Datum', 'Besuche', 'Seitenaufrufe', 'Eind. Besucher', 'Absprünge', 'Bytes']));
     days.forEach(function (d) { L.push(csvRow([d.datum, d.visits, d.pageviews, d.uniques, d.bounces, d.bytes])); });
     EXPORT_DIMS.forEach(function (dd) {
-      var rows = agg(dd[0], a, b, dd[2]).filter(function (r) { return r.key != null && r.key !== ''; });
+      // Top-N-Dims (siehe TOPN_DIM_ID): kein vollstaendiges agg() mehr lokal verfuegbar,
+      // Export spiegelt hier bewusst den aktuell geladenen Stand (Top-N + evtl. per
+      // "+ N weitere" nachgeladen), nicht mehr zwingend alle Werte des Zeitraums.
+      var governed = TOPN_DIM_ID.hasOwnProperty(dd[0]);
+      var rows = governed
+        ? TOPN[dd[0]].rows.map(function (r) { return {key: r.dimkey, pv: r.pv, v: r.v}; })
+        : agg(dd[0], a, b, dd[2]);
+      rows = rows.filter(function (r) { return r.key != null && r.key !== ''; });
       if (!rows.length) return;
       var label = dd[3] || function (x) { return x; };
       L.push('');
-      L.push(csvRow([dd[1] + ' (' + (dd[2] === 'v' ? 'Besuche' : 'Seitenaufrufe') + ')']));
+      var title = dd[1] + ' (' + (dd[2] === 'v' ? 'Besuche' : 'Seitenaufrufe') + ')';
+      if (governed) title += ' – nur geladener Ausschnitt, siehe "+ N weitere" im Dashboard';
+      L.push(csvRow([title]));
       L.push(csvRow(['Wert', dd[2] === 'v' ? 'Besuche' : 'Seitenaufrufe', 'Seitenaufrufe', 'Besuche']));
       rows.forEach(function (r) { L.push(csvRow([label(r.key.split(SEP).join(' › ')), r[dd[2]], r.pv, r.v])); });
     });

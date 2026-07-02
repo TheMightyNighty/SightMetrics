@@ -139,21 +139,94 @@ final class CubeRepository
 
     /**
      * Cube-Zeilen, auf das Zeitfenster [$from, $bis] begrenzt (serverseitig).
+     * $excludeDims: Dimensionen, die NICHT komplett mitgeliefert werden (siehe TopNDims) --
+     * fuer die liefert stattdessen topN() nur die Top-N-Zeilen, um das Transfervolumen bei
+     * hoher Kardinalitaet zu begrenzen.
      *
+     * @param list<string> $excludeDims
      * @return list<array<string,mixed>>
      */
-    public function cube(int $siteId, string $from, string $bis): array
+    public function cube(int $siteId, string $from, string $bis, array $excludeDims = []): array
     {
-        return $this->cached("cube:$siteId:$from:$bis", function () use ($siteId, $from, $bis) {
+        $excludeKey = $excludeDims === [] ? '' : ':ex=' . implode(',', $excludeDims);
+        return $this->cached("cube:$siteId:$from:$bis$excludeKey", function () use ($siteId, $from, $bis, $excludeDims) {
             $qb = $this->qb('cube');
-            return $qb->select('datum', 'dim', 'dimkey', 'pv', 'v')
+            $qb->select('datum', 'dim', 'dimkey', 'pv', 'v')
                 ->from('cube')
                 ->where(
                     $qb->expr()->eq('site_id', $qb->createNamedParameter($siteId, ParameterType::INTEGER)),
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
+                );
+            if ($excludeDims !== []) {
+                $qb->andWhere($qb->expr()->notIn(
+                    'dim',
+                    $qb->createNamedParameter($excludeDims, ArrayParameterType::STRING)
+                ));
+            }
+            return $qb->executeQuery()->fetchAllAssociative();
+        });
+    }
+
+    /**
+     * Top-N-Zeilen einer Dimension, absteigend nach $metric ('pv' oder 'v') sortiert.
+     * Fuer serverseitiges Top-N + Nachladen bei hochkardinalen Dimensionen ohne
+     * Drill-down-Kind (siehe TopNDims/ROADMAP.md).
+     *
+     * @return list<array{dimkey: string, pv: int, v: int}>
+     */
+    public function topN(int $siteId, string $from, string $bis, string $dim, string $metric, int $limit, int $offset = 0): array
+    {
+        if (!in_array($metric, ['pv', 'v'], true)) {
+            throw new \InvalidArgumentException('Ungueltige Metrik: ' . $metric);
+        }
+        return $this->cached("topN:$siteId:$from:$bis:$dim:$metric:$limit:$offset", function () use ($siteId, $from, $bis, $dim, $metric, $limit, $offset) {
+            $qb = $this->qb('cube');
+            return $qb->select('dimkey')
+                ->addSelectLiteral('SUM(pv) AS pv', 'SUM(v) AS v')
+                ->from('cube')
+                ->where(
+                    $qb->expr()->eq('site_id', $qb->createNamedParameter($siteId, ParameterType::INTEGER)),
+                    $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
+                    $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
+                    $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
                 )
+                ->groupBy('dimkey')
+                ->orderBy($metric, 'DESC')
+                ->setMaxResults($limit)
+                ->setFirstResult($offset)
                 ->executeQuery()->fetchAllAssociative();
+        });
+    }
+
+    /**
+     * Gesamtsumme + Anzahl unterschiedlicher dimkeys einer Dimension im Zeitfenster --
+     * Basis fuer die Prozentanzeige und "+ N weitere" bei serverseitigem Top-N.
+     *
+     * @return array{pv: int, v: int, count: int}
+     */
+    public function dimSummary(int $siteId, string $from, string $bis, string $dim): array
+    {
+        return $this->cached("dimSummary:$siteId:$from:$bis:$dim", function () use ($siteId, $from, $bis, $dim) {
+            $qb = $this->qb('cube');
+            $row = $qb->addSelectLiteral(
+                'COALESCE(SUM(pv), 0) AS pv',
+                'COALESCE(SUM(v), 0) AS v',
+                'COUNT(DISTINCT dimkey) AS cnt'
+            )
+                ->from('cube')
+                ->where(
+                    $qb->expr()->eq('site_id', $qb->createNamedParameter($siteId, ParameterType::INTEGER)),
+                    $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
+                    $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
+                    $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
+                )
+                ->executeQuery()->fetchAssociative();
+            return [
+                'pv' => (int)($row['pv'] ?? 0),
+                'v' => (int)($row['v'] ?? 0),
+                'count' => (int)($row['cnt'] ?? 0),
+            ];
         });
     }
 }

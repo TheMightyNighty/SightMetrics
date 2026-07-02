@@ -420,15 +420,22 @@ oder ein frischer Ingestion-Lauf soll ohne Wartezeit sichtbar sein). Fehlt die
 Cache-Konfiguration (z. B. Unit-/Functional-Tests ohne geladenes `ext_localconf.php`),
 faellt `CubeRepository::cached()` fehlertolerant auf die Live-Query zurueck.
 
-**Keine serverseitige Kardinalitaets-Begrenzung.** `windowDays` begrenzt nur die Zeitachse
-(wie viele Tage geladen werden), nicht wie viele *unterschiedliche Werte* pro Dimension im
-Fenster existieren. `CubeRepository::cube()` liefert alle Zeilen des Fensters; Aggregation
-und Top-N-Anzeige (z. B. "Top 8 Laender") passiert clientseitig in `dashboard.js`. Bei einer
-Site mit z. B. 50.000 unterschiedlichen URLs/Referrern im Zeitfenster waechst die JSON-Payload
-entsprechend — unabhaengig von `windowDays`. Fuer die bisherigen Einsatzgroessen (einzelne
-Behoerden-Websites) unproblematisch; bei sehr grossen/vielbesuchten Sites (grosse Bundes-Portale)
-sollte vor dem Einsatz die tatsaechliche Kardinalitaet pro Dimension geprueft werden. Siehe
-`ROADMAP.md` fuer den Stand der Diskussion zu einer moeglichen serverseitigen Top-N-Begrenzung.
+**Serverseitige Kardinalitaets-Begrenzung (teilweise).** `windowDays` begrenzt nur die
+Zeitachse (wie viele Tage geladen werden). Fuer sechs Dimensionen ohne Drill-down-Kind, bei
+denen die Anzahl unterschiedlicher Werte im Prinzip unbegrenzt waechst — Suchbegriffe,
+Einstiegs-/Ausstiegsseiten, Downloads, Statuscodes, HTTP-Methoden — liefert
+`CubeRepository::topN()` serverseitig nur die Top-N-Zeilen (Default 8, `TopNDims::DEFAULT_LIMIT`),
+zusammen mit einer Gesamtsumme (`dimSummary()`) fuer die Prozentanzeige und "+ N weitere".
+Nachladen (Datumsbereich-Aenderung im Picker, Klick auf "+ N weitere") laeuft ueber die
+Ajax-Route `ajax_sightmetrics_topn` (`TopNAjaxController`, `Configuration/Backend/AjaxRoutes.php`).
+Land bleibt bewusst unbegrenzt (die Choropleth-Karte braucht alle Laender, ISO-Codes sind
+ohnehin auf ~250 Werte begrenzt); Browser/OS/Geraet/Referrer-Typ ebenfalls unbegrenzt (haben
+ein Drill-down-Kind, siehe `DRILL` in `dashboard.js` — eine Kappung der Elternebene wuerde
+`childrenOf()` brechen, wenn ein Elternteil mit Kindern aus den Top-N faellt). Fuer diese
+verbleibenden Dimensionen sowie fuer den Seitenbaum (`url`-Dimension) gilt weiterhin: bei
+einer Site mit sehr vielen unterschiedlichen Werten waechst die JSON-Payload unabhaengig von
+`windowDays`. Siehe `ROADMAP.md` ("Phase 2") fuer den Stand der Diskussion zu Drill-down und
+Seitenbaum.
 
 ### Neue Dimension hinzufügen
 

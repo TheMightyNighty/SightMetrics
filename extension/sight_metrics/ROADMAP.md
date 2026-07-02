@@ -42,16 +42,60 @@ fuer Details zu abgeschlossenen Themen.
   Trennzeichen bauen (z. B. `SUBSTRING_INDEX(dimkey, CHAR(31), 1)` fuer den Eltern-Praefix
   in MySQL/MariaDB).
 
-  **Grobskizze danach** (final zu entwerfen, nicht final):
-  - `CubeRepository`: neue Methode `topKeys($siteId, $from, $bis, $dim, $metric, $limit)`
-    (SUM($metric) GROUP BY dimkey ORDER BY total DESC LIMIT $limit) und eine Methode, die
-    Zeilen nur fuer eine gegebene Menge von dimkeys bzw. einen Eltern-Praefix liefert.
-  - Ein generischer neuer Controller-Endpunkt (nicht einer pro Dimension) fuer Nachladen:
-    Parameter dim, optional parentKey, from, to, limit/offset.
-  - `dashboard.js`: `agg()`/`childrenOf()`/`barlist()` auf asynchrones Nachladen umstellen
-    (Ladezustand fuer "+ N weitere" und beim Aufklappen einer Kind-Kategorie, die nicht
-    schon im initialen Payload steckt).
-  - Tests: PHP Unit/Functional fuer die neuen Repository-Methoden, JS-Smoke-Test fuer den
+  ~~**Phase 1: flache Barlisten ohne Drill-down-Kind**~~ **[behoben, 2026-07-02]** — Keyword,
+  Entry, Exit, Download, Status, Methode. Land bewusst ausgenommen (Choropleth-Karte braucht
+  alle Laender, ISO-Kardinalitaet ohnehin begrenzt); Browser/OS/Geraet/Referrer-Typ ebenfalls
+  ausgenommen (haben ein DRILL-Kind, siehe Phase 2 unten).
+
+  **Umgesetzt:**
+  - `Classes/Support/TopNDims.php`: dim->Metrik-Zuordnung + Default-Limit (8) fuer die
+    6 governed Dims.
+  - `CubeRepository::topN()` (GROUP BY dimkey ORDER BY metric DESC LIMIT/OFFSET, Metrik
+    gegen `['pv','v']`-Whitelist geprueft) und `::dimSummary()` (Gesamtsumme + Anzahl
+    unterschiedlicher dimkeys, Basis fuer Prozentanzeige und "+ N weitere"). Beide ueber
+    `cached()` (siehe Caching-Punkt oben) TTL-gecacht. `::cube()` bekommt einen
+    `$excludeDims`-Parameter; `DashboardController` schliesst die 6 governed Dims damit aus
+    dem Initial-Payload aus.
+  - Neuer Ajax-Endpunkt `Configuration/Backend/AjaxRoutes.php` ->
+    `TopNAjaxController::handleRequest()` (Routenname `ajax_sightmetrics_topn` — TYPO3
+    praefixiert Ajax-Routen automatisch mit `ajax_`/`/ajax`, siehe Kommentar in
+    AjaxRoutes.php). Prueft `SiteSelector::allowedSiteIds()` wie das Hauptmodul (kein
+    Site-Zugriff am Modul vorbei ueber die Ajax-Route), validiert `dim` gegen die
+    TopNDims-Whitelist und `from`/`to` als `YYYY-MM-DD`.
+  - `dashboard.js`: `reloadTopNAll()`/`renderTopN()` ersetzen fuer diese 6 Dims die alten
+    `barlist()`-Aufrufe. Der client-seitige Datumsbereich-Picker (`w-from`/`w-to`, sofortige
+    Neuberechnung fuer den Rest des Dashboards) loest fuer diese 6 Listen einen Ajax-Reload
+    aus (Race-Guard ueber `st.from`/`st.to`, falls waehrend eines laufenden Fetches erneut
+    der Zeitraum gewechselt wird); "+ N weitere" laedt per Offset-Pagination nach.
+  - CSV-Export (`EXPORT_DIMS`/`buildCsv()`): fuer diese 6 Dims bewusst nur der aktuell im
+    Dashboard geladene Ausschnitt (Top-N + evtl. nachgeladene Seiten), mit Hinweis in der
+    CSV-Spaltenueberschrift — kein zusaetzlicher Vollstaendigkeits-Request beim Export.
+  - Tests: `CubeRepositoryFunctionalTest` (Sortierung/Limit/Offset, Aggregation ueber
+    mehrere Tage, Metrik-Whitelist, `dimSummary()`), neuer JS-Test fuer initiales
+    Top-N-Rendering + Ajax-Nachladen-Klick. Manuell im Demo-Stack per Playwright verifiziert
+    (Login, Modul laden, "+ N weitere" klicken, Datumsbereich wechseln -> alle 6 Ajax-Calls
+    200, keine Konsolenfehler).
+
+  ### Phase 2 (offen): zweistufiger Drill-down + Seitenbaum
+
+  Betrifft die verbleibenden zwei Darstellungsmuster aus der urspruenglichen Skizze:
+  1. **Zweistufiger Drill-down** (Referrer-Typ→Name→URL, Browser→Version, OS→Version,
+     Geraet→Modell) — Kind-Kategorien muessen bei Bedarf nachgeladen werden, nicht nur die
+     Top N der Elternebene. Der SEP-Mechanismus (`chr(31)`, siehe unten) ist geklaert, eine
+     serverseitige Top-N-Query fuer Kind-Dimensionen kann darauf aufbauen (z. B.
+     `SUBSTRING_INDEX(dimkey, CHAR(31), 1)` fuer den Eltern-Praefix in MySQL/MariaDB).
+  2. **Seitenbaum** (`url`-Dimension, `buildTree()`/`renderTree()`) — rekursiver Pfad-Baum,
+     strukturell anders (kein Top-N/Kind-Schema, sondern Pfadsegmente). Braucht ein eigenes
+     Baum-Nachlade-Konzept.
+
+  **Grobskizze** (final zu entwerfen, nicht final):
+  - `CubeRepository`: Methode, die Top-N-Kinder fuer einen gegebenen Eltern-Praefix liefert
+    (Analog zu `topN()`, zusaetzlich mit Praefix-Filter auf `dimkey`).
+  - Nachlade-Endpunkt erweitern (oder TopNAjaxController generalisieren) um Parameter
+    `parentKey`.
+  - `dashboard.js`: `childrenOf()`/`renderInto()` auf asynchrones Nachladen beim Aufklappen
+    einer Kind-Kategorie umstellen, die nicht schon im initialen Payload steckt.
+  - Tests: PHP Unit/Functional fuer die neue Repository-Methode, JS-Smoke-Test fuer den
     async Drill-down-Pfad erweitern.
 
 - ~~**Kein Caching**~~ **[behoben]** — `CubeRepository::daily()`/`cube()` (die beiden mit dem

@@ -11,7 +11,9 @@ use Psr\Log\LoggerAwareTrait;
 use SightMetrics\Domain\Repository\CubeRepository;
 use SightMetrics\Support\ErrorPage;
 use SightMetrics\Support\SiteSelector;
+use SightMetrics\Support\TopNDims;
 use SightMetrics\Support\WindowResolver;
+use TYPO3\CMS\Backend\Routing\UriBuilder;
 use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
@@ -35,6 +37,7 @@ final class DashboardController implements LoggerAwareInterface
         private readonly CubeRepository $cubeRepository,
         private readonly ExtensionConfiguration $extensionConfiguration,
         private readonly SiteFinder $siteFinder,
+        private readonly UriBuilder $uriBuilder,
     ) {}
 
     public function handleRequest(ServerRequestInterface $request): ResponseInterface
@@ -61,10 +64,25 @@ final class DashboardController implements LoggerAwareInterface
                 isset($params['to']) ? (string)$params['to'] : null,
             );
 
+            $governedDims = array_keys(TopNDims::METRIC_BY_DIM);
+            $topN = [];
+            foreach (TopNDims::METRIC_BY_DIM as $dim => $metric) {
+                $topN[$dim] = [
+                    'metric' => $metric,
+                    'rows' => $this->cubeRepository->topN($siteId, $from, $bis, $dim, $metric, TopNDims::DEFAULT_LIMIT),
+                    'total' => $this->cubeRepository->dimSummary($siteId, $from, $bis, $dim),
+                ];
+            }
+
             $payload = [
                 'meta' => $meta,
                 'daily' => $this->cubeRepository->daily($siteId, $from, $bis),
-                'cube' => $this->cubeRepository->cube($siteId, $from, $bis),
+                'cube' => $this->cubeRepository->cube($siteId, $from, $bis, $governedDims),
+                'topN' => $topN,
+                'topNLimit' => TopNDims::DEFAULT_LIMIT,
+                // AJAX-Routen werden von TYPO3 automatisch mit "ajax_" praefixiert
+                // (siehe Configuration/Backend/AjaxRoutes.php, AbstractServiceProvider).
+                'topNUrl' => (string)$this->uriBuilder->buildUriFromRoute('ajax_sightmetrics_topn'),
                 'sites' => $sites,
                 'siteId' => $siteId,
                 'window' => ['von' => $from, 'bis' => $bis],

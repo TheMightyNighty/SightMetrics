@@ -7,6 +7,9 @@ services:
   SightMetrics\:
     resource: '../Classes/*'
 
-  # Controller-Ziel des Backend-Moduls muss aus dem Container holbar sein
+  # Controller-Ziele des Backend-Moduls bzw. der Ajax-Route muessen aus dem Container holbar sein
   SightMetrics\Controller\DashboardController:
+    public: true
+
+  SightMetrics\Controller\TopNAjaxController:
     public: true

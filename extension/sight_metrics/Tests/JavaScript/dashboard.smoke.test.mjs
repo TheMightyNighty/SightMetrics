@@ -56,13 +56,13 @@ function waitForReady(window) {
   });
 }
 
-function buildDom() {
+function buildDom(payload) {
   const template = readFileSync(TEMPLATE_PATH, 'utf8');
   const match = template.match(/<f:else>([\s\S]*)<\/f:else>/);
   assert.ok(match, 'Template-Struktur <f:else>...</f:else> nicht gefunden -- Test an Template-Aenderung anpassen');
   const bodyHtml = match[1].replace(
     '<f:format.raw>{payload}</f:format.raw>',
-    JSON.stringify(FAKE_PAYLOAD).replace(/</g, '\\u003c')
+    JSON.stringify(payload || FAKE_PAYLOAD).replace(/</g, '\\u003c')
   );
 
   // runScripts:'dangerously' noetig, damit window.eval() spaeter mit vollem Zugriff auf
@@ -149,6 +149,59 @@ test('dashboard.js laedt Payload, rendert KPIs, Linien-/Balkenchart und Karte oh
   assert.equal(geoJsonCalls.length, 1, 'L.geoJSON haette genau einmal aufgerufen werden muessen');
   assert.equal(geoJsonCalls[0].data.type, 'FeatureCollection');
   assert.ok(geoJsonCalls[0].data.features.length > 0, 'Karte ohne Laender-Features gerendert');
+});
+
+test('Top-N-Barliste (z. B. Keyword) rendert Server-Top-N und laedt "+ N weitere" per Fetch nach', async () => {
+  const payload = {
+    ...FAKE_PAYLOAD,
+    topNUrl: '/typo3/ajax/sightmetrics/topn',
+    topNLimit: 2,
+    topN: {
+      keyword: {
+        metric: 'v',
+        rows: [{ dimkey: 'rathaus', pv: 10, v: 6 }, { dimkey: 'personalausweis', pv: 8, v: 4 }],
+        total: { pv: 30, v: 15, count: 5 },
+      },
+      entry: { metric: 'v', rows: [], total: { pv: 0, v: 0, count: 0 } },
+      exit: { metric: 'v', rows: [], total: { pv: 0, v: 0, count: 0 } },
+      download: { metric: 'pv', rows: [], total: { pv: 0, v: 0, count: 0 } },
+      status: { metric: 'pv', rows: [], total: { pv: 0, v: 0, count: 0 } },
+      method: { metric: 'pv', rows: [], total: { pv: 0, v: 0, count: 0 } },
+    },
+  };
+  const { window, windowErrors } = buildDom(payload);
+
+  const fetchCalls = [];
+  window.fetch = (url) => {
+    fetchCalls.push(String(url));
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        rows: [{ dimkey: 'anmeldung', pv: 5, v: 3 }, { dimkey: 'termin', pv: 4, v: 2 }],
+        total: { pv: 30, v: 15, count: 4 },
+      }),
+    });
+  };
+
+  const source = readFileSync(DASHBOARD_JS_PATH, 'utf8');
+  window.eval(source);
+  await waitForReady(window);
+  assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
+
+  const keywordEl = window.document.getElementById('bl-keyword');
+  assert.ok(keywordEl.textContent.includes('rathaus'), 'initiale Top-N-Zeilen aus dem Payload muessen gerendert werden');
+  const more = keywordEl.querySelector('.bl-more-click');
+  assert.ok(more, '"+ N weitere" muss angezeigt werden, wenn total.count > geladene Zeilen');
+  assert.equal(more.textContent, '+ 3 weitere');
+
+  more.click();
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(fetchCalls.length, 1, 'Klick auf "+ N weitere" muss genau einen Ajax-Request ausloesen');
+  assert.match(fetchCalls[0], /dim=keyword/);
+  assert.match(fetchCalls[0], /offset=2/);
+  assert.ok(keywordEl.textContent.includes('anmeldung'), 'nachgeladene Zeilen muessen angehaengt werden');
+  assert.equal(keywordEl.querySelectorAll('.bl-more').length, 0, 'nach vollstaendigem Nachladen kein "+ N weitere" mehr');
 });
 
 test('dashboard.js bricht sauber ab, wenn Chart.js/Leaflet fehlen (kein Wurf, kein Crash)', async () => {
