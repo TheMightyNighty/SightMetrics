@@ -26,6 +26,12 @@ final class CubeRepository
 {
     private const CONNECTION = 'cube';
 
+    /**
+     * Eltern|Kind-Trenner in dimkey-Werten (Drill-down-Dimensionen), exakt identisch zu
+     * chr(31) in ingestion/transform.sql und der SEP-Konstante in dashboard.js.
+     */
+    private const CHILD_SEP = "\x1f";
+
     public function __construct(
         private readonly ConnectionPool $connectionPool,
         private readonly CacheManager $cacheManager,
@@ -169,20 +175,44 @@ final class CubeRepository
     }
 
     /**
+     * Beschraenkt eine Cube-Query auf Zeilen, deren dimkey mit "$parentKey . CHILD_SEP"
+     * beginnt (Drill-down: Kind-Zeilen einer Eltern-Kategorie). $parentKey ist ein
+     * gebundener Parameter (kein Injection-Risiko); nur die per PHP berechnete Praefix-
+     * LAENGE wird als Literal in die Query eingebettet. SUBSTR() zaehlt sowohl bei MySQL/
+     * MariaDB (nicht-binaere Spalten) als auch bei SQLite Unicode-Codepoints, daher
+     * mb_strlen() statt strlen() -- sonst wuerden mehrbyte-UTF-8-Labels falsch abgeschnitten.
+     */
+    private function applyParentPrefix(QueryBuilder $qb, ?string $parentKey): void
+    {
+        if ($parentKey === null) {
+            return;
+        }
+        $prefix = $parentKey . self::CHILD_SEP;
+        // Kein $qb->expr()->eq() hier: das quotet sein erstes Argument als Identifier
+        // (Connection::quoteIdentifier()), was den SUBSTR(...)-Ausdruck kaputt macht.
+        // andWhere() akzeptiert rohe SQL-Fragmente direkt.
+        $qb->andWhere(
+            'SUBSTR(dimkey, 1, ' . mb_strlen($prefix, 'UTF-8') . ') = ' . $qb->createNamedParameter($prefix)
+        );
+    }
+
+    /**
      * Top-N-Zeilen einer Dimension, absteigend nach $metric ('pv' oder 'v') sortiert.
-     * Fuer serverseitiges Top-N + Nachladen bei hochkardinalen Dimensionen ohne
-     * Drill-down-Kind (siehe TopNDims/ROADMAP.md).
+     * Fuer serverseitiges Top-N + Nachladen bei hochkardinalen Dimensionen (siehe
+     * TopNDims/ROADMAP.md). $parentKey: wenn gesetzt, nur Kind-Zeilen dieser Eltern-Kategorie
+     * (Drill-down, dimkey-Praefix vor CHILD_SEP) -- siehe applyParentPrefix().
      *
      * @return list<array{dimkey: string, pv: int, v: int}>
      */
-    public function topN(int $siteId, string $from, string $bis, string $dim, string $metric, int $limit, int $offset = 0): array
+    public function topN(int $siteId, string $from, string $bis, string $dim, string $metric, int $limit, int $offset = 0, ?string $parentKey = null): array
     {
         if (!in_array($metric, ['pv', 'v'], true)) {
             throw new \InvalidArgumentException('Ungueltige Metrik: ' . $metric);
         }
-        return $this->cached("topN:$siteId:$from:$bis:$dim:$metric:$limit:$offset", function () use ($siteId, $from, $bis, $dim, $metric, $limit, $offset) {
+        $cacheKey = "topN:$siteId:$from:$bis:$dim:$metric:$limit:$offset:" . ($parentKey ?? '');
+        return $this->cached($cacheKey, function () use ($siteId, $from, $bis, $dim, $metric, $limit, $offset, $parentKey) {
             $qb = $this->qb('cube');
-            return $qb->select('dimkey')
+            $qb->select('dimkey')
                 ->addSelectLiteral('SUM(pv) AS pv', 'SUM(v) AS v')
                 ->from('cube')
                 ->where(
@@ -190,8 +220,9 @@ final class CubeRepository
                     $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
-                )
-                ->groupBy('dimkey')
+                );
+            $this->applyParentPrefix($qb, $parentKey);
+            return $qb->groupBy('dimkey')
                 ->orderBy($metric, 'DESC')
                 ->setMaxResults($limit)
                 ->setFirstResult($offset)
@@ -200,16 +231,18 @@ final class CubeRepository
     }
 
     /**
-     * Gesamtsumme + Anzahl unterschiedlicher dimkeys einer Dimension im Zeitfenster --
-     * Basis fuer die Prozentanzeige und "+ N weitere" bei serverseitigem Top-N.
+     * Gesamtsumme + Anzahl unterschiedlicher dimkeys einer Dimension (optional unter einem
+     * $parentKey-Praefix) im Zeitfenster -- Basis fuer die Prozentanzeige und "+ N weitere"
+     * bei serverseitigem Top-N.
      *
      * @return array{pv: int, v: int, count: int}
      */
-    public function dimSummary(int $siteId, string $from, string $bis, string $dim): array
+    public function dimSummary(int $siteId, string $from, string $bis, string $dim, ?string $parentKey = null): array
     {
-        return $this->cached("dimSummary:$siteId:$from:$bis:$dim", function () use ($siteId, $from, $bis, $dim) {
+        $cacheKey = "dimSummary:$siteId:$from:$bis:$dim:" . ($parentKey ?? '');
+        return $this->cached($cacheKey, function () use ($siteId, $from, $bis, $dim, $parentKey) {
             $qb = $this->qb('cube');
-            $row = $qb->addSelectLiteral(
+            $qb->addSelectLiteral(
                 'COALESCE(SUM(pv), 0) AS pv',
                 'COALESCE(SUM(v), 0) AS v',
                 'COUNT(DISTINCT dimkey) AS cnt'
@@ -220,8 +253,9 @@ final class CubeRepository
                     $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
-                )
-                ->executeQuery()->fetchAssociative();
+                );
+            $this->applyParentPrefix($qb, $parentKey);
+            $row = $qb->executeQuery()->fetchAssociative();
             return [
                 'pv' => (int)($row['pv'] ?? 0),
                 'v' => (int)($row['v'] ?? 0),

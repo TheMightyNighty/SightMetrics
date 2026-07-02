@@ -420,22 +420,24 @@ oder ein frischer Ingestion-Lauf soll ohne Wartezeit sichtbar sein). Fehlt die
 Cache-Konfiguration (z. B. Unit-/Functional-Tests ohne geladenes `ext_localconf.php`),
 faellt `CubeRepository::cached()` fehlertolerant auf die Live-Query zurueck.
 
-**Serverseitige Kardinalitaets-Begrenzung (teilweise).** `windowDays` begrenzt nur die
-Zeitachse (wie viele Tage geladen werden). Fuer sechs Dimensionen ohne Drill-down-Kind, bei
-denen die Anzahl unterschiedlicher Werte im Prinzip unbegrenzt waechst — Suchbegriffe,
-Einstiegs-/Ausstiegsseiten, Downloads, Statuscodes, HTTP-Methoden — liefert
-`CubeRepository::topN()` serverseitig nur die Top-N-Zeilen (Default 8, `TopNDims::DEFAULT_LIMIT`),
-zusammen mit einer Gesamtsumme (`dimSummary()`) fuer die Prozentanzeige und "+ N weitere".
-Nachladen (Datumsbereich-Aenderung im Picker, Klick auf "+ N weitere") laeuft ueber die
-Ajax-Route `ajax_sightmetrics_topn` (`TopNAjaxController`, `Configuration/Backend/AjaxRoutes.php`).
-Land bleibt bewusst unbegrenzt (die Choropleth-Karte braucht alle Laender, ISO-Codes sind
-ohnehin auf ~250 Werte begrenzt); Browser/OS/Geraet/Referrer-Typ ebenfalls unbegrenzt (haben
-ein Drill-down-Kind, siehe `DRILL` in `dashboard.js` — eine Kappung der Elternebene wuerde
-`childrenOf()` brechen, wenn ein Elternteil mit Kindern aus den Top-N faellt). Fuer diese
-verbleibenden Dimensionen sowie fuer den Seitenbaum (`url`-Dimension) gilt weiterhin: bei
-einer Site mit sehr vielen unterschiedlichen Werten waechst die JSON-Payload unabhaengig von
-`windowDays`. Siehe `ROADMAP.md` ("Phase 2") fuer den Stand der Diskussion zu Drill-down und
-Seitenbaum.
+**Serverseitige Kardinalitaets-Begrenzung.** `windowDays` begrenzt nur die Zeitachse (wie
+viele Tage geladen werden). Fuer alle Dimensionen mit potenziell unbegrenzt vielen
+unterschiedlichen Werten — Suchbegriffe, Einstiegs-/Ausstiegsseiten, Downloads, Statuscodes,
+HTTP-Methoden, Browser, Betriebssystem, Geraetetyp, Referrer-Typ/-Name/-URL sowie deren
+Versions-/Modell-Unterkategorien — liefert `CubeRepository::topN()` serverseitig nur die
+Top-N-Zeilen (Default 8, `TopNDims::DEFAULT_LIMIT`; Referrer-URLs 10), zusammen mit einer
+Gesamtsumme (`dimSummary()`) fuer die Prozentanzeige und "+ N weitere". Nachladen
+(Datumsbereich-Aenderung im Picker, Klick auf "+ N weitere", Aufklappen einer
+Drill-down-Zeile) laeuft ueber die Ajax-Route `ajax_sightmetrics_topn`
+(`TopNAjaxController`, `Configuration/Backend/AjaxRoutes.php`). Drill-down-Kinder (z. B.
+Browser-Versionen zu "Chrome") werden nie vorab geladen, sondern erst beim Aufklappen per
+`parentKey`-Parameter nachgefragt (`CubeRepository::applyParentPrefix()`, Praefix-Filter auf
+den mit `chr(31)` kodierten dimkey). Land bleibt bewusst unbegrenzt (die Choropleth-Karte
+braucht alle Laender, ISO-Codes sind ohnehin auf ~250 Werte begrenzt). Fuer den Seitenbaum
+(`url`-Dimension, `buildTree()`/`renderTree()`) gilt weiterhin: bei einer Site mit sehr
+vielen unterschiedlichen URLs waechst die JSON-Payload unabhaengig von `windowDays` — siehe
+`ROADMAP.md` fuer den Stand dazu (eigenes Baum-Nachlade-Konzept noetig, strukturell anders
+als das Eltern-Kind-Schema der uebrigen Dimensionen).
 
 ### Neue Dimension hinzufügen
 

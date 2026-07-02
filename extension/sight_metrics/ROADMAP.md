@@ -76,27 +76,47 @@ fuer Details zu abgeschlossenen Themen.
     (Login, Modul laden, "+ N weitere" klicken, Datumsbereich wechseln -> alle 6 Ajax-Calls
     200, keine Konsolenfehler).
 
-  ### Phase 2 (offen): zweistufiger Drill-down + Seitenbaum
+  ~~**Phase 2: zweistufiger Drill-down**~~ **[behoben, 2026-07-02]** — Referrer-Typ→Name→URL,
+  Browser→Version, OS→Version, Geraet→Modell. Damit sind jetzt auch die vier verbleibenden
+  Root-Dims aus Phase 1 (Browser, OS, Geraet, Referrer-Typ) serverseitig Top-N-begrenzt,
+  inklusive ihrer Kind-Ebenen. Die eigenstaendige flache "Referrer-URLs"-Liste (`bl-refurl`,
+  ungruppiert nach Eltern-Referrer-Name) ist ebenfalls migriert.
 
-  Betrifft die verbleibenden zwei Darstellungsmuster aus der urspruenglichen Skizze:
-  1. **Zweistufiger Drill-down** (Referrer-Typ→Name→URL, Browser→Version, OS→Version,
-     Geraet→Modell) — Kind-Kategorien muessen bei Bedarf nachgeladen werden, nicht nur die
-     Top N der Elternebene. Der SEP-Mechanismus (`chr(31)`, siehe unten) ist geklaert, eine
-     serverseitige Top-N-Query fuer Kind-Dimensionen kann darauf aufbauen (z. B.
-     `SUBSTRING_INDEX(dimkey, CHAR(31), 1)` fuer den Eltern-Praefix in MySQL/MariaDB).
-  2. **Seitenbaum** (`url`-Dimension, `buildTree()`/`renderTree()`) — rekursiver Pfad-Baum,
-     strukturell anders (kein Top-N/Kind-Schema, sondern Pfadsegmente). Braucht ein eigenes
-     Baum-Nachlade-Konzept.
+  **Umgesetzt:**
+  - `TopNDims`: `ROOT_METRIC_BY_DIM` (Top-Level, im Initial-Payload) und
+    `CHILD_METRIC_BY_DIM` (nur ueber `parentKey` erreichbar, nie vorab geladen) getrennt.
+    `referrer_url` steht bewusst in beiden Listen: einmal als eigene flache Top-Level-Liste
+    (alle referrer_url-Zeilen ungruppiert, Limit 10 wie zuvor), einmal als Kind von
+    `referrer_name` (Limit 8). `CHILD_OF_ROOT` dokumentiert die Eltern-Kind-Zuordnung.
+  - `CubeRepository::topN()`/`dimSummary()` haben jetzt einen optionalen `$parentKey`-
+    Parameter; `applyParentPrefix()` filtert per `SUBSTR(dimkey, 1, N) = 'Eltern' . chr(31)`
+    (N = `mb_strlen()` in Unicode-Codepoints, nicht Bytes -- sonst wuerden mehrbyte-UTF-8-
+    Elternlabels an der falschen Stelle abgeschnitten). **Stolperstein dabei:**
+    `$qb->expr()->eq()` quotet sein erstes Argument als Spalten-Identifier
+    (`Connection::quoteIdentifier()`) -- ein `SUBSTR(...)`-Ausdruck als "Feldname" wird damit
+    kaputt-gequotet und SQLite interpretiert das Ergebnis dann still als String-Literal
+    (kein Fehler, aber 0 Treffer). Fix: `andWhere()` mit einem rohen SQL-String statt
+    `expr()->eq()`.
+  - `TopNAjaxController`: `parentKey`-Query-Parameter, waehlt je nachdem `ROOT_METRIC_BY_DIM`
+    oder `CHILD_METRIC_BY_DIM` als Whitelist.
+  - `dashboard.js`: `DRILL`-Map, `childrenOf()`, `firstSeg()` entfernt (obsolet -- der
+    Server filtert jetzt per `parentKey`). `TOPN_ROOT`/`TOPN_CHILD` + generischer
+    `paintTopN()`-Renderer (gemeinsam fuer Root- und Kind-Listen) ersetzen `renderInto()`
+    fuer alle Dims ausser Land (das bleibt die einzige verbleibende `barlist()`-Nutzung,
+    keine Kinder). Aufklappen einer Zeile mit Kind-Dim laedt einmalig per Ajax nach
+    (`parentKey` = vollstaendiger dimkey der Elternzeile); Datumsbereich-Aenderung verwirft
+    aufgeklappte Kind-Listen konsistent mit dem bisherigen Verhalten.
+  - Tests: `CubeRepositoryFunctionalTest` (parentKey-Filterung, Abgrenzung gegen
+    Praefix-Ueberlappung wie "Chrom" vs. "Chromium", Mehrbyte-Elternlabel), neuer JS-Test
+    fuer Drill-down-Nachladen. Manuell im Demo-Stack per Playwright verifiziert (Aufklappen
+    von "Chrome" laedt `browser_version?parentKey=Chrome`, zeigt "Chrome 125.0" korrekt
+    Eltern-Praefix-bereinigt; alle Root-Listen inkl. Referrer-URLs laden bei Datumswechsel
+    neu, keine Konsolenfehler).
 
-  **Grobskizze** (final zu entwerfen, nicht final):
-  - `CubeRepository`: Methode, die Top-N-Kinder fuer einen gegebenen Eltern-Praefix liefert
-    (Analog zu `topN()`, zusaetzlich mit Praefix-Filter auf `dimkey`).
-  - Nachlade-Endpunkt erweitern (oder TopNAjaxController generalisieren) um Parameter
-    `parentKey`.
-  - `dashboard.js`: `childrenOf()`/`renderInto()` auf asynchrones Nachladen beim Aufklappen
-    einer Kind-Kategorie umstellen, die nicht schon im initialen Payload steckt.
-  - Tests: PHP Unit/Functional fuer die neue Repository-Methode, JS-Smoke-Test fuer den
-    async Drill-down-Pfad erweitern.
+  **Bewusst nicht Teil dieses Tasks: Seitenbaum** (`url`-Dimension,
+  `buildTree()`/`renderTree()`) — rekursiver Pfad-Baum, strukturell anders als das
+  Eltern-Kind-Schema oben (Pfadsegmente statt fester Dimensionen), braucht ein eigenes
+  Baum-Nachlade-Konzept. Bleibt vorerst client-seitig mit dem vollstaendigen `url`-Datensatz.
 
 - ~~**Kein Caching**~~ **[behoben]** — `CubeRepository::daily()`/`cube()` (die beiden mit dem
   Zeitfenster wachsenden Reads) laufen jetzt ueber den TYPO3-Cache-Framework-Cache

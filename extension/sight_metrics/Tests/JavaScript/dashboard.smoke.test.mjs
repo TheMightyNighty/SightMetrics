@@ -204,6 +204,56 @@ test('Top-N-Barliste (z. B. Keyword) rendert Server-Top-N und laedt "+ N weitere
   assert.equal(keywordEl.querySelectorAll('.bl-more').length, 0, 'nach vollstaendigem Nachladen kein "+ N weitere" mehr');
 });
 
+test('Drill-down (Browser -> Version) laedt Kinder per parentKey nach, wenn eine Zeile aufgeklappt wird', async () => {
+  const payload = {
+    ...FAKE_PAYLOAD,
+    topNUrl: '/typo3/ajax/sightmetrics/topn',
+    topN: {
+      browser: {
+        metric: 'v',
+        limit: 8,
+        rows: [{ dimkey: 'Firefox', pv: 12, v: 7 }],
+        total: { pv: 12, v: 7, count: 1 },
+      },
+    },
+  };
+  const { window, windowErrors } = buildDom(payload);
+
+  const fetchCalls = [];
+  window.fetch = (url) => {
+    fetchCalls.push(String(url));
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        rows: [{ dimkey: 'Firefox\x1f120', pv: 8, v: 5 }, { dimkey: 'Firefox\x1f119', pv: 4, v: 2 }],
+        total: { pv: 12, v: 7, count: 2 },
+      }),
+    });
+  };
+
+  const source = readFileSync(DASHBOARD_JS_PATH, 'utf8');
+  window.eval(source);
+  await waitForReady(window);
+  assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
+
+  const browserEl = window.document.getElementById('bl-browser');
+  assert.ok(browserEl.textContent.includes('Firefox'), 'Root-Top-N-Zeile aus dem Payload muss gerendert werden');
+  const label = browserEl.querySelector('.bl-drill .bl-label');
+  assert.ok(label, 'Zeile mit Drill-down-Kind muss als .bl-drill (aufklappbar) markiert sein');
+  assert.equal(fetchCalls.length, 0, 'Kinder duerfen erst bei Klick geladen werden, nicht vorab');
+
+  label.click();
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(fetchCalls.length, 1, 'Aufklappen muss genau einen Ajax-Request ausloesen');
+  assert.match(fetchCalls[0], /dim=browser_version/);
+  assert.match(fetchCalls[0], /parentKey=Firefox/);
+  const sub = browserEl.querySelector('.bl-sub');
+  assert.ok(sub, 'Sub-Container fuer die Kind-Liste muss erzeugt werden');
+  assert.ok(sub.textContent.includes('120'), 'nachgeladene Kind-Zeilen muessen gerendert werden (Eltern-Praefix abgetrennt)');
+  assert.ok(!sub.textContent.includes('Firefox\x1f120'), 'Anzeige-Label muss lastSeg-bereinigt sein, nicht der rohe dimkey');
+});
+
 test('dashboard.js bricht sauber ab, wenn Chart.js/Leaflet fehlen (kein Wurf, kein Crash)', async () => {
   const { window, windowErrors } = buildDom();
   delete window.Chart;

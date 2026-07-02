@@ -295,4 +295,63 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
 
         self::assertSame(['pv' => 0, 'v' => 0, 'count' => 0], $summary);
     }
+
+    // ---- Drill-down (parentKey), Phase 2 --------------------------------------
+
+    public function testTopNWithParentKeyReturnsOnlyMatchingChildren(): void
+    {
+        $sep = "\x1f";
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'browser_version', 'dimkey' => 'Chrome' . $sep . '120', 'pv' => 1, 'v' => 5],
+            ['dim' => 'browser_version', 'dimkey' => 'Chrome' . $sep . '119', 'pv' => 1, 'v' => 2],
+            ['dim' => 'browser_version', 'dimkey' => 'Firefox' . $sep . '115', 'pv' => 1, 'v' => 9],
+        ]);
+
+        $children = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'browser_version', 'v', 8, 0, 'Chrome');
+
+        self::assertSame(['Chrome' . $sep . '120', 'Chrome' . $sep . '119'], array_column($children, 'dimkey'));
+    }
+
+    public function testTopNParentKeyDoesNotMatchUnrelatedPrefix(): void
+    {
+        $sep = "\x1f";
+        // "Chromium" beginnt mit "Chrom", darf aber nicht auf parentKey "Chrom" matchen --
+        // der Trenner muss exakt nach dem vollen Elternlabel folgen.
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'browser_version', 'dimkey' => 'Chromium' . $sep . '1', 'pv' => 1, 'v' => 1],
+            ['dim' => 'browser_version', 'dimkey' => 'Chrom' . $sep . '1', 'pv' => 1, 'v' => 1],
+        ]);
+
+        $children = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'browser_version', 'v', 8, 0, 'Chrom');
+
+        self::assertSame(['Chrom' . $sep . '1'], array_column($children, 'dimkey'));
+    }
+
+    public function testTopNParentKeyHandlesMultibyteLabelsCorrectly(): void
+    {
+        $sep = "\x1f";
+        // Mehrbyte-UTF-8-Praefix (Umlaut): SUBSTR() muss Codepoints zaehlen, nicht Bytes,
+        // sonst wird der dimkey an der falschen Stelle abgeschnitten (siehe applyParentPrefix()).
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'referrer_name', 'dimkey' => 'Bürgeramt' . $sep . 'seite-a', 'pv' => 1, 'v' => 3],
+        ]);
+
+        $children = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'referrer_name', 'v', 8, 0, 'Bürgeramt');
+
+        self::assertSame(['Bürgeramt' . $sep . 'seite-a'], array_column($children, 'dimkey'));
+    }
+
+    public function testDimSummaryWithParentKeyOnlyCountsMatchingChildren(): void
+    {
+        $sep = "\x1f";
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'os_version', 'dimkey' => 'Windows' . $sep . '11', 'pv' => 1, 'v' => 4],
+            ['dim' => 'os_version', 'dimkey' => 'Windows' . $sep . '10', 'pv' => 1, 'v' => 2],
+            ['dim' => 'os_version', 'dimkey' => 'macOS' . $sep . '14', 'pv' => 1, 'v' => 7],
+        ]);
+
+        $summary = $this->repo()->dimSummary(1, '2026-01-01', '2026-01-31', 'os_version', 'Windows');
+
+        self::assertSame(['pv' => 2, 'v' => 6, 'count' => 2], $summary);
+    }
 }

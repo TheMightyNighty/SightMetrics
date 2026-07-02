@@ -17,33 +17,57 @@
     return {datum: r.datum, dim: r.dim, key: r.dimkey, pv: +r.pv || 0, v: +r.v || 0};
   });
 
-  // Dimensionen ohne Drill-down-Kind, serverseitig auf Top-N begrenzt (ROADMAP.md
-  // "Top-N + Nachladen"). Land bleibt bewusst aussen vor (Choropleth-Karte braucht alle
-  // Laender), Browser/OS/Geraet/Referrer-Typ auch (haben ein DRILL-Kind).
-  var TOPN_DIM_ID = {keyword: 'bl-keyword', entry: 'bl-entry', exit: 'bl-exit',
-    download: 'bl-download', status: 'bl-status', method: 'bl-method'};
+  // Root-Dimensionen, serverseitig auf Top-N begrenzt (ROADMAP.md "Top-N + Nachladen",
+  // Phase 1+2). Land bleibt bewusst aussen vor (Choropleth-Karte braucht alle Laender, ISO-
+  // Kardinalitaet ohnehin begrenzt); "child" markiert Dims mit Drill-down-Kind.
+  var TOPN_ROOT = {
+    keyword: {id: 'bl-keyword', metric: 'v'},
+    entry: {id: 'bl-entry', metric: 'v'},
+    exit: {id: 'bl-exit', metric: 'v'},
+    download: {id: 'bl-download', metric: 'pv'},
+    status: {id: 'bl-status', metric: 'pv'},
+    method: {id: 'bl-method', metric: 'pv'},
+    browser: {id: 'bl-browser', metric: 'v', child: 'browser_version', limit: 8},
+    os: {id: 'bl-os', metric: 'v', child: 'os_version', limit: 8},
+    device: {id: 'bl-device', metric: 'v', child: 'device_model', limit: 8},
+    referrer_type: {id: 'bl-reftype', metric: 'v', child: 'referrer_name', limit: 8},
+    // Eigenstaendige flache Liste (alle referrer_url-Zeilen, nicht nach Eltern gruppiert) --
+    // dieselbe Dimension ist zusaetzlich als Kind von referrer_name erreichbar (s.u.).
+    referrer_url: {id: 'bl-refurl', metric: 'v', limit: 10},
+  };
+  // Kind-Dimensionen: nur ueber parentKey erreichbar, nie im Initial-Payload.
+  var TOPN_CHILD = {
+    browser_version: {metric: 'v'},
+    os_version: {metric: 'v'},
+    device_model: {metric: 'v'},
+    referrer_name: {metric: 'v', child: 'referrer_url'},
+    referrer_url: {metric: 'v'},
+  };
   var TOPN_URL = DATA.topNUrl || null;
-  var TOPN_LIMIT = DATA.topNLimit || 8;
   var TOPN_WIN = DATA.window || {von: META.von, bis: META.bis};
-  var TOPN = {}; // dim -> {rows, total:{pv,v,count}, metric, from, to, loading}
-  Object.keys(TOPN_DIM_ID).forEach(function (dim) {
-    var t = (DATA.topN && DATA.topN[dim]) || {};
+  var CUR_A = TOPN_WIN.von, CUR_B = TOPN_WIN.bis; // aktuell gewaehlter Zeitraum (fuer Kind-Fetches)
+  var TOPN = {}; // dim -> {rows, total:{pv,v,count}, metric, from, to, loading, limit}
+  Object.keys(TOPN_ROOT).forEach(function (dim) {
+    var meta = TOPN_ROOT[dim], t = (DATA.topN && DATA.topN[dim]) || {};
     TOPN[dim] = {
+      dim: dim,
       rows: (t.rows || []).slice(),
       total: t.total || {pv: 0, v: 0, count: 0},
-      metric: t.metric || 'v',
+      metric: t.metric || meta.metric,
+      limit: t.limit || meta.limit || 8,
       from: TOPN_WIN.von, to: TOPN_WIN.bis, loading: false,
     };
   });
 
-  function topNFetch(dim, a, b, offset) {
+  function topNFetch(dim, a, b, offset, limit, parentKey) {
     if (!TOPN_URL) return Promise.resolve({rows: [], total: {pv: 0, v: 0, count: 0}});
     var u = new URL(TOPN_URL, location.href);
     u.searchParams.set('dim', dim);
     u.searchParams.set('from', a);
     u.searchParams.set('to', b);
-    u.searchParams.set('limit', TOPN_LIMIT);
+    u.searchParams.set('limit', limit);
     u.searchParams.set('offset', offset);
+    if (parentKey != null) u.searchParams.set('parentKey', parentKey);
     if (DATA.siteId) u.searchParams.set('site', DATA.siteId);
     return fetch(u.toString(), {credentials: 'same-origin'}).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -51,30 +75,28 @@
     });
   }
 
-  // Rendert eine Top-N-Barliste aus dem aktuellen TOPN[dim]-Stand (kein Drill-down,
-  // daher rowEl() immer mit drillable=false). "+ N weitere" laedt bei Klick per Ajax nach.
-  function renderTopN(dim, fmt) {
-    var id = TOPN_DIM_ID[dim], cont = $(id); if (!cont) return;
-    var st = TOPN[dim], rows = st.rows, metric = st.metric;
+  // Gemeinsamer Renderer fuer Top-N-Zeilen (Root ODER Kind) + "+ N weitere"-Nachladen.
+  // rowFactory(cont, row, total, max) baut/haengt die Zeile an (entscheidet ueber
+  // Drillability); state braucht {dim, from, to, parentKey, rows, total, metric, limit, loading}.
+  function paintTopN(cont, state, rowFactory) {
     cont.innerHTML = '';
-    if (!rows.length && !st.loading) { cont.innerHTML = '<div class="bl-more">keine Daten</div>'; return; }
-    var total = st.total[metric] || 1, max = rows.length ? rows[0][metric] : 1;
-    rows.forEach(function (r) {
-      cont.appendChild(rowEl(r.dimkey, r[metric], total, max, fmt || esc, false));
-    });
-    var remaining = st.total.count - rows.length;
-    if (st.loading) {
+    var rows = state.rows;
+    if (!rows.length && !state.loading) { cont.innerHTML = '<div class="bl-more">keine Daten</div>'; return; }
+    var total = state.total[state.metric] || 1, max = rows.length ? rows[0][state.metric] : 1;
+    rows.forEach(function (r) { rowFactory(cont, r, total, max); });
+    var remaining = state.total.count - rows.length;
+    if (state.loading) {
       var l = document.createElement('div'); l.className = 'bl-more'; l.textContent = 'lädt …'; cont.appendChild(l);
     } else if (remaining > 0) {
       var m = document.createElement('div'); m.className = 'bl-more bl-more-click';
       m.textContent = '+ ' + nf(remaining) + ' weitere';
       m.setAttribute('role', 'button'); m.tabIndex = 0;
       var loadMore = function () {
-        st.loading = true; renderTopN(dim, fmt);
-        topNFetch(dim, st.from, st.to, st.rows.length).then(function (res) {
-          st.rows = st.rows.concat(res.rows || []); st.total = res.total || st.total; st.loading = false;
-          renderTopN(dim, fmt);
-        }).catch(function () { st.loading = false; renderTopN(dim, fmt); });
+        state.loading = true; paintTopN(cont, state, rowFactory);
+        topNFetch(state.dim, state.from, state.to, state.rows.length, state.limit, state.parentKey).then(function (res) {
+          state.rows = state.rows.concat(res.rows || []); state.total = res.total || state.total; state.loading = false;
+          paintTopN(cont, state, rowFactory);
+        }).catch(function () { state.loading = false; paintTopN(cont, state, rowFactory); });
       };
       m.onclick = loadMore;
       m.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadMore(); } };
@@ -82,30 +104,72 @@
     }
   }
 
+  // Baut eine rowFactory fuer eine gegebene Dim (Root oder Kind); haengt bei vorhandenem
+  // Kind (meta.child) einen Aufklapp-Handler an, der beim ersten Klick per Ajax nachlaedt.
+  function topNRowFactory(dim, meta) {
+    return function (cont, r, total, max) {
+      var label = lastSeg(r.dimkey); // Eltern-Praefix (chr(31)-kodiert) fuer die Anzeige abtrennen
+      var row = rowEl(label, r[meta.metric], total, max, esc, !!meta.child);
+      cont.appendChild(row);
+      if (!meta.child) return;
+      var sub = document.createElement('div'); sub.className = 'bl-sub'; sub.style.display = 'none';
+      row.insertAdjacentElement('afterend', sub);
+      var built = false, lbl = row.querySelector('.bl-label');
+      function toggleSub() {
+        if (!built) {
+          built = true;
+          var childMeta = TOPN_CHILD[meta.child];
+          var childState = {
+            dim: meta.child, from: CUR_A, to: CUR_B, parentKey: r.dimkey,
+            rows: [], total: {pv: 0, v: 0, count: 0}, metric: childMeta.metric, limit: 8, loading: true,
+          };
+          var childFactory = topNRowFactory(meta.child, childMeta);
+          paintTopN(sub, childState, childFactory);
+          topNFetch(childState.dim, childState.from, childState.to, 0, childState.limit, childState.parentKey)
+            .then(function (res) {
+              childState.rows = res.rows || []; childState.total = res.total || childState.total; childState.loading = false;
+              paintTopN(sub, childState, childFactory);
+            }).catch(function () { childState.loading = false; paintTopN(sub, childState, childFactory); });
+        }
+        var open = sub.style.display === 'none';
+        sub.style.display = open ? 'block' : 'none';
+        row.querySelector('.bl-tog').textContent = open ? '▾' : '▸';
+        lbl.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      lbl.onclick = toggleSub;
+      lbl.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSub(); } };
+    };
+  }
+
+  function renderTopNRoot(dim) {
+    var meta = TOPN_ROOT[dim], cont = $(meta.id); if (!cont) return;
+    paintTopN(cont, TOPN[dim], topNRowFactory(dim, meta));
+  }
+
   // Bei Datumsaenderung: aktuellen Stand sofort zeigen, bei abweichendem Zeitraum die
   // Top-N-Liste per Ajax fuer [a,b] neu laden (offset 0). Race-Guard ueber st.from/st.to,
-  // falls waehrend eines laufenden Fetches erneut der Zeitraum gewechselt wird.
+  // falls waehrend eines laufenden Fetches erneut der Zeitraum gewechselt wird. Ein
+  // vollstaendiges Neu-Rendern (paintTopN via renderTopNRoot) verwirft dabei immer auch
+  // eventuell aufgeklappte Kind-Listen -- konsistent mit dem bisherigen Drill-down-Verhalten.
   function reloadTopNAll(a, b) {
-    Object.keys(TOPN_DIM_ID).forEach(function (dim) {
+    CUR_A = a; CUR_B = b;
+    Object.keys(TOPN_ROOT).forEach(function (dim) {
       var st = TOPN[dim];
-      renderTopN(dim);
+      renderTopNRoot(dim);
       if (st.from === a && st.to === b) return;
       st.loading = true; st.from = a; st.to = b;
-      renderTopN(dim);
-      topNFetch(dim, a, b, 0).then(function (res) {
+      renderTopNRoot(dim);
+      topNFetch(dim, a, b, 0, st.limit).then(function (res) {
         if (st.from !== a || st.to !== b) return; // ueberholt durch neueren Zeitraumwechsel
         st.rows = res.rows || []; st.total = res.total || {pv: 0, v: 0, count: 0}; st.loading = false;
-        renderTopN(dim);
+        renderTopNRoot(dim);
       }).catch(function () {
         if (st.from !== a || st.to !== b) return;
-        st.loading = false; renderTopN(dim);
+        st.loading = false; renderTopNRoot(dim);
       });
     });
   }
 
-  // Eltern-Dimension -> Kind-Dimension (Drill-down)
-  var DRILL = {referrer_type: 'referrer_name', referrer_name: 'referrer_url',
-               browser: 'browser_version', os: 'os_version', device: 'device_model'};
   // ISO-2 -> Name in der ECharts-Weltkarte
   // Namen muessen exakt zu properties.name in world.js passen (world-atlas/Natural Earth,
   // siehe Vendor/NOTICE.md). US/KR/CZ weichen von der Alltagsbezeichnung ab.
@@ -204,12 +268,7 @@
     }
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (x, y) { return y[metric] - x[metric]; });
   }
-  function firstSeg(k) { var i = k.indexOf(SEP); return i < 0 ? k : k.slice(0, i); }
   function lastSeg(k) { var i = k.lastIndexOf(SEP); return i < 0 ? k : k.slice(i + 1); }
-  // Kind-Zeilen (volle Keys) einer Eltern-Kategorie – Eltern via SEP kodiert
-  function childrenOf(childDim, parentLabel, a, b, metric) {
-    return agg(childDim, a, b, metric).filter(function (r) { return firstSeg(r.key) === parentLabel; });
-  }
 
   function rowEl(label, val, total, max, fmt, drillable) {
     var pct = 100 * val / total, w = Math.max(2, 100 * val / max);
@@ -222,31 +281,13 @@
     return row;
   }
 
-  // Rekursiver Renderer: jede Zeile mit Kind-Dimension ist aufklappbar (N Ebenen)
-  function renderInto(container, dim, rows, a, b, metric, fmt, limit) {
+  // Nur noch fuer Land verwendet (keine Drill-down-Kinder mehr client-seitig -- Browser/OS/
+  // Geraet/Referrer-Typ laufen ueber renderTopNRoot(), siehe oben).
+  function renderInto(container, rows, metric, fmt, limit) {
     var total = rows.reduce(function (s, r) { return s + r[metric]; }, 0) || 1;
     var top = rows.slice(0, limit), max = top.length ? top[0][metric] : 1;
-    var childDim = DRILL[dim];
     top.forEach(function (r) {
-      var label = lastSeg(r.key);
-      var kids = childDim ? childrenOf(childDim, label, a, b, metric) : [];
-      var row = rowEl(label, r[metric], total, max, fmt, kids.length > 0);
-      container.appendChild(row);
-      if (kids.length > 0) {
-        var sub = document.createElement('div'); sub.className = 'bl-sub'; sub.style.display = 'none';
-        container.appendChild(sub);
-        var built = false;
-        var lbl = row.querySelector('.bl-label');
-        function toggleSub() {
-          if (!built) { renderInto(sub, childDim, kids, a, b, metric, esc, 8); built = true; }
-          var open = sub.style.display === 'none';
-          sub.style.display = open ? 'block' : 'none';
-          row.querySelector('.bl-tog').textContent = open ? '▾' : '▸';
-          lbl.setAttribute('aria-expanded', open ? 'true' : 'false');
-        }
-        lbl.onclick = toggleSub;
-        lbl.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSub(); } };
-      }
+      container.appendChild(rowEl(lastSeg(r.key), r[metric], total, max, fmt, false));
     });
     if (rows.length > limit) { var m = document.createElement('div'); m.className = 'bl-more'; m.textContent = '+ ' + (rows.length - limit) + ' weitere'; container.appendChild(m); }
     if (!top.length) container.innerHTML = '<div class="bl-more">keine Daten</div>';
@@ -255,7 +296,7 @@
   function barlist(id, dim, a, b, metric, opts) {
     opts = opts || {};
     var cont = $(id); if (!cont) return; cont.innerHTML = '';
-    renderInto(cont, dim, agg(dim, a, b, metric), a, b, metric, opts.fmt || esc, opts.limit || 8);
+    renderInto(cont, agg(dim, a, b, metric), metric, opts.fmt || esc, opts.limit || 8);
   }
 
   // Leaflet-Karte + GeoJSON-Layer bleiben ueber Renders hinweg bestehen (nur restylen/neu binden),
@@ -421,12 +462,9 @@
     renderTree(tree, tc, tmax, 0);
 
     barlist('bl-country', 'country', a, b, 'v', {fmt: function (k) { return esc(landName(k)); }});
-    barlist('bl-browser', 'browser', a, b, 'v');
-    barlist('bl-os', 'os', a, b, 'v');
-    barlist('bl-device', 'device', a, b, 'v');
-    barlist('bl-reftype', 'referrer_type', a, b, 'v');
-    barlist('bl-refurl', 'referrer_url', a, b, 'v', {limit: 10});
-    reloadTopNAll(a, b); // Keyword/Entry/Exit/Download/Status/Methode: serverseitiges Top-N
+    // Keyword/Entry/Exit/Download/Status/Methode/Browser/OS/Geraet/Referrer-Typ/-URL:
+    // serverseitiges Top-N + Nachladen (siehe TOPN_ROOT/TOPN_CHILD oben).
+    reloadTopNAll(a, b);
   }
 
   // --- Export -------------------------------------------------------------
@@ -457,10 +495,11 @@
     L.push(csvRow(['Datum', 'Besuche', 'Seitenaufrufe', 'Eind. Besucher', 'Absprünge', 'Bytes']));
     days.forEach(function (d) { L.push(csvRow([d.datum, d.visits, d.pageviews, d.uniques, d.bounces, d.bytes])); });
     EXPORT_DIMS.forEach(function (dd) {
-      // Top-N-Dims (siehe TOPN_DIM_ID): kein vollstaendiges agg() mehr lokal verfuegbar,
+      // Top-N-Dims (siehe TOPN_ROOT): kein vollstaendiges agg() mehr lokal verfuegbar,
       // Export spiegelt hier bewusst den aktuell geladenen Stand (Top-N + evtl. per
-      // "+ N weitere" nachgeladen), nicht mehr zwingend alle Werte des Zeitraums.
-      var governed = TOPN_DIM_ID.hasOwnProperty(dd[0]);
+      // "+ N weitere" nachgeladen), nicht mehr zwingend alle Werte des Zeitraums. Aufgeklappte
+      // Kind-Listen (Browser-Version usw.) sind im Export nicht enthalten -- nur die Root-Ebene.
+      var governed = TOPN_ROOT.hasOwnProperty(dd[0]);
       var rows = governed
         ? TOPN[dd[0]].rows.map(function (r) { return {key: r.dimkey, pv: r.pv, v: r.v}; })
         : agg(dd[0], a, b, dd[2]);

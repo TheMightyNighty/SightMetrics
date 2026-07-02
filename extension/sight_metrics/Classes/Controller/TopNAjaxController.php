@@ -34,7 +34,12 @@ final class TopNAjaxController implements LoggerAwareInterface
     {
         $params = $request->getQueryParams();
         $dim = (string)($params['dim'] ?? '');
-        if (!isset(TopNDims::METRIC_BY_DIM[$dim])) {
+        // parentKey gesetzt -> Drill-down-Nachladen (Kind-Dim), sonst Root-Dim-Nachladen.
+        // Getrennte Whitelists: eine Root-Dim darf nicht als Kind-Dim angefragt werden und
+        // umgekehrt (referrer_url steht bewusst in beiden, siehe TopNDims).
+        $parentKey = isset($params['parentKey']) ? (string)$params['parentKey'] : null;
+        $metricMap = $parentKey !== null ? TopNDims::CHILD_METRIC_BY_DIM : TopNDims::ROOT_METRIC_BY_DIM;
+        if (!isset($metricMap[$dim])) {
             return new JsonResponse(['error' => 'unbekannte Dimension'], 400);
         }
 
@@ -59,14 +64,14 @@ final class TopNAjaxController implements LoggerAwareInterface
 
         $limit = max(1, min(100, (int)($params['limit'] ?? TopNDims::DEFAULT_LIMIT)));
         $offset = max(0, (int)($params['offset'] ?? 0));
-        $metric = TopNDims::METRIC_BY_DIM[$dim];
+        $metric = $metricMap[$dim];
 
         try {
-            $rows = $this->cubeRepository->topN($siteId, $from, $to, $dim, $metric, $limit, $offset);
-            $total = $this->cubeRepository->dimSummary($siteId, $from, $to, $dim);
+            $rows = $this->cubeRepository->topN($siteId, $from, $to, $dim, $metric, $limit, $offset, $parentKey);
+            $total = $this->cubeRepository->dimSummary($siteId, $from, $to, $dim, $parentKey);
         } catch (\Throwable $e) {
             $this->logger?->error('SightMetrics: Top-N-Ajax fehlgeschlagen', [
-                'exception' => $e, 'dim' => $dim, 'siteId' => $siteId,
+                'exception' => $e, 'dim' => $dim, 'siteId' => $siteId, 'parentKey' => $parentKey,
             ]);
             return new JsonResponse(['error' => 'Abfrage fehlgeschlagen'], 500);
         }

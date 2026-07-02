@@ -64,12 +64,16 @@ final class DashboardController implements LoggerAwareInterface
                 isset($params['to']) ? (string)$params['to'] : null,
             );
 
-            $governedDims = array_keys(TopNDims::METRIC_BY_DIM);
+            // Root-Dims (siehe TopNDims): Top-N wird vorab geladen. Kind-Dims (Drill-down,
+            // z. B. browser_version) stehen NIE im Initial-Payload -- die werden erst per
+            // Ajax-Nachladen (parentKey) geholt, wenn der Nutzer eine Zeile aufklappt.
             $topN = [];
-            foreach (TopNDims::METRIC_BY_DIM as $dim => $metric) {
+            foreach (TopNDims::ROOT_METRIC_BY_DIM as $dim => $metric) {
+                $limit = TopNDims::defaultLimitFor($dim);
                 $topN[$dim] = [
                     'metric' => $metric,
-                    'rows' => $this->cubeRepository->topN($siteId, $from, $bis, $dim, $metric, TopNDims::DEFAULT_LIMIT),
+                    'limit' => $limit,
+                    'rows' => $this->cubeRepository->topN($siteId, $from, $bis, $dim, $metric, $limit),
                     'total' => $this->cubeRepository->dimSummary($siteId, $from, $bis, $dim),
                 ];
             }
@@ -77,9 +81,8 @@ final class DashboardController implements LoggerAwareInterface
             $payload = [
                 'meta' => $meta,
                 'daily' => $this->cubeRepository->daily($siteId, $from, $bis),
-                'cube' => $this->cubeRepository->cube($siteId, $from, $bis, $governedDims),
+                'cube' => $this->cubeRepository->cube($siteId, $from, $bis, TopNDims::excludedFromFullPayload()),
                 'topN' => $topN,
-                'topNLimit' => TopNDims::DEFAULT_LIMIT,
                 // AJAX-Routen werden von TYPO3 automatisch mit "ajax_" praefixiert
                 // (siehe Configuration/Backend/AjaxRoutes.php, AbstractServiceProvider).
                 'topNUrl' => (string)$this->uriBuilder->buildUriFromRoute('ajax_sightmetrics_topn'),
