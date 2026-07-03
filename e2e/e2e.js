@@ -49,15 +49,18 @@ function check(name, cond) {
     browserRows: document.querySelectorAll('#bl-browser .bl-row').length,
     treeNodes: document.querySelectorAll('#w-tree .tnode').length,
     siteOptions: document.querySelectorAll('#w-siteselect option').length,
-    mapCanvas: !!document.querySelector('#w-map canvas'),
-    timeCanvas: !!document.querySelector('#w-time canvas'),
+    // Chart.js rendert direkt in <canvas id="w-time"> (kein Kind-Canvas wie frueher
+    // bei ECharts); die Leaflet-Karte zeichnet die Laender als SVG-Pfade.
+    mapSvgPaths: document.querySelectorAll('#w-map svg path').length,
+    timeCanvas: (document.getElementById('w-time') || {}).tagName === 'CANVAS'
+      && (document.getElementById('w-time') || {}).height > 0,
   }));
   check('KPI Besuche gefüllt', /[1-9]/.test(data.visits));
   check('KPI Seitenaufrufe gefüllt', /[1-9]/.test(data.pv));
   check('KPI Absprungrate gefüllt (%)', /%/.test(data.bounce));
   check('KPI Bandbreite gefüllt', /(B|KB|MB|GB)/.test(data.band));
-  check('Verlaufs-Diagramm gerendert', data.timeCanvas);
-  check('Weltkarte gerendert (Canvas)', data.mapCanvas);
+  check('Verlaufs-Diagramm gerendert (Chart.js-Canvas)', data.timeCanvas);
+  check('Weltkarte gerendert (Leaflet-SVG, ' + data.mapSvgPaths + ' Pfade)', data.mapSvgPaths > 100);
   check('Browser-Barliste hat Zeilen', data.browserRows > 0);
   check('Seitenbaum hat Knoten', data.treeNodes > 0);
   check('Site-Auswahl befüllt (Multi-Site)', data.siteOptions >= 1);
