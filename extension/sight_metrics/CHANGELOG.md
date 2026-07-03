@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 (unveroeffentlicht, Branch `feature/chartjs-statt-echarts`)
+## 1.2.0 (2026-07-03)
 
 ### Sicherheit
 - **Mandantentrennung benutzerbezogen**: Site-Sichtbarkeit folgt dem TYPO3-Webmount-
