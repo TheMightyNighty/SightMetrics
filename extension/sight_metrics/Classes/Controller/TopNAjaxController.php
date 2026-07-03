@@ -9,10 +9,9 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use SightMetrics\Domain\Repository\CubeRepository;
-use SightMetrics\Support\SiteSelector;
+use SightMetrics\Support\AjaxSiteGuard;
 use SightMetrics\Support\TopNDims;
 use SightMetrics\Support\WindowResolver;
-use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Http\JsonResponse;
 use TYPO3\CMS\Core\Site\SiteFinder;
 
@@ -44,19 +43,9 @@ final class TopNAjaxController implements LoggerAwareInterface
             return new JsonResponse(['error' => 'unbekannte Dimension'], 400);
         }
 
-        $beUser = $GLOBALS['BE_USER'] ?? null;
-        if (!$beUser instanceof BackendUserAuthentication) {
-            return new JsonResponse(['error' => 'kein Backend-Benutzer'], 403);
-        }
-
         $siteId = (int)($params['site'] ?? 0);
-        // Gleiche Pruefung wie DashboardController: null = kein Site-Mapping konfiguriert
-        // -> kein Filter (Rueckwaertskompatibilitaet); sonst muss $siteId in der erlaubten
-        // Menge sein -- auch bei leerer Menge (Benutzer ohne Webmount auf gemappte Sites
-        // darf NICHTS abfragen, siehe SiteSelector::allowedSiteIds()).
-        $allowedIds = SiteSelector::allowedSiteIds($this->siteFinder, $beUser);
-        if ($allowedIds !== null && !in_array($siteId, $allowedIds, true)) {
-            return new JsonResponse(['error' => 'kein Zugriff auf diese Site'], 403);
+        if (($deny = AjaxSiteGuard::denyResponse($this->siteFinder, $siteId)) !== null) {
+            return $deny;
         }
 
         // Gleiche Datumsvalidierung wie WindowResolver (Format + checkdate).

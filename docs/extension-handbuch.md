@@ -484,11 +484,17 @@ Drill-down-Zeile) laeuft ueber die Ajax-Route `ajax_sightmetrics_topn`
 Browser-Versionen zu "Chrome") werden nie vorab geladen, sondern erst beim Aufklappen per
 `parentKey`-Parameter nachgefragt (`CubeRepository::applyParentPrefix()`, Praefix-Filter auf
 den mit `chr(31)` kodierten dimkey). Land bleibt bewusst unbegrenzt (die Choropleth-Karte
-braucht alle Laender, ISO-Codes sind ohnehin auf ~250 Werte begrenzt). Fuer den Seitenbaum
-(`url`-Dimension, `buildTree()`/`renderTree()`) gilt weiterhin: bei einer Site mit sehr
-vielen unterschiedlichen URLs waechst die JSON-Payload unabhaengig von `windowDays` — siehe
-`ROADMAP.md` fuer den Stand dazu (eigenes Baum-Nachlade-Konzept noetig, strukturell anders
-als das Eltern-Kind-Schema der uebrigen Dimensionen).
+braucht alle Laender, ISO-Codes sind ohnehin auf ~250 Werte begrenzt).
+
+Der **Seitenbaum** (`url`-Dimension) wird ebenfalls serverseitig begrenzt, aber ueber ein
+eigenes Schema: `CubeRepository::urlTree()` segmentiert die URL-Pfade in SQL (portable
+`SUBSTR`/`INSTR`-Ausdruecke, laufen auf MariaDB und SQLite) und liefert pro Ebene nur die
+Top-8-Segmente mit Unterbaum-Summen. Der Initial-Payload enthaelt die ersten zwei Ebenen
+(erste Ebene aufgeklappt, wie zuvor); tiefere Aeste und "+ N weitere" laedt `dashboard.js`
+ueber die Ajax-Route `ajax_sightmetrics_tree` (`TreeAjaxController`, Pfad-Praefix als
+`path`-Parameter) nach. Damit haengt kein Panel mehr an der vollstaendigen Zeilenmenge
+einer hochkardinalen Dimension — der `cube`-Initial-Payload enthaelt nur noch die kleinen
+Dims (Land, Stunde).
 
 ### Neue Dimension hinzufügen
 

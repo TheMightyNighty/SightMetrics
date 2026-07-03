@@ -89,9 +89,14 @@ final class DashboardController implements LoggerAwareInterface
                 'daily' => $this->cubeRepository->daily($siteId, $from, $bis),
                 'cube' => $this->cubeRepository->cube($siteId, $from, $bis, TopNDims::excludedFromFullPayload()),
                 'topN' => $topN,
+                // Seitenbaum: 2 Ebenen vorab (erste Ebene aufgeklappt + deren Kinder
+                // sichtbar, wie beim frueheren client-seitigen Aufbau); tiefere Ebenen
+                // laedt dashboard.js beim Aufklappen ueber die tree-Ajax-Route nach.
+                'tree' => $this->cubeRepository->urlTree($siteId, $from, $bis, '', 2, TopNDims::DEFAULT_LIMIT),
                 // AJAX-Routen werden von TYPO3 automatisch mit "ajax_" praefixiert
                 // (siehe Configuration/Backend/AjaxRoutes.php, AbstractServiceProvider).
                 'topNUrl' => (string)$this->uriBuilder->buildUriFromRoute('ajax_sightmetrics_topn'),
+                'treeUrl' => (string)$this->uriBuilder->buildUriFromRoute('ajax_sightmetrics_tree'),
                 'sites' => $sites,
                 'siteId' => $siteId,
                 'window' => ['von' => $from, 'bis' => $bis],

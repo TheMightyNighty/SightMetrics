@@ -364,30 +364,121 @@
     leafletMap.invalidateSize();
   }
 
-  function buildTree(rows) {
-    var root = {name: '/', pv: 0, children: {}};
-    rows.forEach(function (r) {
-      var parts = r.key.split('/').filter(Boolean), node = root, path = ''; root.pv += r.pv;
-      parts.forEach(function (p) { path += '/' + p; if (!node.children[p]) node.children[p] = {name: p, path: path, pv: 0, children: {}}; node = node.children[p]; node.pv += r.pv; });
+  // --- Seitenbaum: serverseitig segmentiert (CubeRepository::urlTree), lazy nachgeladen ---
+  // Zeilen kommen pro Ebene vorsortiert + gedeckelt vom Server; Aufklappen eines Astes
+  // laedt dessen Kinder einmalig per Ajax (path-Praefix), "+ N weitere" paginiert.
+  var TREE_URL = DATA.treeUrl || null;
+  var TREE_LIMIT = 8;
+  var TREE = {
+    rows: (DATA.tree && DATA.tree.rows) || [],
+    total: (DATA.tree && DATA.tree.total) || {count: 0},
+    from: TOPN_WIN.von, to: TOPN_WIN.bis, loading: false,
+  };
+
+  function treeFetch(path, a, b, offset, depth) {
+    if (!TREE_URL) return Promise.resolve({rows: [], total: {count: 0}});
+    var u = new URL(TREE_URL, location.href);
+    u.searchParams.set('path', path);
+    u.searchParams.set('from', a);
+    u.searchParams.set('to', b);
+    u.searchParams.set('limit', TREE_LIMIT);
+    u.searchParams.set('offset', offset);
+    u.searchParams.set('depth', depth || 1);
+    if (DATA.siteId) u.searchParams.set('site', DATA.siteId);
+    return fetch(u.toString(), {credentials: 'same-origin'}).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
     });
-    return root;
   }
-  function renderTree(node, container, max, depth) {
-    Object.keys(node.children).map(function (k) { return node.children[k]; }).sort(function (a, b) { return b.pv - a.pv; }).forEach(function (k) {
-      var hasKids = Object.keys(k.children).length > 0;
+
+  // Rendert eine Baum-Ebene aus state = {path, rows, total:{count}, loading}. max ist das
+  // groesste pv der obersten Ebene (Balkenbreiten sind wie bisher global vergleichbar).
+  function paintTreeLevel(container, state, max, depth) {
+    container.innerHTML = '';
+    state.rows.forEach(function (node) {
       var row = document.createElement('div'); row.className = 'tnode';
-      var tog = document.createElement('span'); tog.className = 'tog' + (hasKids ? '' : ' leaf'); tog.textContent = hasKids ? '▸' : '•';
-      if (hasKids) { tog.setAttribute('role', 'button'); tog.setAttribute('tabindex', '0'); tog.setAttribute('aria-expanded', depth < 1 ? 'true' : 'false'); }
-      var lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.title = k.path; lbl.textContent = k.name + (hasKids ? '/' : '');
-      var bar = document.createElement('span'); bar.className = 'bar'; bar.style.width = Math.max(2, Math.round(120 * k.pv / max)) + 'px';
-      var num = document.createElement('span'); num.className = 'num'; num.textContent = nf(k.pv);
+      var tog = document.createElement('span'); tog.className = 'tog' + (node.hasChildren ? '' : ' leaf'); tog.textContent = node.hasChildren ? '▸' : '•';
+      var lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.title = node.path; lbl.textContent = node.seg + (node.hasChildren ? '/' : '');
+      var bar = document.createElement('span'); bar.className = 'bar'; bar.style.width = Math.max(2, Math.round(120 * node.pv / max)) + 'px';
+      var num = document.createElement('span'); num.className = 'num'; num.textContent = nf(node.pv);
       row.appendChild(tog); row.appendChild(lbl); row.appendChild(bar); row.appendChild(num); container.appendChild(row);
-      if (hasKids) {
-        var ch = document.createElement('div'); ch.className = 'children' + (depth < 1 ? ' open' : ''); if (depth < 1) tog.textContent = '▾';
-        renderTree(k, ch, max, depth + 1); container.appendChild(ch);
-        tog.onclick = function () { var o = ch.classList.toggle('open'); tog.textContent = o ? '▾' : '▸'; tog.setAttribute('aria-expanded', o ? 'true' : 'false'); };
-        tog.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tog.onclick(); } };
+      if (!node.hasChildren) return;
+
+      tog.setAttribute('role', 'button'); tog.setAttribute('tabindex', '0');
+      var open = depth < 1; // erste Ebene wie bisher aufgeklappt (Kinder sind vorgeladen)
+      var ch = document.createElement('div'); ch.className = 'children' + (open ? ' open' : '');
+      container.appendChild(ch);
+      tog.textContent = open ? '▾' : '▸';
+      tog.setAttribute('aria-expanded', open ? 'true' : 'false');
+      var childState = null;
+      function buildChildren() {
+        childState = {
+          path: node.path,
+          rows: node.children || [],
+          total: node.childTotal || {count: node.children ? node.children.length : 0},
+          loading: !node.children,
+        };
+        paintTreeLevel(ch, childState, max, depth + 1);
+        if (!node.children) {
+          treeFetch(node.path, TREE.from, TREE.to, 0).then(function (res) {
+            node.children = res.rows || []; node.childTotal = res.total || {count: 0};
+            childState.rows = node.children; childState.total = node.childTotal; childState.loading = false;
+            paintTreeLevel(ch, childState, max, depth + 1);
+          }).catch(function () { childState.loading = false; paintTreeLevel(ch, childState, max, depth + 1); });
+        }
       }
+      if (open) buildChildren();
+      tog.onclick = function () {
+        if (!childState) buildChildren();
+        var o = ch.classList.toggle('open');
+        tog.textContent = o ? '▾' : '▸';
+        tog.setAttribute('aria-expanded', o ? 'true' : 'false');
+      };
+      tog.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tog.onclick(); } };
+    });
+
+    var remaining = (state.total.count || 0) - state.rows.length;
+    if (state.loading) {
+      var l = document.createElement('div'); l.className = 'bl-more'; l.textContent = 'lädt …'; container.appendChild(l);
+    } else if (remaining > 0) {
+      var m = document.createElement('div'); m.className = 'bl-more bl-more-click';
+      m.textContent = '+ ' + nf(remaining) + ' weitere';
+      m.setAttribute('role', 'button'); m.tabIndex = 0;
+      var loadMore = function () {
+        state.loading = true; paintTreeLevel(container, state, max, depth);
+        treeFetch(state.path, TREE.from, TREE.to, state.rows.length).then(function (res) {
+          state.rows = state.rows.concat(res.rows || []); state.total = res.total || state.total; state.loading = false;
+          paintTreeLevel(container, state, max, depth);
+        }).catch(function () { state.loading = false; paintTreeLevel(container, state, max, depth); });
+      };
+      m.onclick = loadMore;
+      m.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadMore(); } };
+      container.appendChild(m);
+    } else if (!state.rows.length) {
+      container.innerHTML = '<div class="bl-more">keine Daten</div>';
+    }
+  }
+
+  function renderTreeRoot() {
+    var tc = $('w-tree'); if (!tc) return;
+    var max = TREE.rows.length ? TREE.rows[0].pv : 1;
+    paintTreeLevel(tc, {path: '', rows: TREE.rows, total: TREE.total, loading: TREE.loading}, max, 0);
+  }
+
+  // Datumswechsel: Wurzel (2 Ebenen) neu laden; aufgeklappte tiefere Aeste werden dabei
+  // verworfen -- konsistent zum Verhalten der Top-N-Barlisten. Race-Guard wie dort.
+  function reloadTree(a, b) {
+    renderTreeRoot();
+    if (TREE.from === a && TREE.to === b) return;
+    TREE.loading = true; TREE.from = a; TREE.to = b;
+    renderTreeRoot();
+    treeFetch('', a, b, 0, 2).then(function (res) {
+      if (TREE.from !== a || TREE.to !== b) return;
+      TREE.rows = res.rows || []; TREE.total = res.total || {count: 0}; TREE.loading = false;
+      renderTreeRoot();
+    }).catch(function () {
+      if (TREE.from !== a || TREE.to !== b) return;
+      TREE.loading = false; renderTreeRoot();
     });
   }
 
@@ -456,10 +547,7 @@
 
     renderMap(a, b);
 
-    var tc = $('w-tree'); tc.innerHTML = '';
-    var urls = agg('url', a, b, 'pv'), tree = buildTree(urls);
-    var tmax = Math.max.apply(null, Object.keys(tree.children).map(function (k) { return tree.children[k].pv; }).concat([1]));
-    renderTree(tree, tc, tmax, 0);
+    reloadTree(a, b); // Seitenbaum: serverseitig segmentiert + lazy nachgeladen
 
     barlist('bl-country', 'country', a, b, 'v', {fmt: function (k) { return esc(landName(k)); }});
     // Keyword/Entry/Exit/Download/Status/Methode/Browser/OS/Geraet/Referrer-Typ/-URL:
@@ -472,7 +560,7 @@
   var EXPORT_DIMS = [
     ['country', 'Länder', 'v', landName], ['browser', 'Browser', 'v'], ['os', 'Betriebssystem', 'v'],
     ['device', 'Gerätetyp', 'v'], ['referrer_type', 'Referrer-Typen', 'v'], ['referrer_url', 'Referrer-URLs', 'v'],
-    ['keyword', 'Suchbegriffe', 'v'], ['url', 'Seiten', 'pv'], ['entry', 'Einstiegsseiten', 'v'],
+    ['keyword', 'Suchbegriffe', 'v'], ['entry', 'Einstiegsseiten', 'v'],
     ['exit', 'Ausstiegsseiten', 'v'], ['download', 'Downloads', 'pv'], ['status', 'Statuscodes', 'pv'],
     ['method', 'HTTP-Methoden', 'pv'], ['hour', 'Besuchszeiten (Stunde)', 'pv']];
   // Fuehrende =/+/-/@ (Formel-Praefixe in Excel/LibreOffice/Sheets) mit Apostroph entschaerfen:
@@ -513,6 +601,21 @@
       L.push(csvRow(['Wert', dd[2] === 'v' ? 'Besuche' : 'Seitenaufrufe', 'Seitenaufrufe', 'Besuche']));
       rows.forEach(function (r) { L.push(csvRow([label(r.key.split(SEP).join(' › ')), r[dd[2]], r.pv, r.v])); });
     });
+
+    // Seitenbaum: rekursiver Dump des aktuell geladenen Stands (volle Pfade mit
+    // Unterbaum-Summen inkl. der Seite selbst) -- wie bei den Top-N-Dims bewusst nur
+    // der geladene Ausschnitt, kein Vollstaendigkeits-Request beim Export.
+    if (TREE.rows.length) {
+      L.push('');
+      L.push(csvRow(['Seiten (Unterbaum-Summen) – nur geladener Ausschnitt, siehe Seitenbaum im Dashboard']));
+      L.push(csvRow(['Pfad', 'Seitenaufrufe', 'Besuche']));
+      (function dumpTree(rows) {
+        rows.forEach(function (r) {
+          L.push(csvRow([r.path, r.pv, r.v]));
+          if (r.children) dumpTree(r.children);
+        });
+      })(TREE.rows);
+    }
     return L.join('\r\n');
   }
   function download(name, text) {

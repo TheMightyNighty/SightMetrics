@@ -276,4 +276,102 @@ final class CubeRepository
             ];
         });
     }
+
+    /**
+     * Direkte Kind-Segmente eines Pfad-Praefixes im Seitenbaum ('url'-Dimension), mit
+     * Unterbaum-Summen. $path = '' (Wurzel) oder '/seg(/seg)*'. Pro Segment werden alle
+     * Zeilen aggregiert, deren dimkey unterhalb von "$path/" liegt — die Summe eines
+     * Segments enthaelt damit sowohl die Seite selbst (z. B. '/a/b') als auch alle
+     * tieferen Pfade ('/a/b/c'), identisch zur frueheren client-seitigen buildTree()-
+     * Aggregation. 'hasChildren' zeigt an, ob unterhalb des Segments weitere Ebenen
+     * existieren (fuers Aufklappen im Frontend).
+     *
+     * Portables SQL: SUBSTR/INSTR/CASE existieren in MariaDB/MySQL und SQLite; die
+     * Segment-Extraktion laeuft komplett in SQL, damit an der Wurzel grosser Sites nicht
+     * alle URL-Zeilen uebertragen werden muessen. SUBSTR zaehlt Unicode-Codepoints
+     * (siehe applyParentPrefix), daher mb_strlen() fuer die Praefix-Laenge.
+     *
+     * @return array{
+     *   rows: list<array{seg: string, path: string, pv: int, v: int, hasChildren: bool}>,
+     *   total: array{count: int}
+     * }
+     */
+    public function urlTreeChildren(int $siteId, string $from, string $bis, string $path, int $limit, int $offset = 0): array
+    {
+        $cacheKey = "urlTree:$siteId:$from:$bis:$limit:$offset:$path";
+        return $this->cached($cacheKey, function () use ($siteId, $from, $bis, $path, $limit, $offset) {
+            $prefix = $path . '/';
+            $plen = mb_strlen($prefix, 'UTF-8');
+            // Pfadrest hinter dem Praefix; daraus das erste Segment (bis zum naechsten '/').
+            $rest = 'SUBSTR(dimkey, ' . ($plen + 1) . ')';
+            $seg = "CASE WHEN INSTR($rest, '/') > 0 THEN SUBSTR($rest, 1, INSTR($rest, '/') - 1) ELSE $rest END";
+            // Kind-Ebenen vorhanden? Nur wenn hinter dem '/' auch noch etwas kommt
+            // (schuetzt vor Pseudo-Kindern durch trailing slashes wie '/a/').
+            $hasChildren = "MAX(CASE WHEN INSTR($rest, '/') > 0 AND SUBSTR($rest, INSTR($rest, '/') + 1) <> '' THEN 1 ELSE 0 END)";
+
+            $qb = $this->qb('cube');
+            $qb->addSelectLiteral("$seg AS seg", 'SUM(pv) AS pv', 'SUM(v) AS v', "$hasChildren AS has_children")
+                ->from('cube')
+                ->where(
+                    $qb->expr()->eq('site_id', $qb->createNamedParameter($siteId, ParameterType::INTEGER)),
+                    $qb->expr()->eq('dim', $qb->createNamedParameter('url')),
+                    $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
+                    $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
+                )
+                // Praefix-Filter wie applyParentPrefix (rohes Fragment, expr()->eq()
+                // wuerde den SUBSTR-Ausdruck als Identifier quoten).
+                ->andWhere("SUBSTR(dimkey, 1, $plen) = " . $qb->createNamedParameter($prefix))
+                ->groupBy('seg')
+                ->having("seg <> ''")
+                ->orderBy('pv', 'DESC')
+                ->setMaxResults($limit)
+                ->setFirstResult($offset);
+            $rows = array_map(static fn(array $r): array => [
+                'seg' => (string)$r['seg'],
+                'path' => $path . '/' . (string)$r['seg'],
+                'pv' => (int)$r['pv'],
+                'v' => (int)$r['v'],
+                'hasChildren' => (bool)$r['has_children'],
+            ], $qb->executeQuery()->fetchAllAssociative());
+
+            // Gesamtzahl unterschiedlicher Segmente (fuer "+ N weitere"); CASE ohne ELSE
+            // liefert NULL fuer leere Segmente -> COUNT DISTINCT zaehlt sie nicht mit.
+            $qbCount = $this->qb('cube');
+            $qbCount->addSelectLiteral("COUNT(DISTINCT CASE WHEN $seg <> '' THEN $seg END) AS cnt")
+                ->from('cube')
+                ->where(
+                    $qbCount->expr()->eq('site_id', $qbCount->createNamedParameter($siteId, ParameterType::INTEGER)),
+                    $qbCount->expr()->eq('dim', $qbCount->createNamedParameter('url')),
+                    $qbCount->expr()->gte('datum', $qbCount->createNamedParameter($from)),
+                    $qbCount->expr()->lte('datum', $qbCount->createNamedParameter($bis)),
+                )
+                ->andWhere("SUBSTR(dimkey, 1, $plen) = " . $qbCount->createNamedParameter($prefix));
+            $count = (int)$qbCount->executeQuery()->fetchOne();
+
+            return ['rows' => $rows, 'total' => ['count' => $count]];
+        });
+    }
+
+    /**
+     * Seitenbaum bis $depth Ebenen tief (1 oder 2). Bei depth=2 wird fuer jedes Kind der
+     * ersten Ebene direkt dessen Kind-Ebene mitgeladen ('children'/'childTotal') — der
+     * Initial-Payload zeigt so wie bisher die ersten beiden Ebenen ohne Nachladen.
+     *
+     * @return array{rows: list<array<string,mixed>>, total: array{count: int}}
+     */
+    public function urlTree(int $siteId, string $from, string $bis, string $path, int $depth, int $limit, int $offset = 0): array
+    {
+        $level = $this->urlTreeChildren($siteId, $from, $bis, $path, $limit, $offset);
+        if ($depth >= 2) {
+            foreach ($level['rows'] as $i => $row) {
+                if (!$row['hasChildren']) {
+                    continue;
+                }
+                $child = $this->urlTreeChildren($siteId, $from, $bis, $row['path'], $limit);
+                $level['rows'][$i]['children'] = $child['rows'];
+                $level['rows'][$i]['childTotal'] = $child['total'];
+            }
+        }
+        return $level;
+    }
 }

@@ -13,3 +13,6 @@ services:
 
   SightMetrics\Controller\TopNAjaxController:
     public: true
+
+  SightMetrics\Controller\TreeAjaxController:
+    public: true

@@ -61,6 +61,13 @@ final class TopNDims
 
     public const DEFAULT_LIMIT = 8;
 
+    /**
+     * Seitenbaum-Dimension: kein Top-N-/Kind-Schema, sondern Pfadsegmente — laeuft ueber
+     * CubeRepository::urlTree() und die Ajax-Route sightmetrics_tree, steht aber wie die
+     * Top-N-Dims nicht mehr komplett im Initial-Payload.
+     */
+    public const TREE_DIM = 'url';
+
     public static function defaultLimitFor(string $rootDim): int
     {
         return self::LIMIT_BY_ROOT_DIM[$rootDim] ?? self::DEFAULT_LIMIT;
@@ -75,7 +82,8 @@ final class TopNDims
     {
         return array_values(array_unique(array_merge(
             array_keys(self::ROOT_METRIC_BY_DIM),
-            array_keys(self::CHILD_METRIC_BY_DIM)
+            array_keys(self::CHILD_METRIC_BY_DIM),
+            [self::TREE_DIM]
         )));
     }
 }

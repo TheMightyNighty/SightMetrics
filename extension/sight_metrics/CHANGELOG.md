@@ -20,6 +20,12 @@
   und Drill-down-Kinder (Browser-Version usw.) werden per Ajax-Route
   `ajax_sightmetrics_topn` nachgeladen (`TopNAjaxController`, `TopNDims`-Whitelists,
   `CubeRepository::topN()`/`dimSummary()` mit `parentKey`-Praefixfilter).
+- **Seitenbaum serverseitig segmentiert + lazy**: `CubeRepository::urlTree()` extrahiert
+  Pfad-Segmente mit Unterbaum-Summen direkt in SQL (portable SUBSTR/INSTR, MariaDB +
+  SQLite); Initial-Payload enthaelt zwei Ebenen (Top-8 je Ebene), tiefere Aeste und
+  "+ N weitere" laedt die Ajax-Route `ajax_sightmetrics_tree` nach
+  (`TreeAjaxController`). Die `url`-Zeilen stehen damit nicht mehr komplett im Payload.
+  Gemeinsame Site-Zugriffspruefung beider Ajax-Endpunkte in `AjaxSiteGuard` gebuendelt.
 - **Query-Caching**: Cube-DB-Reads laufen ueber den TYPO3-Cache `sight_metrics`
   (Extension-Konfiguration `cacheLifetime`, Default 60 s, 0 = aus). Betrieb: Cache-GC
   einrichten, siehe Handbuch "Bekannte Grenzen".

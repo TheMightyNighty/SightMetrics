@@ -369,6 +369,84 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         self::assertSame(['pv' => 5, 'v' => 3, 'count' => 1], $summary, 'leerer dimkey zaehlt weder in Summen noch in count');
     }
 
+    // ---- Seitenbaum (urlTreeChildren/urlTree) ----------------------------------
+
+    public function testUrlTreeChildrenSegmentsAndAggregatesSubtrees(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'url', 'dimkey' => '/a', 'pv' => 5, 'v' => 3],
+            ['dim' => 'url', 'dimkey' => '/a/x', 'pv' => 2, 'v' => 1],
+            ['dim' => 'url', 'dimkey' => '/a/y', 'pv' => 1, 'v' => 1],
+            ['dim' => 'url', 'dimkey' => '/b', 'pv' => 4, 'v' => 2],
+        ]);
+
+        $tree = $this->repo()->urlTreeChildren(1, '2026-01-01', '2026-01-31', '', 8);
+
+        self::assertSame(2, $tree['total']['count']);
+        self::assertSame(
+            [
+                // '/a' aggregiert Seite selbst (5) + Unterbaum (2+1) = 8, hat Kinder
+                ['seg' => 'a', 'path' => '/a', 'pv' => 8, 'v' => 5, 'hasChildren' => true],
+                ['seg' => 'b', 'path' => '/b', 'pv' => 4, 'v' => 2, 'hasChildren' => false],
+            ],
+            $tree['rows'],
+            'Segmente mit Unterbaum-Summen, absteigend nach pv'
+        );
+    }
+
+    public function testUrlTreeChildrenOfSubPathExcludeSelfAndSiblings(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'url', 'dimkey' => '/a', 'pv' => 5, 'v' => 3],
+            ['dim' => 'url', 'dimkey' => '/a/x', 'pv' => 2, 'v' => 1],
+            ['dim' => 'url', 'dimkey' => '/a/x/tief', 'pv' => 1, 'v' => 1],
+            ['dim' => 'url', 'dimkey' => '/ab', 'pv' => 9, 'v' => 9],
+        ]);
+
+        $tree = $this->repo()->urlTreeChildren(1, '2026-01-01', '2026-01-31', '/a', 8);
+
+        self::assertSame(
+            [['seg' => 'x', 'path' => '/a/x', 'pv' => 3, 'v' => 2, 'hasChildren' => true]],
+            $tree['rows'],
+            'weder die Seite /a selbst noch der Praefix-Nachbar /ab duerfen als Kind erscheinen'
+        );
+    }
+
+    public function testUrlTreeChildrenRespectLimitOffsetAndCount(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'url', 'dimkey' => '/eins', 'pv' => 3, 'v' => 1],
+            ['dim' => 'url', 'dimkey' => '/zwei', 'pv' => 2, 'v' => 1],
+            ['dim' => 'url', 'dimkey' => '/drei', 'pv' => 1, 'v' => 1],
+        ]);
+
+        $page1 = $this->repo()->urlTreeChildren(1, '2026-01-01', '2026-01-31', '', 2);
+        self::assertSame(['eins', 'zwei'], array_column($page1['rows'], 'seg'));
+        self::assertSame(3, $page1['total']['count'], 'count = alle Segmente, nicht nur die Seite');
+
+        $page2 = $this->repo()->urlTreeChildren(1, '2026-01-01', '2026-01-31', '', 2, 2);
+        self::assertSame(['drei'], array_column($page2['rows'], 'seg'));
+    }
+
+    public function testUrlTreeDepthTwoPreloadsGrandchildren(): void
+    {
+        $this->insertSite(1, 'Site-1', [
+            ['dim' => 'url', 'dimkey' => '/a/x', 'pv' => 2, 'v' => 1],
+            ['dim' => 'url', 'dimkey' => '/b', 'pv' => 1, 'v' => 1],
+        ]);
+
+        $tree = $this->repo()->urlTree(1, '2026-01-01', '2026-01-31', '', 2, 8);
+
+        self::assertSame('a', $tree['rows'][0]['seg']);
+        self::assertSame(
+            [['seg' => 'x', 'path' => '/a/x', 'pv' => 2, 'v' => 1, 'hasChildren' => false]],
+            $tree['rows'][0]['children'],
+            'depth=2 laedt die Kind-Ebene der ersten Ebene mit'
+        );
+        self::assertSame(1, $tree['rows'][0]['childTotal']['count']);
+        self::assertArrayNotHasKey('children', $tree['rows'][1], 'Blatt-Knoten bekommt keine children');
+    }
+
     public function testDimSummaryWithParentKeyOnlyCountsMatchingChildren(): void
     {
         $sep = "\x1f";

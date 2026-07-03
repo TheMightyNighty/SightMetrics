@@ -254,6 +254,61 @@ test('Drill-down (Browser -> Version) laedt Kinder per parentKey nach, wenn eine
   assert.ok(!sub.textContent.includes('Firefox\x1f120'), 'Anzeige-Label muss lastSeg-bereinigt sein, nicht der rohe dimkey');
 });
 
+test('Seitenbaum rendert vorgeladene 2 Ebenen und laedt tiefere Aeste per path-Fetch nach', async () => {
+  const payload = {
+    ...FAKE_PAYLOAD,
+    treeUrl: '/typo3/ajax/sightmetrics/tree',
+    tree: {
+      rows: [
+        {
+          seg: 'buergerservice', path: '/buergerservice', pv: 20, v: 12, hasChildren: true,
+          children: [
+            { seg: 'personalausweis', path: '/buergerservice/personalausweis', pv: 8, v: 5, hasChildren: true },
+            { seg: 'reisepass', path: '/buergerservice/reisepass', pv: 4, v: 2, hasChildren: false },
+          ],
+          childTotal: { count: 2 },
+        },
+        { seg: 'aktuelles', path: '/aktuelles', pv: 6, v: 4, hasChildren: false },
+      ],
+      total: { count: 2 },
+    },
+  };
+  const { window, windowErrors } = buildDom(payload);
+
+  const fetchCalls = [];
+  window.fetch = (url) => {
+    fetchCalls.push(String(url));
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({
+        rows: [{ seg: 'beantragen', path: '/buergerservice/personalausweis/beantragen', pv: 5, v: 3, hasChildren: false }],
+        total: { count: 1 },
+      }),
+    });
+  };
+
+  const source = readFileSync(DASHBOARD_JS_PATH, 'utf8');
+  window.eval(source);
+  await waitForReady(window);
+  assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
+
+  const treeEl = window.document.getElementById('w-tree');
+  assert.ok(treeEl.textContent.includes('buergerservice/'), 'Ebene 1 aus dem Payload muss gerendert werden');
+  assert.ok(treeEl.textContent.includes('personalausweis'), 'vorgeladene Ebene 2 muss sichtbar sein (aufgeklappt)');
+  assert.equal(fetchCalls.length, 0, 'vorgeladene Ebenen duerfen keinen Fetch ausloesen');
+
+  // Ebene-3-Ast aufklappen -> genau ein Fetch mit dem Pfad-Praefix.
+  const toggles = [...treeEl.querySelectorAll('.tog[role="button"]')];
+  const level2Toggle = toggles.find((t) => t.getAttribute('aria-expanded') === 'false');
+  assert.ok(level2Toggle, 'Ebene-2-Knoten mit Kindern muss aufklappbar (zu) sein');
+  level2Toggle.onclick();
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.equal(fetchCalls.length, 1, 'Aufklappen muss genau einen Ajax-Request ausloesen');
+  assert.match(fetchCalls[0], /path=%2Fbuergerservice%2Fpersonalausweis/);
+  assert.ok(treeEl.textContent.includes('beantragen'), 'nachgeladene Ebene 3 muss gerendert werden');
+});
+
 test('dashboard.js bricht sauber ab, wenn Chart.js/Leaflet fehlen (kein Wurf, kein Crash)', async () => {
   const { window, windowErrors } = buildDom();
   delete window.Chart;
