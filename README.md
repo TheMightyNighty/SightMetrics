@@ -156,4 +156,5 @@ Kopier-/Sync-Schritt sofort im laufenden Container sichtbar.
 ## Technologie-Stack
 
 TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.4 (statisches Binary in `ingestion/bin/`) ·
-MariaDB · [Apache ECharts](https://echarts.apache.org/) (Charts im Backend-Modul).
+MariaDB · [Chart.js](https://www.chartjs.org/) (Verlaufs-/Stundendiagramm) ·
+[Leaflet](https://leafletjs.com/) (Besucherkarte) im Backend-Modul.

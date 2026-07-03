@@ -24,8 +24,9 @@ use TYPO3\CMS\Core\Site\SiteFinder;
  * Backend-Modul "SightMetrics".
  *
  * Liest ausschliesslich (read-only) aus der Cube-DB und reicht die Daten als
- * JSON an das Frontend (ECharts) durch. Die teure Aggregation hat die DuckDB-
- * Pipeline schon erledigt – hier passiert nur SELECT + Rendering.
+ * JSON an das Frontend (dashboard.js: Chart.js + Leaflet) durch. Die teure
+ * Aggregation hat die DuckDB-Pipeline schon erledigt – hier passiert nur
+ * SELECT + Rendering.
  */
 final class DashboardController implements LoggerAwareInterface
 {

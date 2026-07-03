@@ -170,7 +170,7 @@
     });
   }
 
-  // ISO-2 -> Name in der ECharts-Weltkarte
+  // ISO-2 -> Laendername in den Weltkarten-Geodaten (world.js, Leaflet-Choroplethe)
   // Namen muessen exakt zu properties.name in world.js passen (world-atlas/Natural Earth,
   // siehe Vendor/NOTICE.md). US/KR/CZ weichen von der Alltagsbezeichnung ab.
   var ISO2NAME = {US:'United States of America',CN:'China',JP:'Japan',KR:'South Korea',DE:'Germany',GB:'United Kingdom',

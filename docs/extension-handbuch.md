@@ -27,12 +27,18 @@ Cube-DB (MariaDB, User `report_ro`); kein DuckDB, kein Schreiben.
 ```
 extension/
 ├── lint.sh                         Linting-Runner: PHPStan + TYPO3 Coding Standards
-├── run-tests.sh                    Lokaler Test-Runner (Suite 2a Unit, 2b Functional, 2c Smoke)
+├── run-tests.sh                    Lokaler Test-Runner (2a Unit, 2b Functional, 2c Smoke, 2d JS)
 │
 └── sight_metrics/                  Composer-Paket sightmetrics/sight-metrics
     ├── composer.json               Paket-Metadaten + require-dev (phpstan, testing-framework …)
     ├── ext_emconf.php              TYPO3 Extension-Metadaten (Versions-Constraints offen für v14)
-    ├── ext_conf_template.txt       Extension-Konfiguration (Fehlerseiten-Text, showTechnical, windowDays)
+    ├── ext_localconf.php           Registriert den Cache "sight_metrics" (Cache-Framework)
+    ├── ext_conf_template.txt       Extension-Konfiguration (Fehlerseite, windowDays, cacheLifetime)
+    ├── package.json                Dev-Tooling: JS-Test + versionsgepinnter Vendor-Bezug (npm)
+    ├── package-lock.json           Versions-Pinning für Chart.js/Leaflet/jsdom
+    ├── CHANGELOG.md                Änderungshistorie der Extension
+    ├── ROADMAP.md                  Offene Punkte / Prüfungs-Findings
+    ├── REUSE.toml · LICENSES/      REUSE-konforme Lizenzstruktur
     ├── phpstan.neon                PHPStan-Konfiguration (lokal, Level 6)
     ├── phpstan.ci.neon             PHPStan-Konfiguration (CI, kein baselineExtensions-Noise)
     ├── phpunit.xml.dist            PHPUnit-Konfiguration für Unit-Tests
@@ -42,22 +48,27 @@ extension/
     │
     ├── Classes/
     │   ├── Command/
-    │   │   └── SmokeCommand.php    TYPO3-CLI: sightmetrics:smoke — prüft cube-Connection + Tabellen
+    │   │   ├── SmokeCommand.php    TYPO3-CLI: sightmetrics:smoke — prüft cube-Connection + Tabellen
+    │   │   └── HealthCommand.php   TYPO3-CLI: sightmetrics:health — Datenaktualität, Nagios-Codes
     │   ├── Controller/
-    │   │   └── DashboardController.php  Backend-Controller: lädt Daten, rendert Fluid-Template
+    │   │   ├── DashboardController.php  Backend-Controller: lädt Daten, rendert Fluid-Template
+    │   │   └── TopNAjaxController.php   Ajax: Top-N-Nachladen ("+ N weitere", Drill-down)
     │   ├── Domain/
     │   │   └── Repository/
-    │   │       └── CubeRepository.php   Alle Queries gegen die Cube-DB (sites/meta/daily/cube)
+    │   │       └── CubeRepository.php   Alle Queries gegen die Cube-DB (inkl. topN/dimSummary, Caching)
     │   └── Support/
     │       ├── ErrorPage.php       Rendert konfigurierbare Fehlerseite (DB weg)
-    │       └── SiteSelector.php    Liest Site-Auswahl aus Request-Parameter + Session
+    │       ├── SiteSelector.php    Site-Auswahl + Webmount-basierte Mandantentrennung
+    │       ├── TopNDims.php        Whitelists: welche Dimensionen serverseitig Top-N-begrenzt sind
+    │       └── WindowResolver.php  Serverseitiges Zeitfenster (windowDays, from/to-Klemmung)
     │
     ├── Configuration/
     │   ├── Backend/
-    │   │   └── Modules.php         Backend-Modul-Registrierung (web_sightmetrics)
-    │   ├── Commands.php            CLI-Kommando-Registrierung (sightmetrics:smoke)
+    │   │   ├── Modules.php         Backend-Modul-Registrierung (web_sightmetrics)
+    │   │   └── AjaxRoutes.php      Ajax-Route sightmetrics_topn (erbt Modul-Berechtigung)
+    │   ├── Commands.php            CLI-Kommando-Registrierung (sightmetrics:smoke, :health)
     │   ├── Icons.php               Icon-Registrierung (EXT:sight_metrics/module.svg)
-    │   └── Services.yaml           Symfony-DI-Konfiguration (CubeRepository als privater Service)
+    │   └── Services.yaml           Symfony-DI-Konfiguration (Controller public, Rest privat)
     │
     ├── Resources/
     │   ├── Private/
@@ -65,25 +76,33 @@ extension/
     │   │   │   └── locallang_mod.xlf   Modul-Überschrift (DE)
     │   │   └── Templates/
     │   │       └── Dashboard/
-    │   │           └── Index.html  Fluid-Template: KPIs, Barlisten, Drill-down, Karte, Verlauf
+    │   │           └── Index.html  Fluid-Template: JSON-Datenblock + Panel-Gerüst
     │   └── Public/
     │       ├── Css/
     │       │   └── dashboard.css   Modul-Styles (Barlisten, Karten-Panel, Drill-down, A11y)
     │       ├── Icons/
     │       │   └── module.svg      Backend-Modul-Icon
     │       ├── JavaScript/
-    │       │   └── dashboard.js    Drill-down, Choropleth-Karte, ECharts-Initialisierung
-    │       └── Vendor/
-    │           ├── echarts.min.js  Apache ECharts (selbst-gehostet, kein CDN)
-    │           └── world.js        ECharts Weltkarten-Datensatz
+    │       │   └── dashboard.js    Rendering: Chart.js-Charts, Leaflet-Karte, Top-N/Drill-down
+    │       └── Vendor/             (Herkunft/Prüfsummen: NOTICE.md; Bezug: npm run vendor:update)
+    │           ├── chart.umd.min.js  Chart.js (MIT, selbst-gehostet, kein CDN)
+    │           ├── leaflet.js · leaflet.css · images/  Leaflet (BSD-2-Clause)
+    │           ├── world.js        Weltkarten-GeoJSON (Natural Earth via world-atlas)
+    │           └── NOTICE.md       Versionen, Lizenzen, SHA-256-Prüfsummen
+    │
+    ├── scripts/
+    │   └── update-vendor.mjs       Kopiert Chart.js/Leaflet aus node_modules nach Vendor/
     │
     └── Tests/
         ├── bootstrap.php           PHPUnit-Bootstrap für Unit-Tests (ohne TYPO3-Core)
         ├── Functional/
-        │   └── CubeRepositoryFunctionalTest.php  Functional-Tests (TYPO3+SQLite, 10 Tests)
+        │   └── CubeRepositoryFunctionalTest.php  Functional-Tests (TYPO3+SQLite)
+        ├── JavaScript/
+        │   └── dashboard.smoke.test.mjs  DOM-Smoke-Test (jsdom, Chart.js/Leaflet-Fakes)
         └── Unit/
             ├── ErrorPageTest.php   Unit-Tests für ErrorPage (konfigurierbare Meldungen)
-            └── SiteSelectorTest.php  Unit-Tests für SiteSelector (Request-Parameter-Auswertung)
+            ├── SiteSelectorTest.php  Unit-Tests für SiteSelector (inkl. Mandantentrennung)
+            └── WindowResolverTest.php  Unit-Tests für das Zeitfenster (inkl. iso()-Validierung)
 ```
 
 ---
@@ -269,6 +288,7 @@ statt einer PHP-Exception. Konfiguration im TYPO3-Backend unter
 | `errorMessage` | „Die Verbindung …" | Erläuterungstext |
 | `showTechnical` | `0` | Technische Fehlermeldung anzeigen (nur für Admins/Debug) |
 | `windowDays` | `92` | Serverseitiges Zeitfenster in Tagen: nur dieses Fenster wird aus der Cube-DB geladen (begrenzt das Transfervolumen unabhängig von der Retention). `0` = unbegrenzt. |
+| `cacheLifetime` | `60` | Cache-TTL in Sekunden für die Cube-DB-Reads (TYPO3-Cache-Framework, Cache `sight_metrics`). `0` = kein Caching, jeder Aufruf liest live. Betrieb: siehe „Cache-Aufräumen ist Betreiber-Pflicht" (§10). |
 
 Die Cube-Connection ist von der TYPO3-Hauptverbindung vollständig getrennt – ein
 Cube-DB-Ausfall nimmt das TYPO3-Backend nicht mit.
@@ -337,7 +357,7 @@ So bleibt das Transfervolumen unabhängig von der Retention der Cube-DB begrenzt
 ### Dark Mode
 
 Das Modul folgt dem TYPO3-Backend-Farbschema (Attribut `data-color-scheme`, sonst
-`prefers-color-scheme`): Karten, Texte, Barlisten und die ECharts-Achsen/-Beschriftungen
+`prefers-color-scheme`): Karten, Texte, Barlisten und die Chart.js-Achsen/-Beschriftungen
 werden im dunklen Schema lesbar umgefärbt. Die Umschaltung erfolgt clientseitig über die
 Klasse `sm-dark` am Wurzel-Container.
 
@@ -472,14 +492,28 @@ als das Eltern-Kind-Schema der uebrigen Dimensionen).
 
 ### Neue Dimension hinzufügen
 
-1. Ingestion-Seite: `transform.sql` — neuen `INSERT INTO cube_rows` Eintrag mit
-   neuem `dim`-Schlüssel ergänzen.
-2. Extension-Seite: `Index.html` — neuen Panel-Block analog zu bestehenden Panels
-   einfügen (Fluid `<f:for>` auf `{cubeByDim.neuer_key}`).
-3. Optional: `dashboard.js` — für Charts/Drill-down erweitern.
-
-Kein PHP-Code muss für neue Dimensionen geändert werden; `CubeRepository::cube()`
-liefert alle `dim`-Schlüssel unabhängig.
+1. **Ingestion-Seite:** `transform.sql` — neuen `UNION ALL SELECT ...`-Zweig im
+   Cube-Aufbau mit neuem `dim`-Schlüssel ergänzen (für Drill-down-Dimensionen den
+   Eltern-Kind-Trenner `chr(31)` im `dimkey` verwenden, siehe bestehende Zweige wie
+   `browser_version`).
+2. **Extension-Seite, Template:** `Index.html` — neuen Panel-Block mit einem leeren
+   Container ergänzen (z. B. `<div id="bl-neuer-key" class="barlist"></div>`); das
+   Template enthält nur das Gerüst, die Daten kommen als JSON-Block und werden
+   client-seitig gerendert.
+3. **Extension-Seite, JavaScript:** `dashboard.js` — die Dimension registrieren:
+   - **Unbegrenzte Kardinalität** (URLs, Suchbegriffe u. ä.): Eintrag in `TOPN_ROOT`
+     (Container-ID + Metrik `pv`/`v`; bei Drill-down-Kind zusätzlich `child` und den
+     Kind-Eintrag in `TOPN_CHILD`).
+   - **Kleine, feste Wertemenge** (wie Land): klassischer `barlist()`-Aufruf in
+     `render()` — die Zeilen kommen dann vollständig im Initial-Payload.
+4. **Extension-Seite, PHP (nur bei Top-N-Dimensionen):** `Classes/Support/TopNDims.php` —
+   die Dimension in `ROOT_METRIC_BY_DIM` (bzw. `CHILD_METRIC_BY_DIM`/`CHILD_OF_ROOT`)
+   eintragen. **Ohne diesen Eintrag** liefert der Ajax-Endpunkt für die Dimension 400
+   (Whitelist) und `DashboardController` lädt kein Top-N vor; ohne den Eintrag landet
+   die Dimension stattdessen ungebremst im Initial-Payload (`cube()` liefert alle
+   nicht in `TopNDims::excludedFromFullPayload()` gelisteten `dim`-Schlüssel).
+5. Optional: `EXPORT_DIMS` in `dashboard.js` für den CSV-Export ergänzen und der
+   JS-Smoke-Test (`Tests/JavaScript/`) um die neue Dimension erweitern.
 
 ---
 
@@ -553,12 +587,13 @@ tail -f var/log/typo3_*.log
 
 ### CSP-Fehler (Content Security Policy)
 
-Das Backend-Modul bettet JSON-Daten inline ein und nutzt selbst-gehostetes ECharts.
-Wenn die TYPO3-Instanz eine strenge CSP setzt, kann es zu Konsolen-Fehlern kommen.
+Das Backend-Modul bettet JSON-Daten inline ein (CSP-sicherer `<script type="application/json">`-
+Block) und nutzt selbst-gehostetes Chart.js/Leaflet, eingebunden über den TYPO3-`PageRenderer`
+(`addJsFooterFile`/`addCssFile`). Wenn die TYPO3-Instanz eine strenge CSP setzt, kann es
+dennoch zu Konsolen-Fehlern kommen (z. B. durch `style`-Attribute der Barlisten-Balken).
 
-Lösung: In `additional.php` die CSP für das Backend-Modul explizit erweitern oder
-ECharts + world.js in den TYPO3-eigenen Asset-Ordner verschieben und per
-`PageRenderer::addJsFile()` einbinden.
+Lösung: In `additional.php` bzw. `Configuration/ContentSecurityPolicies.php` die CSP für
+das Backend gezielt erweitern statt sie global aufzuweichen.
 
 ### `trustedHostsPattern`-Fehler
 
@@ -578,5 +613,7 @@ Im TYPO3-Backend unter **Admin-Tools → Benutzer → Benutzergruppen**: Modul
 ### Leere Auswertung obwohl Daten importiert
 
 - `site_id` in `sites.conf` muss mit der im Dropdown gewählten Site übereinstimmen.
-- Datums-Picker: Standard ist der aktuelle Monat – prüfen, ob Daten in diesem Zeitraum liegen.
+- Datums-Picker: Standard ist das initial geladene Zeitfenster (`windowDays`, Default die
+  letzten 92 Tage des Datenbestands) – prüfen, ob Daten in diesem Zeitraum liegen; ggf.
+  Zeitraum-Vorgabe „Gesamter Zeitraum" wählen.
 - `SELECT COUNT(*) FROM meta;` auf der Cube-DB prüfen.

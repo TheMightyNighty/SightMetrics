@@ -83,33 +83,42 @@ Sortiert nach Schwere; Sicherheits-Findings zuerst.
 
 ### Dokumentation
 
-7. **Verzeichnisstruktur (Handbuch §2) stark veraltet** — listet `echarts.min.js`
-   (existiert nicht mehr; heute `chart.umd.min.js`, `leaflet.js`, `leaflet.css`,
-   `images/`); es fehlen `TopNAjaxController`, `TopNDims`, `HealthCommand`,
-   `WindowResolver`, `AjaxRoutes.php`, `ext_localconf.php`, `Tests/JavaScript/`,
-   `WindowResolverTest`, `package.json`, `scripts/`; "10 Tests" stimmt nicht mehr (23
-   functional); die `Commands.php`-Zeile nennt nur `smoke`, nicht `health`.
+7. ~~**Verzeichnisstruktur (Handbuch §2) stark veraltet**~~ **[behoben]** — Baum komplett
+   neu geschrieben: `echarts.min.js` raus, `chart.umd.min.js`/`leaflet.*`/`images/` rein;
+   `TopNAjaxController`, `TopNDims`, `HealthCommand`, `WindowResolver`, `AjaxRoutes.php`,
+   `ext_localconf.php`, `Tests/JavaScript/`, `WindowResolverTest`, `package.json`,
+   `scripts/`, `CHANGELOG.md`, `ROADMAP.md`, REUSE-Struktur ergaenzt; veraltete Testzahl
+   und `Commands.php`-Beschreibung korrigiert.
 
-8. **ECharts-Verweise an 7 Stellen nicht nachgezogen** (Chart.js/Leaflet-Migration):
-   Handbuch Zeilen 75/77/78/330/525/529, `README.md:159`, `DashboardController.php:27`
-   (Docblock), `dashboard.js:173` (Kommentar). Der CSP-Troubleshooting-Abschnitt empfiehlt
-   sogar, "ECharts zu verschieben".
+8. ~~**ECharts-Verweise an 7 Stellen nicht nachgezogen**~~ **[behoben]** — alle aktiven
+   Verweise auf Chart.js/Leaflet umgestellt (Handbuch-Baum, Dark-Mode-Abschnitt,
+   CSP-Troubleshooting, `README.md`-Technologie-Stack, `DashboardController`-Docblock,
+   `dashboard.js`-Kommentar). Der CSP-Abschnitt beschreibt jetzt die tatsaechliche
+   Einbindung (PageRenderer, CSP-sicherer JSON-Block) statt der veralteten Empfehlung.
+   Historische Erwaehnungen in CHANGELOG/ROADMAP bleiben bewusst stehen (beschreiben die
+   Migration selbst).
 
-9. **§ "Neue Dimension hinzufuegen" faktisch falsch** — Schritt 2 verweist auf
-   Fluid-`<f:for>` ueber `{cubeByDim...}` (Template ist laengst JSON-getrieben), und
-   "Kein PHP-Code muss geaendert werden" stimmt seit Top-N nicht mehr: eine hochkardinale
-   neue Dimension gehoert in die `TopNDims`-Whitelist, sonst geht sie ungebremst in den
-   Payload bzw. der Ajax-Endpunkt antwortet 400. Wer der Anleitung folgt, scheitert.
+9. ~~**§ "Neue Dimension hinzufuegen" faktisch falsch**~~ **[behoben]** — Anleitung neu
+   geschrieben: Template liefert nur noch das Panel-Geruest (kein Fluid-`f:for`),
+   Registrierung in `dashboard.js` (`TOPN_ROOT`/`TOPN_CHILD` bzw. `barlist()` fuer kleine
+   Wertemengen) und — fuer Top-N-Dimensionen — Pflicht-Eintrag in `TopNDims`
+   (`ROOT_METRIC_BY_DIM`/`CHILD_METRIC_BY_DIM`), inkl. Erklaerung, was ohne den Eintrag
+   passiert (400 vom Ajax-Endpunkt bzw. ungebremster Initial-Payload).
 
-10. **`cacheLifetime` fehlt in der Konfigurationstabelle §6** (steht nur versteckt in
-    "Bekannte Grenzen").
+10. ~~**`cacheLifetime` fehlt in der Konfigurationstabelle §6**~~ **[behoben]** —
+    Tabellenzeile ergaenzt, mit Querverweis auf den Cache-GC-Abschnitt.
 
-11. **Troubleshooting "Datums-Picker: Standard ist der aktuelle Monat" falsch** —
-    Standard ist das geladene Fenster (`windowDays`, 92 Tage).
+11. ~~**Troubleshooting "Datums-Picker: Standard ist der aktuelle Monat" falsch**~~
+    **[behoben]** — korrigiert auf das initial geladene Zeitfenster (`windowDays`,
+    Default letzte 92 Tage), mit Hinweis auf die Vorgabe "Gesamter Zeitraum".
 
-12. **`ext_emconf.php` Version 1.2.0 nicht angehoben** trotz Caching, Top-N,
-    Drill-down-Nachladen und neuer Ajax-Route — fuer Pflege-/Upgrade-Nachvollziehbarkeit
-    sollte die Version mitwachsen.
+12. ~~**`ext_emconf.php` Version 1.2.0 nicht angehoben**~~ **[behoben — via CHANGELOG]** —
+    1.2.0 ist noch unveroeffentlicht (Feature-Branch), daher kein Versionssprung noetig;
+    stattdessen den 1.2.0-CHANGELOG-Eintrag vervollstaendigt (Sicherheit: Mandantentrennung,
+    Ajax-Modul-Berechtigung, CSV-Haertung; Neu: Top-N + Nachladen, Caching,
+    sightmetrics:health, JS-Smoke-Test; Geaendert: world.js-Quelle, npm-Vendor-Pinning).
+    Der veraltete Abschnitt "Bekannte Einschraenkungen" (Ad-hoc-Download ohne Lockfile)
+    ist entfernt — seit dem npm-Umbau gegenstandslos.
 
 ## Architektur
 
