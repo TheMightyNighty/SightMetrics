@@ -130,7 +130,43 @@ jobs:
         working-directory: extension/sight_metrics
         run: vendor/bin/phpunit -c phpunit.functional.xml.dist
 
-  # ---- Skipped in CI (brauchen laufenden Docker-Stack) ----------------------
-  # Suite 2 Smoke  → docker exec sightmetrics-web php vendor/bin/typo3 sightmetrics:smoke
-  # Suite 3 E2E    → Puppeteer gegen http://localhost:8091
-  # Lokal ausführen via: bash extension/run-tests.sh
+  # ---- Job 4: E2E (Demo-Stack + Puppeteer, echtes TYPO3-Backend) -------------
+  e2e:
+    name: "E2E (TYPO3-Backend, Puppeteer)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # setup.sh ist idempotent + nicht-interaktiv: laedt DuckDB, erzeugt
+      # Beispiel-Log + synthetische Geo-CSV, installiert TYPO3 im Container.
+      - name: Demo-Stack aufbauen
+        working-directory: demo
+        run: ./setup.sh
+
+      - name: Beispieldaten importieren (2 Sites fuer den Multi-Site-Check)
+        working-directory: ingestion
+        env:
+          CUBE_DSN: "host=127.0.0.1 port=3307 user=cube_rw password=cube_rw database=analytics"
+          SM_COMPLETE_DAYS: "0"   # Backfill: Beispiel-Log komplett importieren
+        run: |
+          python3 generate_logs.py --clean -n 800 --days 14 -o ../logs/site2.log
+          ./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1
+          ./load_cube.sh ../logs/site2.log "Schulamt Beispielkreis" 2
+
+      - name: Auf TYPO3-Backend warten
+        run: |
+          for i in $(seq 1 60); do
+            curl -fsS -o /dev/null http://localhost:8091/typo3/ && exit 0
+            sleep 2
+          done
+          echo "TYPO3-Backend nicht erreichbar"; docker logs sightmetrics-web | tail -50; exit 1
+
+      - name: Smoke (TYPO3 CLI, read-only Cube)
+        run: docker exec sightmetrics-web php vendor/bin/typo3 sightmetrics:smoke
+
+      - name: E2E (Puppeteer)
+        env:
+          CHROME_BIN: /usr/bin/google-chrome   # auf ubuntu-latest vorinstalliert
+        run: bash e2e/run.sh
