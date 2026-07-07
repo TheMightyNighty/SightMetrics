@@ -37,3 +37,4 @@ state/
 .php-cs-fixer.cache
 .phpunit.result.cache
 /tmp/phpunit-*.phar
+ingestion/bots/

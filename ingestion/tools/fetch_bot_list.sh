@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+# Baut die Bot-Erkennungsliste aus matomo/device-detector (bots.yml).
+#
+# Ergebnis: eine RE2-taugliche Regex pro Zeile -> bots/bot_regex.list.
+# lib_bots.sh kombiniert die Zeilen beim Import zu EINEM case-insensitiven
+# Muster; damit ist die Bot-Erkennung Matomo-vergleichbar statt Heuristik.
+#
+# Lizenz-Hinweis: die Muster stammen aus matomo/device-detector (LGPL-3.0-or-
+# later, https://github.com/matomo-org/device-detector). Die Liste wird deshalb
+# NICHT im Repo/Image mitgeliefert, sondern vom Betreiber erzeugt (wie GeoIP).
+#
+# Nutzung:  ./tools/fetch_bot_list.sh [ZIELDATEI]
+#   ENV: BOTS_YML_URL  Quell-URL (Default: device-detector master)
+# ---------------------------------------------------------------------------
+set -euo pipefail
+cd "$(dirname "$0")/.."   # -> ingestion/
+OUT="${1:-bots/bot_regex.list}"
+URL="${BOTS_YML_URL:-https://raw.githubusercontent.com/matomo-org/device-detector/master/regexes/bots.yml}"
+DUCKDB="$(pwd)/bin/duckdb"
+
+TMP_YML=$(mktemp); TMP_RAW=$(mktemp)
+trap 'rm -f "$TMP_YML" "$TMP_RAW"' EXIT
+echo ">> Lade ${URL}"
+curl -fsSL -o "$TMP_YML" "$URL"
+
+# Regex-Zeilen extrahieren (YAML-Zeilen '- regex: ...', beide Quote-Stile) und
+# RE2-inkompatible Konstrukte verwerfen (Lookaround, atomare Gruppen,
+# possessive Quantifier, Backreferences - RE2 kennt sie nicht).
+python3 - "$TMP_YML" > "$TMP_RAW" <<'PY'
+import re, sys
+kept = dropped = 0
+for line in open(sys.argv[1], encoding='utf-8'):
+    m = re.match(r"^- regex:\s*(.*)$", line.strip())
+    if not m:
+        continue
+    v = m.group(1).strip()
+    if v.startswith("'") and v.endswith("'"):
+        v = v[1:-1].replace("''", "'")
+    elif v.startswith('"') and v.endswith('"'):
+        v = v[1:-1].replace('\\"', '"')
+    if not v:
+        continue
+    if re.search(r"\(\?<[=!]|\(\?=|\(\?!|\(\?>|[*+?][+]|\\[1-9]", v):
+        dropped += 1
+        continue
+    kept += 1
+    print(v)
+print(f">> {kept} Muster uebernommen, {dropped} RE2-inkompatible verworfen", file=sys.stderr)
+PY
+
+# Validierung: jedes Muster einzeln in DuckDB (RE2) kompilieren; kaputte Muster
+# aussortieren statt beim naechtlichen Import zu scheitern.
+mkdir -p "$(dirname "$OUT")"
+{
+  echo "# Quelle: ${URL}"
+  echo "# Erzeugt: $(date -u +%Y-%m-%dT%H:%M:%SZ) von tools/fetch_bot_list.sh"
+  echo "# Lizenz der Muster: LGPL-3.0-or-later (matomo/device-detector)"
+} > "$OUT"
+ok=0; bad=0
+while IFS= read -r pat; do
+  if printf 'SELECT regexp_matches(%s, %s);\n' "'probe'" "'${pat//\'/\'\'}'" | "$DUCKDB" >/dev/null 2>&1; then
+    printf '%s\n' "$pat" >> "$OUT"; ok=$((ok+1))
+  else
+    bad=$((bad+1))
+  fi
+done < "$TMP_RAW"
+echo ">> Validiert: ${ok} Muster ok, ${bad} verworfen -> ${OUT}"
+
+# Abschlusstest: kombiniertes Muster einmal komplett kompilieren (wie beim Import).
+"$DUCKDB" -noheader -list <<SQL >/dev/null
+SELECT regexp_matches('Mozilla/5.0 (compatible; Googlebot/2.1)', '(?i)(' || string_agg(line, ')|(') || ')')
+FROM read_csv('${OUT//\'/\'\'}', columns={'line':'VARCHAR'}, delim='\t', header=false, quote='', escape='', ignore_errors=true)
+WHERE trim(line) <> '' AND line NOT LIKE '#%';
+SQL
+echo ">> Kombiniertes Muster kompiliert. Aktivierung: Datei liegt am Standardpfad (bots/bot_regex.list) oder SM_BOT_RE_PATH setzen."
