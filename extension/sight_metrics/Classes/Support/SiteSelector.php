@@ -10,34 +10,34 @@ use TYPO3\CMS\Core\Site\SiteFinder;
 final class SiteSelector
 {
     /**
-     * Ermittelt die aktive Site-ID: bevorzugt die angeforderte, fällt auf die erste zurück.
+     * Determines the active site ID: prefers the requested one, falls back to the first.
      *
-     * @param list<array{site_id: int|string, ...}> $sites
+     * @param list<array<string,mixed>> $sites
      */
     public static function resolve(array $sites, int $requested): int
     {
-        $ids = array_map(static fn(array $s): int => (int)$s['site_id'], $sites);
-        return in_array($requested, $ids, true) ? $requested : (int)($ids[0] ?? 0);
+        $ids = array_map(static fn(array $s): int => Params::toInt($s['site_id'] ?? null), $sites);
+        return in_array($requested, $ids, true) ? $requested : ($ids[0] ?? 0);
     }
 
     /**
-     * Liest sightmetrics_site_id aus allen TYPO3-Site-Konfigurationen, eingeschraenkt auf
-     * die Sites, deren Seitenbaum (rootPageId) der Backend-Benutzer sehen darf (allgemeines
-     * TYPO3-Seitenbaum-/Webmount-Modell, keine eigene Berechtigungsstruktur). Admins sehen
-     * immer alles.
+     * Reads sightmetrics_site_id from all TYPO3 site configurations, restricted to
+     * the sites whose page tree (rootPageId) the backend user is allowed to see (the
+     * general TYPO3 page tree/webmount model, no custom permission structure). Admins
+     * always see everything.
      *
-     * Rueckgabe-Semantik (bewusst dreiwertig, NICHT zusammenfallen lassen):
-     *   - null = KEINE Site hat ein sightmetrics_site_id-Mapping -> kein Filter, alle
-     *     Cube-Sites sichtbar (Rueckwaertskompatibilitaet fuer Installationen ohne Mapping).
-     *   - []   = Mappings existieren, aber der Benutzer hat auf keine gemappte Site
-     *     Webmount-Zugriff -> NICHTS sichtbar. Darf von Aufrufern nicht als "kein Filter"
-     *     interpretiert werden (sonst Mandantentrennungs-Bypass: ein Benutzer ohne
-     *     passenden Webmount saehe alle Mandanten).
-     *   - [ids] = nur diese Cube-Site-IDs sichtbar.
+     * Return semantics (deliberately three-valued, do NOT conflate):
+     *   - null = NO site has a sightmetrics_site_id mapping -> no filter, all
+     *     cube sites visible (backward compatibility for installations without mapping).
+     *   - []   = mappings exist, but the user has no webmount access to any mapped
+     *     site -> NOTHING visible. Must not be interpreted by callers as "no filter"
+     *     (otherwise a tenant-separation bypass: a user without a matching webmount
+     *     would see all tenants).
+     *   - [ids] = only these cube site IDs are visible.
      *
-     * Konfiguration in config/sites/<identifier>/config.yaml:
+     * Configuration in config/sites/<identifier>/config.yaml:
      *   sightmetrics_site_id: 1
-     * Oder mehrere Sites auf dieselbe cube_site_id:
+     * Or multiple sites mapped to the same cube_site_id:
      *   sightmetrics_site_id: 1
      *
      * @return list<int>|null
@@ -53,9 +53,9 @@ final class SiteSelector
             }
             $mappingExists = true;
             if (!$beUser->isAdmin() && $beUser->isInWebMount($site->getRootPageId()) === null) {
-                continue; // kein Seitenbaum-/Webmount-Zugriff auf diese Site
+                continue; // no page tree/webmount access to this site
             }
-            $ids[] = (int)$raw;
+            $ids[] = Params::toInt($raw);
         }
         return $mappingExists ? array_values(array_unique($ids)) : null;
     }

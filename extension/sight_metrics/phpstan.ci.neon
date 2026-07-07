@@ -1,5 +1,7 @@
+# CI variant: own composer install of the extension (vendor/ next to the config).
 includes:
-    - phpstan.neon
+    - phpstan-base.neon
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
 parameters:
-    bootstrapFiles!:
+    bootstrapFiles:
         - vendor/autoload.php

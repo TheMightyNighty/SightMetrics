@@ -10,16 +10,17 @@ use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use SightMetrics\Domain\Repository\CubeRepository;
 use SightMetrics\Support\AjaxSiteGuard;
+use SightMetrics\Support\Params;
 use SightMetrics\Support\TopNDims;
 use SightMetrics\Support\WindowResolver;
 use TYPO3\CMS\Core\Http\JsonResponse;
 use TYPO3\CMS\Core\Site\SiteFinder;
 
 /**
- * Ajax-Endpunkt fuers Nachladen (initiale Datumsaenderung + "+ N weitere") der
- * serverseitig auf Top-N begrenzten Barlisten (siehe TopNDims/ROADMAP.md). Registriert in
- * Configuration/Backend/AjaxRoutes.php, daher automatisch CSRF-Token-geschuetzt
- * (UriBuilder::buildUriFromRoute() haengt den Token an, sofern access != 'public').
+ * Ajax endpoint for lazy-loading (initial date change + "+ N more") of the
+ * server-side Top-N-limited bar lists (see TopNDims/ROADMAP.md). Registered in
+ * Configuration/Backend/AjaxRoutes.php, hence automatically CSRF-token-protected
+ * (UriBuilder::buildUriFromRoute() appends the token as long as access != 'public').
  */
 final class TopNAjaxController implements LoggerAwareInterface
 {
@@ -33,32 +34,32 @@ final class TopNAjaxController implements LoggerAwareInterface
     public function handleRequest(ServerRequestInterface $request): ResponseInterface
     {
         $params = $request->getQueryParams();
-        $dim = (string)($params['dim'] ?? '');
-        // parentKey gesetzt -> Drill-down-Nachladen (Kind-Dim), sonst Root-Dim-Nachladen.
-        // Getrennte Whitelists: eine Root-Dim darf nicht als Kind-Dim angefragt werden und
-        // umgekehrt (referrer_url steht bewusst in beiden, siehe TopNDims).
-        $parentKey = isset($params['parentKey']) ? (string)$params['parentKey'] : null;
+        $dim = Params::toString($params['dim'] ?? null);
+        // parentKey set -> drill-down lazy-loading (child dim), otherwise root-dim lazy-loading.
+        // Separate whitelists: a root dim must not be requested as a child dim and
+        // vice versa (referrer_url is deliberately in both, see TopNDims).
+        $parentKey = Params::toStringOrNull($params['parentKey'] ?? null);
         $metricMap = $parentKey !== null ? TopNDims::CHILD_METRIC_BY_DIM : TopNDims::ROOT_METRIC_BY_DIM;
         if (!isset($metricMap[$dim])) {
             return new JsonResponse(['error' => 'unbekannte Dimension'], 400);
         }
 
-        $siteId = (int)($params['site'] ?? 0);
+        $siteId = Params::toInt($params['site'] ?? null);
         if (($deny = AjaxSiteGuard::denyResponse($this->siteFinder, $siteId)) !== null) {
             return $deny;
         }
 
-        // Gleiche Datumsvalidierung wie WindowResolver (Format + checkdate).
-        $from = WindowResolver::iso(isset($params['from']) ? (string)$params['from'] : null);
-        $to = WindowResolver::iso(isset($params['to']) ? (string)$params['to'] : null);
+        // Same date validation as WindowResolver (format + checkdate).
+        $from = WindowResolver::iso(Params::toStringOrNull($params['from'] ?? null));
+        $to = WindowResolver::iso(Params::toStringOrNull($params['to'] ?? null));
         if ($from === null || $to === null) {
             return new JsonResponse(['error' => 'ungueltiger Zeitraum'], 400);
         }
 
-        $limit = max(1, min(100, (int)($params['limit'] ?? TopNDims::DEFAULT_LIMIT)));
-        // Offset deckeln: tiefe Pagination waere pro Seite ein voller Sort ueber die
-        // Dimension; jenseits von 10000 Zeilen ist die UI ohnehin nicht mehr sinnvoll.
-        $offset = max(0, min(10000, (int)($params['offset'] ?? 0)));
+        $limit = max(1, min(100, Params::toInt($params['limit'] ?? null, TopNDims::DEFAULT_LIMIT)));
+        // Cap the offset: deep pagination would mean a full sort over the
+        // dimension per page; beyond 10000 rows the UI is no longer useful anyway.
+        $offset = max(0, min(10000, Params::toInt($params['offset'] ?? null)));
         $metric = $metricMap[$dim];
 
         try {

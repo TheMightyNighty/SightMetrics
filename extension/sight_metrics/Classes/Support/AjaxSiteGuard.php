@@ -9,19 +9,19 @@ use TYPO3\CMS\Core\Http\JsonResponse;
 use TYPO3\CMS\Core\Site\SiteFinder;
 
 /**
- * Gemeinsame Site-Zugriffspruefung der Ajax-Endpunkte (TopN/Tree). Eine einzige
- * Implementierung, damit die dreiwertige Semantik von SiteSelector::allowedSiteIds()
- * (null = kein Mapping/filterlos, [] = nichts erlaubt, [ids] = nur diese) nicht in
- * mehreren Controllern unterschiedlich interpretiert werden kann — genau diese
- * Fehlinterpretation war der Mandantentrennungs-Bypass aus der Pruefung 2026-07-02.
+ * Shared site access check for the Ajax endpoints (TopN/Tree). A single
+ * implementation, so that the three-valued semantics of SiteSelector::allowedSiteIds()
+ * (null = no mapping/unfiltered, [] = nothing allowed, [ids] = only these) cannot
+ * be interpreted differently across multiple controllers -- exactly this
+ * misinterpretation was the tenant-separation bypass from the 2026-07-02 review.
  */
 final class AjaxSiteGuard
 {
     private function __construct() {}
 
     /**
-     * Liefert eine ablehnende JsonResponse (403) oder null, wenn der Zugriff auf
-     * $siteId erlaubt ist. Kein Backend-Benutzer im Kontext -> ebenfalls 403.
+     * Returns a rejecting JsonResponse (403), or null if access to
+     * $siteId is allowed. No backend user in context -> also 403.
      */
     public static function denyResponse(SiteFinder $siteFinder, int $siteId): ?JsonResponse
     {

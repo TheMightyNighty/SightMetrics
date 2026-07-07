@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace SightMetrics\Support;
 
 /**
- * Reine (TYPO3-freie) Auflösung der konfigurierbaren Fehlerseite -> unit-testbar.
+ * Pure (TYPO3-free) resolution of the configurable error page -> unit-testable.
  */
 final class ErrorPage
 {
@@ -13,17 +13,21 @@ final class ErrorPage
     public const DEFAULT_MESSAGE = 'The connection to the analytics database is currently interrupted.';
 
     /**
-     * @param array<string,mixed> $conf Extension-Konfiguration (ext_conf_template)
-     * @param bool $isAdmin Technische Meldung nur an Backend-Admins ausliefern (kann
-     *        DB-Host/User/Pfade enthalten), auch wenn showTechnical aktiviert ist.
+     * @param array<mixed> $conf Extension configuration (ext_conf_template, untyped)
+     * @param bool $isAdmin Only deliver the technical message to backend admins (may
+     *        contain DB host/user/paths), even if showTechnical is enabled.
      * @return array{title:string,message:string,technical:string}
      */
     public static function resolve(array $conf, string $technical, bool $isAdmin): array
     {
+        $title = Params::toString($conf['errorTitle'] ?? null);
+        $message = Params::toString($conf['errorMessage'] ?? null);
+        $showTechnical = Params::toInt($conf['showTechnical'] ?? null) === 1
+            || Params::toString($conf['showTechnical'] ?? null) === '1';
         return [
-            'title' => !empty($conf['errorTitle']) ? (string)$conf['errorTitle'] : self::DEFAULT_TITLE,
-            'message' => !empty($conf['errorMessage']) ? (string)$conf['errorMessage'] : self::DEFAULT_MESSAGE,
-            'technical' => (!empty($conf['showTechnical']) && $isAdmin) ? $technical : '',
+            'title' => $title !== '' ? $title : self::DEFAULT_TITLE,
+            'message' => $message !== '' ? $message : self::DEFAULT_MESSAGE,
+            'technical' => ($showTechnical && $isAdmin) ? $technical : '',
         ];
     }
 }

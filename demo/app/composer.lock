@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fed3e10ef7212700f782c38f1862e427",
+    "content-hash": "2b42c7a81aec0746eb403b05bfc09fcf",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -2133,7 +2133,7 @@
             "dist": {
                 "type": "path",
                 "url": "./packages/sight_metrics",
-                "reference": "9fa39661f2730e1c96e6cbcd5d647d95070fc344"
+                "reference": "d7508bec6488ad2119c55640022f4c9f841953f8"
             },
             "require": {
                 "php": "^8.2",
@@ -2141,7 +2141,8 @@
                 "typo3/cms-core": "^13.4 || ^14.0"
             },
             "require-dev": {
-                "phpstan/phpstan": "^1.12",
+                "phpstan/phpstan": "^2.0",
+                "phpstan/phpstan-strict-rules": "^2.0",
                 "phpunit/phpunit": "^11.0",
                 "typo3/coding-standards": "^0.8",
                 "typo3/testing-framework": "^8.0"
@@ -2160,7 +2161,19 @@
             "license": [
                 "GPL-2.0-or-later"
             ],
-            "description": "SightMetrics – Zugriffsauswertung als TYPO3-Backend-Modul (read-only auf die Cube-DB)",
+            "authors": [
+                {
+                    "name": "Robert Schleiermacher",
+                    "email": "robert.schleiermacher@gmail.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "SightMetrics – privacy-friendly, log-file based web analytics as a TYPO3 backend module (read-only on the cube DB; requires the separately deployed SightMetrics ingestion pipeline)",
+            "support": {
+                "issues": "https://github.com/TheMIghtyNighty/SightMetrics/issues",
+                "source": "https://github.com/TheMIghtyNighty/SightMetrics",
+                "docs": "https://docs.typo3.org/p/sightmetrics/sight-metrics/main/en-us/"
+            },
             "transport-options": {
                 "relative": true
             }
@@ -7989,11 +8002,11 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "2.2.2",
+            "version": "2.2.5",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/e5cc34d491a90e79c216d824f60fe21fd4d93bd6",
-                "reference": "e5cc34d491a90e79c216d824f60fe21fd4d93bd6",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/909c1e5fef7989ac0d0c1c5c42e32a5c4f6198a0",
+                "reference": "909c1e5fef7989ac0d0c1c5c42e32a5c4f6198a0",
                 "shasum": ""
             },
             "require": {
@@ -8049,7 +8062,58 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-06-05T09:00:01+00:00"
+            "time": "2026-07-05T06:31:06+00:00"
+        },
+        {
+            "name": "phpstan/phpstan-strict-rules",
+            "version": "2.0.11",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/phpstan/phpstan-strict-rules.git",
+                "reference": "9b000a578b85b32945b358b172c7b20e91189024"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/phpstan/phpstan-strict-rules/zipball/9b000a578b85b32945b358b172c7b20e91189024",
+                "reference": "9b000a578b85b32945b358b172c7b20e91189024",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^7.4 || ^8.0",
+                "phpstan/phpstan": "^2.1.39"
+            },
+            "require-dev": {
+                "php-parallel-lint/php-parallel-lint": "^1.2",
+                "phpstan/phpstan-deprecation-rules": "^2.0",
+                "phpstan/phpstan-phpunit": "^2.0",
+                "phpunit/phpunit": "^9.6"
+            },
+            "type": "phpstan-extension",
+            "extra": {
+                "phpstan": {
+                    "includes": [
+                        "rules.neon"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "PHPStan\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "Extra strict and opinionated rules for PHPStan",
+            "keywords": [
+                "static analysis"
+            ],
+            "support": {
+                "issues": "https://github.com/phpstan/phpstan-strict-rules/issues",
+                "source": "https://github.com/phpstan/phpstan-strict-rules/tree/2.0.11"
+            },
+            "time": "2026-05-02T06:54:10+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",

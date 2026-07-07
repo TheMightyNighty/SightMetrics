@@ -6,6 +6,7 @@ namespace SightMetrics\Domain\Repository;
 
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\ParameterType;
+use SightMetrics\Support\Params;
 use TYPO3\CMS\Core\Cache\CacheManager;
 use TYPO3\CMS\Core\Cache\Frontend\FrontendInterface;
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
@@ -13,29 +14,29 @@ use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Database\Query\QueryBuilder;
 
 /**
- * Liest die Cube-Tabellen ueber eine SEPARATE, read-only DB-Verbindung ('cube').
- * Kein Extbase, keine TCA – nur DBAL-SELECTs gegen aussenstehende Tabellen
- * (Abschnitt 11.1/11.4). Multi-Site: alle Lesezugriffe sind nach site_id gefiltert.
+ * Reads the cube tables via a SEPARATE, read-only DB connection ('cube').
+ * No Extbase, no TCA -- just DBAL SELECTs against external tables
+ * (section 11.1/11.4). Multi-site: all read accesses are filtered by site_id.
  *
- * daily()/cube() sind die Reads, deren Volumen mit Zeitfenster/Kardinalitaet waechst;
- * sie werden kurzlebig ueber den TYPO3-Cache "sight_metrics" gecacht (TTL per
- * Extension-Konfiguration, 0 = deaktiviert). meta()/sites() sind Einzelzeilen/kleine
- * Listen und bleiben bewusst live, damit z. B. eine neue Site sofort sichtbar ist.
+ * daily()/cube() are the reads whose volume grows with time window/cardinality;
+ * they are cached short-lived via the TYPO3 cache "sight_metrics" (TTL per
+ * extension configuration, 0 = disabled). meta()/sites() are single rows/small
+ * lists and deliberately stay live, so e.g. a new site is immediately visible.
  */
 final class CubeRepository
 {
     /**
-     * Unterstuetzte Version des DB-Vertrags (Tabellen cube/daily/meta, siehe
-     * docs/SCHEMA.md). Die Ingestion schreibt ihre Version nach meta.schema_version;
-     * ist die Version dort NEUER, passen Leser und Schreiber nicht mehr zusammen.
+     * Supported version of the DB contract (tables cube/daily/meta, see
+     * docs/SCHEMA.md). The ingestion writes its version to meta.schema_version;
+     * if the version there is NEWER, reader and writer no longer match.
      */
     public const SCHEMA_VERSION = 1;
 
     private const CONNECTION = 'cube';
 
     /**
-     * Eltern|Kind-Trenner in dimkey-Werten (Drill-down-Dimensionen), exakt identisch zu
-     * chr(31) in ingestion/transform.sql und der SEP-Konstante in dashboard.js.
+     * Parent|child separator in dimkey values (drill-down dimensions), exactly identical to
+     * chr(31) in ingestion/transform.sql and the SEP constant in dashboard.js.
      */
     private const CHILD_SEP = "\x1f";
 
@@ -54,8 +55,8 @@ final class CubeRepository
     {
         try {
             $conf = $this->extensionConfiguration->get('sight_metrics');
-            if (isset($conf['cacheLifetime']) && $conf['cacheLifetime'] !== '') {
-                return max(0, (int)$conf['cacheLifetime']);
+            if (\is_array($conf) && isset($conf['cacheLifetime']) && $conf['cacheLifetime'] !== '') {
+                return max(0, Params::toInt($conf['cacheLifetime']));
             }
         } catch (\Throwable) {
         }
@@ -71,9 +72,9 @@ final class CubeRepository
         if ($lifetime <= 0) {
             return $fetch();
         }
-        // Cache-Konfiguration fehlt (z. B. Unit-/Functional-Tests ohne geladenes
-        // ext_localconf.php) -> Caching ist ein reines Perf-Feature, kein
-        // Korrektheitserfordernis, daher hier fehlertolerant auf Live-Query zurueckfallen.
+        // Cache configuration missing (e.g. unit/functional tests without a loaded
+        // ext_localconf.php) -> caching is a pure perf feature, not a
+        // correctness requirement, so fault-tolerantly fall back to a live query here.
         try {
             $cache = $this->cache();
         } catch (\Throwable) {
@@ -92,14 +93,14 @@ final class CubeRepository
     private function qb(string $table): QueryBuilder
     {
         $qb = $this->connectionPool->getConnectionByName(self::CONNECTION)->createQueryBuilder();
-        $qb->getRestrictions()->removeAll(); // Cube-Tabellen ohne TCA
+        $qb->getRestrictions()->removeAll(); // cube tables have no TCA
         return $qb;
     }
 
     /**
-     * Verfuegbare Sites (fuer die Auswahl).
-     * $allowedIds: wenn gesetzt, nur diese site_ids zurueckgeben (TYPO3-Site-Mapping).
-     * Leere Liste = kein Filter (alle Sites sichtbar, Rueckwaertskompatibilitaet).
+     * Available sites (for the selector).
+     * $allowedIds: if set, only return these site_ids (TYPO3 site mapping).
+     * Empty list = no filter (all sites visible, backward compatibility).
      *
      * @param list<int>              $allowedIds
      * @return list<array<string,mixed>>
@@ -117,10 +118,10 @@ final class CubeRepository
     }
 
     /**
-     * Hoechste in meta abgelegte Schema-Version des DB-Vertrags.
-     * null = Spalte fehlt oder ist leer (Legacy-Ingestion vor der Versionierung) --
-     * wird als kompatibel behandelt, nur eine NEUERE Version als SCHEMA_VERSION
-     * ist ein harter Fehler (siehe DashboardController::assertSchemaCompatible()).
+     * Highest schema version of the DB contract stored in meta.
+     * null = column missing or empty (legacy ingestion predating versioning) --
+     * treated as compatible; only a NEWER version than SCHEMA_VERSION
+     * is a hard error (see DashboardController::assertSchemaCompatible()).
      */
     public function schemaVersion(): ?int
     {
@@ -128,9 +129,9 @@ final class CubeRepository
             $qb = $this->qb('meta');
             $value = $qb->addSelectLiteral('MAX(schema_version)')->from('meta')
                 ->executeQuery()->fetchOne();
-            return $value === null ? null : (int)$value;
+            return $value === null ? null : Params::toInt($value);
         } catch (\Throwable) {
-            return null; // Spalte existiert nicht: Bestands-DB einer aelteren Ingestion
+            return null; // column doesn't exist: existing DB from an older ingestion
         }
     }
 
@@ -143,18 +144,19 @@ final class CubeRepository
         $row = $qb->select('*')->from('meta')
             ->where($qb->expr()->eq('site_id', $qb->createNamedParameter($siteId, ParameterType::INTEGER)))
             ->setMaxResults(1)->executeQuery()->fetchAssociative();
-        return $row ?: [];
+        return $row === false ? [] : $row;
     }
 
     /**
-     * Tages-Aggregate, auf das Zeitfenster [$from, $bis] begrenzt (serverseitig).
-     * Begrenzt das Transfervolumen unabhaengig von der Retention der Cube-DB.
+     * Daily aggregates, limited to the time window [$from, $bis] (server-side).
+     * Limits the transfer volume independently of the cube DB's retention.
      *
      * @return list<array<string,mixed>>
      */
     public function daily(int $siteId, string $from, string $bis): array
     {
-        return $this->cached("daily:$siteId:$from:$bis", function () use ($siteId, $from, $bis) {
+        /** @var list<array<string,mixed>> $rows cached() is untyped (mixed) */
+        $rows = $this->cached("daily:$siteId:$from:$bis", function () use ($siteId, $from, $bis) {
             $qb = $this->qb('daily');
             return $qb->select('datum', 'visits', 'pageviews', 'uniques', 'bounces', 'bytes')
                 ->from('daily')
@@ -166,13 +168,14 @@ final class CubeRepository
                 ->orderBy('datum')
                 ->executeQuery()->fetchAllAssociative();
         });
+        return $rows;
     }
 
     /**
-     * Cube-Zeilen, auf das Zeitfenster [$from, $bis] begrenzt (serverseitig).
-     * $excludeDims: Dimensionen, die NICHT komplett mitgeliefert werden (siehe TopNDims) --
-     * fuer die liefert stattdessen topN() nur die Top-N-Zeilen, um das Transfervolumen bei
-     * hoher Kardinalitaet zu begrenzen.
+     * Cube rows, limited to the time window [$from, $bis] (server-side).
+     * $excludeDims: dimensions that are NOT delivered completely (see TopNDims) --
+     * for these, topN() instead delivers only the top-N rows, to limit the
+     * transfer volume at high cardinality.
      *
      * @param list<string> $excludeDims
      * @return list<array<string,mixed>>
@@ -180,7 +183,8 @@ final class CubeRepository
     public function cube(int $siteId, string $from, string $bis, array $excludeDims = []): array
     {
         $excludeKey = $excludeDims === [] ? '' : ':ex=' . implode(',', $excludeDims);
-        return $this->cached("cube:$siteId:$from:$bis$excludeKey", function () use ($siteId, $from, $bis, $excludeDims) {
+        /** @var list<array<string,mixed>> $rows cached() is untyped (mixed) */
+        $rows = $this->cached("cube:$siteId:$from:$bis$excludeKey", function () use ($siteId, $from, $bis, $excludeDims) {
             $qb = $this->qb('cube');
             $qb->select('datum', 'dim', 'dimkey', 'pv', 'v')
                 ->from('cube')
@@ -197,15 +201,16 @@ final class CubeRepository
             }
             return $qb->executeQuery()->fetchAllAssociative();
         });
+        return $rows;
     }
 
     /**
-     * Beschraenkt eine Cube-Query auf Zeilen, deren dimkey mit "$parentKey . CHILD_SEP"
-     * beginnt (Drill-down: Kind-Zeilen einer Eltern-Kategorie). $parentKey ist ein
-     * gebundener Parameter (kein Injection-Risiko); nur die per PHP berechnete Praefix-
-     * LAENGE wird als Literal in die Query eingebettet. SUBSTR() zaehlt sowohl bei MySQL/
-     * MariaDB (nicht-binaere Spalten) als auch bei SQLite Unicode-Codepoints, daher
-     * mb_strlen() statt strlen() -- sonst wuerden mehrbyte-UTF-8-Labels falsch abgeschnitten.
+     * Restricts a cube query to rows whose dimkey starts with "$parentKey . CHILD_SEP"
+     * (drill-down: child rows of a parent category). $parentKey is a bound
+     * parameter (no injection risk); only the prefix LENGTH computed in PHP
+     * is embedded as a literal in the query. SUBSTR() counts Unicode codepoints
+     * both in MySQL/MariaDB (non-binary columns) and in SQLite, hence
+     * mb_strlen() instead of strlen() -- otherwise multibyte UTF-8 labels would be truncated incorrectly.
      */
     private function applyParentPrefix(QueryBuilder $qb, ?string $parentKey): void
     {
@@ -213,19 +218,19 @@ final class CubeRepository
             return;
         }
         $prefix = $parentKey . self::CHILD_SEP;
-        // Kein $qb->expr()->eq() hier: das quotet sein erstes Argument als Identifier
-        // (Connection::quoteIdentifier()), was den SUBSTR(...)-Ausdruck kaputt macht.
-        // andWhere() akzeptiert rohe SQL-Fragmente direkt.
+        // No $qb->expr()->eq() here: it quotes its first argument as an identifier
+        // (Connection::quoteIdentifier()), which breaks the SUBSTR(...) expression.
+        // andWhere() accepts raw SQL fragments directly.
         $qb->andWhere(
             'SUBSTR(dimkey, 1, ' . mb_strlen($prefix, 'UTF-8') . ') = ' . $qb->createNamedParameter($prefix)
         );
     }
 
     /**
-     * Top-N-Zeilen einer Dimension, absteigend nach $metric ('pv' oder 'v') sortiert.
-     * Fuer serverseitiges Top-N + Nachladen bei hochkardinalen Dimensionen (siehe
-     * TopNDims/ROADMAP.md). $parentKey: wenn gesetzt, nur Kind-Zeilen dieser Eltern-Kategorie
-     * (Drill-down, dimkey-Praefix vor CHILD_SEP) -- siehe applyParentPrefix().
+     * Top-N rows of a dimension, sorted descending by $metric ('pv' or 'v').
+     * For server-side Top-N + lazy-loading on high-cardinality dimensions (see
+     * TopNDims/ROADMAP.md). $parentKey: if set, only child rows of this parent category
+     * (drill-down, dimkey prefix before CHILD_SEP) -- see applyParentPrefix().
      *
      * @return list<array{dimkey: string, pv: int, v: int}>
      */
@@ -235,7 +240,8 @@ final class CubeRepository
             throw new \InvalidArgumentException('Ungueltige Metrik: ' . $metric);
         }
         $cacheKey = "topN:$siteId:$from:$bis:$dim:$metric:$limit:$offset:" . ($parentKey ?? '');
-        return $this->cached($cacheKey, function () use ($siteId, $from, $bis, $dim, $metric, $limit, $offset, $parentKey) {
+        /** @var list<array{dimkey: string, pv: int, v: int}> $rows cached() is untyped (mixed) */
+        $rows = $this->cached($cacheKey, function () use ($siteId, $from, $bis, $dim, $metric, $limit, $offset, $parentKey) {
             $qb = $this->qb('cube');
             $qb->select('dimkey')
                 ->addSelectLiteral('SUM(pv) AS pv', 'SUM(v) AS v')
@@ -245,8 +251,8 @@ final class CubeRepository
                     $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
-                    // Leere Keys nicht anzeigen (frueher client-seitig in agg() gefiltert);
-                    // '<>' schliesst NULL-dimkeys gleich mit aus.
+                    // Don't show empty keys (previously filtered client-side in agg());
+                    // '<>' also excludes NULL dimkeys.
                     $qb->expr()->neq('dimkey', $qb->createNamedParameter('')),
                 );
             $this->applyParentPrefix($qb, $parentKey);
@@ -255,27 +261,29 @@ final class CubeRepository
                 ->setMaxResults($limit)
                 ->setFirstResult($offset)
                 ->executeQuery()->fetchAllAssociative();
-            // mysqli liefert Aggregat-Summen als String -- fuer einen sauberen JSON-Vertrag
-            // (Client rechnet mit Zahlen) hier explizit casten.
+            // mysqli returns aggregate sums as strings -- cast explicitly here
+            // for a clean JSON contract (client computes with numbers).
             return array_map(static fn(array $r): array => [
-                'dimkey' => (string)$r['dimkey'],
-                'pv' => (int)$r['pv'],
-                'v' => (int)$r['v'],
+                'dimkey' => Params::toString($r['dimkey'] ?? null),
+                'pv' => Params::toInt($r['pv'] ?? null),
+                'v' => Params::toInt($r['v'] ?? null),
             ], $rows);
         });
+        return $rows;
     }
 
     /**
-     * Gesamtsumme + Anzahl unterschiedlicher dimkeys einer Dimension (optional unter einem
-     * $parentKey-Praefix) im Zeitfenster -- Basis fuer die Prozentanzeige und "+ N weitere"
-     * bei serverseitigem Top-N.
+     * Total sum + count of distinct dimkeys of a dimension (optionally under a
+     * $parentKey prefix) within the time window -- basis for the percentage display and "+ N more"
+     * with server-side Top-N.
      *
      * @return array{pv: int, v: int, count: int}
      */
     public function dimSummary(int $siteId, string $from, string $bis, string $dim, ?string $parentKey = null): array
     {
         $cacheKey = "dimSummary:$siteId:$from:$bis:$dim:" . ($parentKey ?? '');
-        return $this->cached($cacheKey, function () use ($siteId, $from, $bis, $dim, $parentKey) {
+        /** @var array{pv: int, v: int, count: int} $summary cached() is untyped (mixed) */
+        $summary = $this->cached($cacheKey, function () use ($siteId, $from, $bis, $dim, $parentKey) {
             $qb = $this->qb('cube');
             $qb->addSelectLiteral(
                 'COALESCE(SUM(pv), 0) AS pv',
@@ -288,33 +296,34 @@ final class CubeRepository
                     $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
-                    // Konsistent zu topN(): leere Keys zaehlen weder in die Prozentbasis
-                    // noch in "+ N weitere".
+                    // Consistent with topN(): empty keys count neither in the percentage base
+                    // nor in "+ N more".
                     $qb->expr()->neq('dimkey', $qb->createNamedParameter('')),
                 );
             $this->applyParentPrefix($qb, $parentKey);
             $row = $qb->executeQuery()->fetchAssociative();
             return [
-                'pv' => (int)($row['pv'] ?? 0),
-                'v' => (int)($row['v'] ?? 0),
-                'count' => (int)($row['cnt'] ?? 0),
+                'pv' => Params::toInt(\is_array($row) ? ($row['pv'] ?? null) : null),
+                'v' => Params::toInt(\is_array($row) ? ($row['v'] ?? null) : null),
+                'count' => Params::toInt(\is_array($row) ? ($row['cnt'] ?? null) : null),
             ];
         });
+        return $summary;
     }
 
     /**
-     * Direkte Kind-Segmente eines Pfad-Praefixes im Seitenbaum ('url'-Dimension), mit
-     * Unterbaum-Summen. $path = '' (Wurzel) oder '/seg(/seg)*'. Pro Segment werden alle
-     * Zeilen aggregiert, deren dimkey unterhalb von "$path/" liegt — die Summe eines
-     * Segments enthaelt damit sowohl die Seite selbst (z. B. '/a/b') als auch alle
-     * tieferen Pfade ('/a/b/c'), identisch zur frueheren client-seitigen buildTree()-
-     * Aggregation. 'hasChildren' zeigt an, ob unterhalb des Segments weitere Ebenen
-     * existieren (fuers Aufklappen im Frontend).
+     * Direct child segments of a path prefix in the page tree ('url' dimension), with
+     * subtree sums. $path = '' (root) or '/seg(/seg)*'. Per segment, all
+     * rows are aggregated whose dimkey lies below "$path/" -- the sum of a
+     * segment thus contains both the page itself (e.g. '/a/b') and all
+     * deeper paths ('/a/b/c'), identical to the earlier client-side buildTree()
+     * aggregation. 'hasChildren' indicates whether further levels exist below
+     * the segment (for expanding in the frontend).
      *
-     * Portables SQL: SUBSTR/INSTR/CASE existieren in MariaDB/MySQL und SQLite; die
-     * Segment-Extraktion laeuft komplett in SQL, damit an der Wurzel grosser Sites nicht
-     * alle URL-Zeilen uebertragen werden muessen. SUBSTR zaehlt Unicode-Codepoints
-     * (siehe applyParentPrefix), daher mb_strlen() fuer die Praefix-Laenge.
+     * Portable SQL: SUBSTR/INSTR/CASE exist in MariaDB/MySQL and SQLite; the
+     * segment extraction runs completely in SQL, so that not all URL rows have
+     * to be transferred at the root of large sites. SUBSTR counts Unicode codepoints
+     * (see applyParentPrefix), hence mb_strlen() for the prefix length.
      *
      * @return array{
      *   rows: list<array{seg: string, path: string, pv: int, v: int, hasChildren: bool}>,
@@ -324,14 +333,15 @@ final class CubeRepository
     public function urlTreeChildren(int $siteId, string $from, string $bis, string $path, int $limit, int $offset = 0): array
     {
         $cacheKey = "urlTree:$siteId:$from:$bis:$limit:$offset:$path";
-        return $this->cached($cacheKey, function () use ($siteId, $from, $bis, $path, $limit, $offset) {
+        /** @var array{rows: list<array{seg: string, path: string, pv: int, v: int, hasChildren: bool}>, total: array{count: int}} $level cached() is untyped (mixed) */
+        $level = $this->cached($cacheKey, function () use ($siteId, $from, $bis, $path, $limit, $offset) {
             $prefix = $path . '/';
             $plen = mb_strlen($prefix, 'UTF-8');
-            // Pfadrest hinter dem Praefix; daraus das erste Segment (bis zum naechsten '/').
+            // Path remainder after the prefix; from this the first segment (up to the next '/').
             $rest = 'SUBSTR(dimkey, ' . ($plen + 1) . ')';
             $seg = "CASE WHEN INSTR($rest, '/') > 0 THEN SUBSTR($rest, 1, INSTR($rest, '/') - 1) ELSE $rest END";
-            // Kind-Ebenen vorhanden? Nur wenn hinter dem '/' auch noch etwas kommt
-            // (schuetzt vor Pseudo-Kindern durch trailing slashes wie '/a/').
+            // Child levels present? Only if there's still something after the '/'
+            // (protects against pseudo-children from trailing slashes like '/a/').
             $hasChildren = "MAX(CASE WHEN INSTR($rest, '/') > 0 AND SUBSTR($rest, INSTR($rest, '/') + 1) <> '' THEN 1 ELSE 0 END)";
 
             $qb = $this->qb('cube');
@@ -343,8 +353,8 @@ final class CubeRepository
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
                 )
-                // Praefix-Filter wie applyParentPrefix (rohes Fragment, expr()->eq()
-                // wuerde den SUBSTR-Ausdruck als Identifier quoten).
+                // Prefix filter like applyParentPrefix (raw fragment, expr()->eq()
+                // would quote the SUBSTR expression as an identifier).
                 ->andWhere("SUBSTR(dimkey, 1, $plen) = " . $qb->createNamedParameter($prefix))
                 ->groupBy('seg')
                 ->having("seg <> ''")
@@ -352,15 +362,15 @@ final class CubeRepository
                 ->setMaxResults($limit)
                 ->setFirstResult($offset);
             $rows = array_map(static fn(array $r): array => [
-                'seg' => (string)$r['seg'],
-                'path' => $path . '/' . (string)$r['seg'],
-                'pv' => (int)$r['pv'],
-                'v' => (int)$r['v'],
+                'seg' => Params::toString($r['seg'] ?? null),
+                'path' => $path . '/' . Params::toString($r['seg'] ?? null),
+                'pv' => Params::toInt($r['pv'] ?? null),
+                'v' => Params::toInt($r['v'] ?? null),
                 'hasChildren' => (bool)$r['has_children'],
             ], $qb->executeQuery()->fetchAllAssociative());
 
-            // Gesamtzahl unterschiedlicher Segmente (fuer "+ N weitere"); CASE ohne ELSE
-            // liefert NULL fuer leere Segmente -> COUNT DISTINCT zaehlt sie nicht mit.
+            // Total count of distinct segments (for "+ N more"); CASE without ELSE
+            // returns NULL for empty segments -> COUNT DISTINCT doesn't count them.
             $qbCount = $this->qb('cube');
             $qbCount->addSelectLiteral("COUNT(DISTINCT CASE WHEN $seg <> '' THEN $seg END) AS cnt")
                 ->from('cube')
@@ -371,16 +381,17 @@ final class CubeRepository
                     $qbCount->expr()->lte('datum', $qbCount->createNamedParameter($bis)),
                 )
                 ->andWhere("SUBSTR(dimkey, 1, $plen) = " . $qbCount->createNamedParameter($prefix));
-            $count = (int)$qbCount->executeQuery()->fetchOne();
+            $count = Params::toInt($qbCount->executeQuery()->fetchOne());
 
             return ['rows' => $rows, 'total' => ['count' => $count]];
         });
+        return $level;
     }
 
     /**
-     * Seitenbaum bis $depth Ebenen tief (1 oder 2). Bei depth=2 wird fuer jedes Kind der
-     * ersten Ebene direkt dessen Kind-Ebene mitgeladen ('children'/'childTotal') — der
-     * Initial-Payload zeigt so wie bisher die ersten beiden Ebenen ohne Nachladen.
+     * Page tree up to $depth levels deep (1 or 2). With depth=2, each child of the
+     * first level directly has its child level loaded too ('children'/'childTotal') -- the
+     * initial payload thus shows the first two levels without lazy-loading, as before.
      *
      * @return array{rows: list<array<string,mixed>>, total: array{count: int}}
      */

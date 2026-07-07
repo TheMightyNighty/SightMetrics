@@ -1,0 +1,6 @@
+# Shared base (level/paths); bootstrap + strict-rules include are
+# environment-specific (phpstan.neon = demo container, phpstan.ci.neon = CI).
+parameters:
+    level: max
+    paths:
+        - Classes

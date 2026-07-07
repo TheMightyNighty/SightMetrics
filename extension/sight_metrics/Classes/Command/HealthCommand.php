@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SightMetrics\Command;
 
 use SightMetrics\Domain\Repository\CubeRepository;
+use SightMetrics\Support\Params;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -12,14 +13,14 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Health-Check des Reporting-Pfads, den die GUI tatsaechlich liest:
- * Cube-DB erreichbar? Daten je Site aktuell (Alter von meta.bis)?
+ * Health check of the reporting path that the GUI actually reads:
+ * Is the cube DB reachable? Is the data per site current (age of meta.bis)?
  *
- * Ergaenzt check_import.sh (prueft die Ingestion-State-Dateien) um die Sicht
- * aus dem TYPO3-Backend. Nagios-kompatible Exit-Codes (0=OK,1=WARN,2=CRIT,3=UNKNOWN),
- * optional JSON fuer Monitoring-Agenten.
+ * Complements check_import.sh (checks the ingestion state files) with the view
+ * from the TYPO3 backend. Nagios-compatible exit codes (0=OK,1=WARN,2=CRIT,3=UNKNOWN),
+ * optional JSON for monitoring agents.
  *
- * Aufruf: vendor/bin/typo3 sightmetrics:health [--warn-hours=26] [--crit-hours=50] [--json]
+ * Usage: vendor/bin/typo3 sightmetrics:health [--warn-hours=26] [--crit-hours=50] [--json]
  */
 #[AsCommand(name: 'sightmetrics:health', description: 'Health-Check: Cube-DB erreichbar und Daten aktuell?')]
 final class HealthCommand extends Command
@@ -38,8 +39,8 @@ final class HealthCommand extends Command
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $warnH = (int)$input->getOption('warn-hours');
-        $critH = (int)$input->getOption('crit-hours');
+        $warnH = Params::toInt($input->getOption('warn-hours'), 26);
+        $critH = Params::toInt($input->getOption('crit-hours'), 50);
         $asJson = (bool)$input->getOption('json');
 
         if ($critH < $warnH) {
@@ -62,8 +63,8 @@ final class HealthCommand extends Command
             return $this->emit($output, $asJson, 2, 'Keine Sites in der Cube-DB (meta leer)', []);
         }
 
-        // DB-Vertrag (docs/SCHEMA.md): neuere Schreiber-Version als CRIT melden,
-        // bevor Freshness geprueft wird -- die Zahlen waeren nicht vertrauenswuerdig.
+        // DB contract (docs/SCHEMA.md): report a newer writer version as CRIT
+        // before checking freshness -- the numbers would not be trustworthy.
         $schema = $this->repo->schemaVersion();
         if ($schema !== null && $schema > CubeRepository::SCHEMA_VERSION) {
             return $this->emit($output, $asJson, 2, sprintf(
@@ -77,18 +78,18 @@ final class HealthCommand extends Command
         $worst = 0;
         $details = [];
         foreach ($sites as $s) {
-            $siteId = (int)$s['site_id'];
-            $name = (string)($s['site'] ?? $siteId);
+            $siteId = Params::toInt($s['site_id'] ?? null);
+            $name = Params::toString($s['site'] ?? null, (string)$siteId);
             $meta = $this->repo->meta($siteId);
-            $bis = (string)($meta['bis'] ?? '');
+            $bis = Params::toString($meta['bis'] ?? null);
             if ($bis === '') {
                 $worst = max($worst, 2);
                 $details[] = ['site_id' => $siteId, 'site' => $name, 'status' => 'CRIT', 'last_data' => null, 'age_hours' => null];
                 continue;
             }
-            // Alter ab Ende des letzten Datentags (bis 23:59:59).
+            // Age from the end of the last data day (up to 23:59:59).
             $end = strtotime($bis . ' 23:59:59');
-            $ageH = $end ? (int)floor(($now - $end) / 3600) : null;
+            $ageH = $end !== false ? (int)floor(($now - $end) / 3600) : null;
             $status = 'OK';
             if ($ageH === null) {
                 $status = 'UNKNOWN';
@@ -124,10 +125,10 @@ final class HealthCommand extends Command
             foreach ($details as $d) {
                 $output->writeln(sprintf(
                     '  site=%s %s last_data=%s age=%s',
-                    (string)$d['site_id'],
-                    (string)$d['status'],
-                    $d['last_data'] === null ? '-' : (string)$d['last_data'],
-                    $d['age_hours'] === null ? '-' : $d['age_hours'] . 'h'
+                    Params::toString($d['site_id'] ?? null),
+                    Params::toString($d['status'] ?? null),
+                    Params::toStringOrNull($d['last_data'] ?? null) ?? '-',
+                    $d['age_hours'] === null ? '-' : Params::toString($d['age_hours']) . 'h'
                 ));
             }
         }

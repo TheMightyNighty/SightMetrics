@@ -1,8 +1,8 @@
-# Static Analysis fuer die Extension. Lauf via extension/lint.sh im Demo-Container
-# (nutzt den TYPO3-Autoloader der Demo-App fuer die Typaufloesung).
+# Static analysis for the extension. Run via extension/lint.sh in the demo container
+# (uses the TYPO3 autoloader + phpstan-strict-rules of the demo app).
+includes:
+    - phpstan-base.neon
+    - ../../vendor/phpstan/phpstan-strict-rules/rules.neon
 parameters:
-    level: 6
-    paths:
-        - Classes
     bootstrapFiles:
         - ../../vendor/autoload.php

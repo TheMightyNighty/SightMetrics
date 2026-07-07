@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace SightMetrics\Command;
 
 use SightMetrics\Domain\Repository\CubeRepository;
+use SightMetrics\Support\Params;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Functional Smoke: prueft den echten read-only DBAL-Lesepfad gegen die Cube-DB.
- * Aufruf: vendor/bin/typo3 sightmetrics:smoke  (Exit 0 = OK, 1 = Fehler)
+ * Functional smoke test: checks the real read-only DBAL read path against the cube DB.
+ * Usage: vendor/bin/typo3 sightmetrics:smoke  (exit 0 = OK, 1 = error)
  */
 #[AsCommand(name: 'sightmetrics:smoke', description: 'Functional Smoke: liest read-only aus der Cube-DB')]
 final class SmokeCommand extends Command
@@ -26,10 +27,10 @@ final class SmokeCommand extends Command
     {
         try {
             $sites = $this->repo->sites();
-            $siteId = (int)($sites[0]['site_id'] ?? 0);
+            $siteId = Params::toInt($sites[0]['site_id'] ?? null);
             $meta = $this->repo->meta($siteId);
-            $von = (string)($meta['von'] ?? '0000-01-01');
-            $bis = (string)($meta['bis'] ?? '9999-12-31');
+            $von = Params::toString($meta['von'] ?? null, '0000-01-01');
+            $bis = Params::toString($meta['bis'] ?? null, '9999-12-31');
             $daily = $this->repo->daily($siteId, $von, $bis);
             $cube = $this->repo->cube($siteId, $von, $bis);
         } catch (\Throwable $e) {
@@ -40,13 +41,13 @@ final class SmokeCommand extends Command
             'sites=%d | site#%d %s | meta.visits_total=%s | daily=%d | cube=%d',
             count($sites),
             $siteId,
-            (string)($meta['site'] ?? '?'),
-            (string)($meta['visits_total'] ?? 'NULL'),
+            Params::toString($meta['site'] ?? null, '?'),
+            Params::toString($meta['visits_total'] ?? null, 'NULL'),
             count($daily),
             count($cube)
         ));
 
-        $ok = count($sites) > 0 && isset($meta['visits_total']) && (int)$meta['visits_total'] > 0
+        $ok = count($sites) > 0 && Params::toInt($meta['visits_total'] ?? null) > 0
             && count($daily) > 0 && count($cube) > 0;
         if (!$ok) {
             $output->writeln('<error>SMOKE FAIL: Cube leer oder nicht lesbar</error>');

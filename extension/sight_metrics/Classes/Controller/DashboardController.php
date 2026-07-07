@@ -10,6 +10,7 @@ use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerAwareTrait;
 use SightMetrics\Domain\Repository\CubeRepository;
 use SightMetrics\Support\ErrorPage;
+use SightMetrics\Support\Params;
 use SightMetrics\Support\SiteSelector;
 use SightMetrics\Support\TopNDims;
 use SightMetrics\Support\WindowResolver;
@@ -22,12 +23,12 @@ use TYPO3\CMS\Core\Page\PageRenderer;
 use TYPO3\CMS\Core\Site\SiteFinder;
 
 /**
- * Backend-Modul "SightMetrics".
+ * Backend module "SightMetrics".
  *
- * Liest ausschliesslich (read-only) aus der Cube-DB und reicht die Daten als
- * JSON an das Frontend (dashboard.js: Chart.js + Leaflet) durch. Die teure
- * Aggregation hat die DuckDB-Pipeline schon erledigt – hier passiert nur
- * SELECT + Rendering.
+ * Reads exclusively (read-only) from the cube DB and passes the data through as
+ * JSON to the frontend (dashboard.js: Chart.js + Leaflet). The DuckDB pipeline
+ * already did the expensive aggregation -- only SELECT + rendering happens
+ * here.
  */
 final class DashboardController implements LoggerAwareInterface
 {
@@ -36,9 +37,9 @@ final class DashboardController implements LoggerAwareInterface
     private const LL = 'LLL:EXT:sight_metrics/Resources/Private/Language/locallang_mod.xlf:';
 
     /**
-     * Label-Schluessel, die dashboard.js braucht (Praefix js. in locallang_mod.xlf).
-     * Werden serverseitig aufgeloest und als 'lang'-Map in den JSON-Payload gelegt --
-     * das JS bleibt frei von TYPO3-APIs und faellt ohne Map auf Englisch zurueck.
+     * Label keys that dashboard.js needs (prefix js. in locallang_mod.xlf).
+     * Resolved server-side and put into the JSON payload as a 'lang' map --
+     * the JS stays free of TYPO3 APIs and falls back to English without the map.
      */
     private const JS_LABEL_KEYS = [
         'loading', 'more', 'noData', 'new', 'asOf',
@@ -68,37 +69,41 @@ final class DashboardController implements LoggerAwareInterface
     {
         $view = $this->moduleTemplateFactory->create($request);
         $view->setTitle('SightMetrics');
+        // Always load CSS: error/onboarding/no-access pages are also styled via
+        // classes (no inline style attributes) -- this way the module works
+        // without style-src 'unsafe-inline' (CSP hardening).
+        $this->pageRenderer->addCssFile('EXT:sight_metrics/Resources/Public/Css/dashboard.css');
 
         $technical = null;
         $noAccess = false;
         $payload = ['meta' => new \stdClass(), 'daily' => [], 'cube' => [], 'sites' => [], 'siteId' => 0, 'window' => null];
         try {
             $params = $request->getQueryParams();
-            // null = kein Site-Mapping konfiguriert -> filterlos (Rueckwaertskompatibilitaet).
-            // [] = Mappings existieren, Benutzer darf nichts sehen -> leere Site-Liste
-            // (NICHT filterlos, sonst Mandantentrennungs-Bypass, siehe SiteSelector).
+            // null = no site mapping configured -> unfiltered (backward compatibility).
+            // [] = mappings exist, user may see nothing -> empty site list
+            // (NOT unfiltered, otherwise tenant-separation bypass, see SiteSelector).
             $allowedIds = SiteSelector::allowedSiteIds($this->siteFinder, $this->beUser());
             $noAccess = ($allowedIds === []);
             $sites = $noAccess ? [] : $this->cubeRepository->sites($allowedIds ?? []);
             $this->assertSchemaCompatible();
-            $siteId = SiteSelector::resolve($sites, (int)($params['site'] ?? 0));
-            // Leere Site-Liste (kein Zugriff oder Cube leer): meta(0) nicht abfragen,
-            // damit ein Cube mit tatsaechlicher site_id 0 nicht doch durchsickert.
+            $siteId = SiteSelector::resolve($sites, Params::toInt($params['site'] ?? null));
+            // Empty site list (no access or cube empty): don't query meta(0),
+            // so a cube with an actual site_id of 0 doesn't leak through anyway.
             $meta = $sites === [] ? [] : $this->cubeRepository->meta($siteId);
 
-            // Serverseitiges Zeitfenster: nur dieses Fenster wird aus dem Cube gelesen,
-            // damit das Transfervolumen nicht mit der Retention waechst.
+            // Server-side time window: only this window is read from the cube,
+            // so the transfer volume doesn't grow with the retention.
             [$from, $bis] = WindowResolver::resolve(
-                isset($meta['von']) ? (string)$meta['von'] : null,
-                isset($meta['bis']) ? (string)$meta['bis'] : null,
+                Params::toStringOrNull($meta['von'] ?? null),
+                Params::toStringOrNull($meta['bis'] ?? null),
                 $this->windowDays(),
-                isset($params['from']) ? (string)$params['from'] : null,
-                isset($params['to']) ? (string)$params['to'] : null,
+                Params::toStringOrNull($params['from'] ?? null),
+                Params::toStringOrNull($params['to'] ?? null),
             );
 
-            // Root-Dims (siehe TopNDims): Top-N wird vorab geladen. Kind-Dims (Drill-down,
-            // z. B. browser_version) stehen NIE im Initial-Payload -- die werden erst per
-            // Ajax-Nachladen (parentKey) geholt, wenn der Nutzer eine Zeile aufklappt.
+            // Root dims (see TopNDims): Top-N is preloaded. Child dims (drill-down,
+            // e.g. browser_version) are NEVER in the initial payload -- these are only
+            // fetched via Ajax lazy-loading (parentKey) when the user expands a row.
             $topN = [];
             foreach (TopNDims::ROOT_METRIC_BY_DIM as $dim => $metric) {
                 $limit = TopNDims::defaultLimitFor($dim);
@@ -115,19 +120,19 @@ final class DashboardController implements LoggerAwareInterface
                 'daily' => $this->cubeRepository->daily($siteId, $from, $bis),
                 'cube' => $this->cubeRepository->cube($siteId, $from, $bis, TopNDims::excludedFromFullPayload()),
                 'topN' => $topN,
-                // Seitenbaum: 2 Ebenen vorab (erste Ebene aufgeklappt + deren Kinder
-                // sichtbar, wie beim frueheren client-seitigen Aufbau); tiefere Ebenen
-                // laedt dashboard.js beim Aufklappen ueber die tree-Ajax-Route nach.
+                // Page tree: 2 levels upfront (first level expanded + its children
+                // visible, like the earlier client-side setup); deeper levels are
+                // lazy-loaded by dashboard.js via the tree Ajax route on expand.
                 'tree' => $this->cubeRepository->urlTree($siteId, $from, $bis, '', 2, TopNDims::DEFAULT_LIMIT),
-                // AJAX-Routen werden von TYPO3 automatisch mit "ajax_" praefixiert
-                // (siehe Configuration/Backend/AjaxRoutes.php, AbstractServiceProvider).
+                // AJAX routes are automatically prefixed by TYPO3 with "ajax_"
+                // (see Configuration/Backend/AjaxRoutes.php, AbstractServiceProvider).
                 'topNUrl' => (string)$this->uriBuilder->buildUriFromRoute('ajax_sightmetrics_topn'),
                 'treeUrl' => (string)$this->uriBuilder->buildUriFromRoute('ajax_sightmetrics_tree'),
                 'sites' => $sites,
                 'siteId' => $siteId,
                 'window' => ['von' => $from, 'bis' => $bis],
-                // UI-Sprache des BE-Benutzers: Label-Map + Locale (Zahlenformat,
-                // Intl.DisplayNames-Laendernamen) fuer dashboard.js.
+                // UI language of the backend user: label map + locale (number format,
+                // Intl.DisplayNames country names) for dashboard.js.
                 'lang' => $this->jsLabels(),
                 'locale' => $this->beUserLocale(),
             ];
@@ -139,24 +144,26 @@ final class DashboardController implements LoggerAwareInterface
             ]);
         }
 
-        // Fehlerfall: konfigurierbare Fehlerseite rendern (kein Dashboard/keine Assets).
+        // Error case: render the configurable error page (no dashboard/no assets).
         if ($technical !== null) {
             $conf = [];
             try {
-                $conf = $this->extensionConfiguration->get('sight_metrics');
+                $raw = $this->extensionConfiguration->get('sight_metrics');
+                $conf = \is_array($raw) ? $raw : [];
             } catch (\Throwable) {
             }
-            // Technische Meldung (kann DB-Host/User/Pfade enthalten) nur an Admins,
-            // auch wenn showTechnical fuer alle Modul-Nutzer aktiviert ist.
-            $isAdmin = ($GLOBALS['BE_USER'] ?? null)?->isAdmin() ?? false;
+            // Technical message (may contain DB host/user/paths) only to admins,
+            // even if showTechnical is enabled for all module users.
+            $beUser = $GLOBALS['BE_USER'] ?? null;
+            $isAdmin = $beUser instanceof BackendUserAuthentication && $beUser->isAdmin();
             $view->assign('error', ErrorPage::resolve($conf, $technical, $isAdmin));
             return $view->renderResponse('Dashboard/Index');
         }
 
-        // Leere Site-Liste, aber kein Fehler: statt eines leeren Dashboards eine
-        // gefuehrte Seite rendern -- entweder "kein Zugriff" (Mappings existieren,
-        // Benutzer hat keinen Webmount) oder Onboarding (Cube-DB noch ohne Daten,
-        // typisch: Extension installiert, Ingestion noch nicht eingerichtet).
+        // Empty site list but no error: instead of an empty dashboard, render a
+        // guided page -- either "no access" (mappings exist, user has no
+        // webmount) or onboarding (cube DB still without data, typically:
+        // extension installed, ingestion not yet set up).
         if ($payload['sites'] === []) {
             $view->assign('error', null);
             $view->assign('noAccess', $noAccess);
@@ -164,10 +171,10 @@ final class DashboardController implements LoggerAwareInterface
             return $view->renderResponse('Dashboard/Index');
         }
 
-        // Erfolgsfall: Daten als CSP-sicherer JSON-Datenblock + Assets.
-        // JSON_INVALID_UTF8_SUBSTITUTE: url/referrer/ua stammen roh aus Webserver-Logs
-        // und koennen ungueltige UTF-8-Bytes enthalten (z. B. Bots); ohne dieses Flag
-        // liefert json_encode() false, ausserhalb des obigen try/catch.
+        // Success case: data as a CSP-safe JSON data block + assets.
+        // JSON_INVALID_UTF8_SUBSTITUTE: url/referrer/ua come raw from webserver logs
+        // and can contain invalid UTF-8 bytes (e.g. bots); without this flag
+        // json_encode() returns false, outside the try/catch above.
         $json = json_encode(
             $payload,
             JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
@@ -175,18 +182,17 @@ final class DashboardController implements LoggerAwareInterface
         );
         if ($json === false) {
             $this->logger?->error('SightMetrics: JSON-Encoding fehlgeschlagen', ['jsonError' => json_last_error_msg()]);
-            // conf=[] -> showTechnical greift hier ohnehin nicht, isAdmin-Wert daher irrelevant.
+            // conf=[] -> showTechnical doesn't apply here anyway, isAdmin value therefore irrelevant.
             $view->assign('error', ErrorPage::resolve([], 'JSON-Encoding fehlgeschlagen: ' . json_last_error_msg(), false));
             return $view->renderResponse('Dashboard/Index');
         }
-        $this->pageRenderer->addCssFile('EXT:sight_metrics/Resources/Public/Css/dashboard.css');
         $this->pageRenderer->addCssFile('EXT:sight_metrics/Resources/Public/Vendor/leaflet.css');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/chart.umd.min.js');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/leaflet.js');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/world.js');
-        // Dashboard als natives ES-Modul (Configuration/JavaScriptModules.php);
-        // Module sind deferred und laufen daher NACH den klassischen Vendor-Skripten
-        // oben -- Chart/L/SM_WORLD sind beim Modulstart als Globals verfuegbar.
+        // Dashboard as a native ES module (Configuration/JavaScriptModules.php);
+        // modules are deferred and thus run AFTER the classic vendor scripts
+        // above -- Chart/L/SM_WORLD are available as globals when the module starts.
         $this->pageRenderer->loadJavaScriptModule('@sightmetrics/dashboard.js');
 
         $view->assign('payload', $json);
@@ -195,10 +201,10 @@ final class DashboardController implements LoggerAwareInterface
     }
 
     /**
-     * Backend-Benutzer aus dem globalen TYPO3-Kontext. Fehlt er (sollte im Backend-Modul-
-     * Kontext praktisch nie vorkommen), wird das als Fehler behandelt statt stillschweigend
-     * "kein Zugriff" oder "voller Zugriff" anzunehmen – landet im bestehenden Catch-Block
-     * inkl. Logging und Fehlerseite.
+     * Backend user from the global TYPO3 context. If missing (should practically never
+     * happen in the backend module context), this is treated as an error instead of
+     * silently assuming "no access" or "full access" -- ends up in the existing catch
+     * block including logging and error page.
      */
     private function beUser(): BackendUserAuthentication
     {
@@ -210,11 +216,11 @@ final class DashboardController implements LoggerAwareInterface
     }
 
     /**
-     * DB-Vertrag pruefen (docs/SCHEMA.md): Schreibt eine NEUERE Ingestion in die
-     * Cube-DB, als diese Extension versteht, wird hart mit klarer Meldung
-     * abgebrochen (landet auf der Fehlerseite; Details fuer Admins) statt mit
-     * kryptischen Query-Fehlern oder still falschen Zahlen weiterzulaufen.
-     * Aeltere/fehlende Version (Legacy) bleibt kompatibel.
+     * Check the DB contract (docs/SCHEMA.md): if an ingestion writes a NEWER
+     * version into the cube DB than this extension understands, abort hard with
+     * a clear message (ends up on the error page; details for admins) instead of
+     * continuing with cryptic query errors or silently wrong numbers.
+     * Older/missing version (legacy) stays compatible.
      */
     private function assertSchemaCompatible(): void
     {
@@ -229,9 +235,9 @@ final class DashboardController implements LoggerAwareInterface
     }
 
     /**
-     * Loest die js.*-Labels in der Sprache des BE-Benutzers auf. Fehlertolerant:
-     * ohne Language-Service (Tests) bleibt die Map leer, dashboard.js nutzt dann
-     * seine englischen Fallbacks.
+     * Resolves the js.*-labels in the backend user's language. Fault-tolerant:
+     * without a language service (tests) the map stays empty, dashboard.js then
+     * uses its English fallbacks.
      *
      * @return array<string,string>
      */
@@ -252,13 +258,13 @@ final class DashboardController implements LoggerAwareInterface
     }
 
     /**
-     * Sprach-/Locale-Kennung des BE-Benutzers (z. B. 'de'), 'en' als Fallback --
-     * fuer toLocaleString()/Intl.DisplayNames im Frontend.
+     * Language/locale identifier of the backend user (e.g. 'de'), 'en' as fallback --
+     * for toLocaleString()/Intl.DisplayNames in the frontend.
      */
     private function beUserLocale(): string
     {
         try {
-            $lang = (string)($this->beUser()->user['lang'] ?? '');
+            $lang = Params::toString($this->beUser()->user['lang'] ?? null);
         } catch (\Throwable) {
             $lang = '';
         }
@@ -266,15 +272,15 @@ final class DashboardController implements LoggerAwareInterface
     }
 
     /**
-     * Standard-Zeitfenster in Tagen aus der Extension-Konfiguration (Default 92 ~ 3 Monate).
-     * 0 = unbegrenzt (gesamter Datenbestand laden).
+     * Default time window in days from the extension configuration (default 92 ~ 3 months).
+     * 0 = unbounded (load the entire dataset).
      */
     private function windowDays(): int
     {
         try {
             $conf = $this->extensionConfiguration->get('sight_metrics');
-            if (isset($conf['windowDays']) && $conf['windowDays'] !== '') {
-                return max(0, (int)$conf['windowDays']);
+            if (\is_array($conf) && isset($conf['windowDays']) && $conf['windowDays'] !== '') {
+                return max(0, Params::toInt($conf['windowDays']));
             }
         } catch (\Throwable) {
         }
