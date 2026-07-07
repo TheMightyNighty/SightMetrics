@@ -460,4 +460,28 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
 
         self::assertSame(['pv' => 2, 'v' => 6, 'count' => 2], $summary);
     }
+
+    // ---- Schema-Version (DB-Vertrag, docs/SCHEMA.md) ---------------------------
+
+    public function testSchemaVersionIsNullForLegacyDatabases(): void
+    {
+        // Fixture-meta ohne schema_version-Wert (Spalte fehlt oder NULL) = Legacy-Ingestion.
+        $this->insertSite(1, 'Site-1');
+
+        self::assertNull($this->repo()->schemaVersion());
+    }
+
+    public function testSchemaVersionReturnsHighestStampedVersion(): void
+    {
+        $this->insertSite(1, 'Site-1');
+        $c = $this->cubeConn();
+        try {
+            $c->executeStatement('ALTER TABLE meta ADD COLUMN schema_version INTEGER');
+        } catch (\Throwable) {
+            // Spalte existiert bereits (Singleton-SQLite-Verbindung ueber Tests hinweg)
+        }
+        $c->executeStatement('UPDATE meta SET schema_version = 5');
+
+        self::assertSame(5, $this->repo()->schemaVersion());
+    }
 }

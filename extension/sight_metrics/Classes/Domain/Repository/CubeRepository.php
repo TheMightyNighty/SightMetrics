@@ -24,6 +24,13 @@ use TYPO3\CMS\Core\Database\Query\QueryBuilder;
  */
 final class CubeRepository
 {
+    /**
+     * Unterstuetzte Version des DB-Vertrags (Tabellen cube/daily/meta, siehe
+     * docs/SCHEMA.md). Die Ingestion schreibt ihre Version nach meta.schema_version;
+     * ist die Version dort NEUER, passen Leser und Schreiber nicht mehr zusammen.
+     */
+    public const SCHEMA_VERSION = 1;
+
     private const CONNECTION = 'cube';
 
     /**
@@ -107,6 +114,24 @@ final class CubeRepository
             ));
         }
         return $qb->executeQuery()->fetchAllAssociative();
+    }
+
+    /**
+     * Hoechste in meta abgelegte Schema-Version des DB-Vertrags.
+     * null = Spalte fehlt oder ist leer (Legacy-Ingestion vor der Versionierung) --
+     * wird als kompatibel behandelt, nur eine NEUERE Version als SCHEMA_VERSION
+     * ist ein harter Fehler (siehe DashboardController::assertSchemaCompatible()).
+     */
+    public function schemaVersion(): ?int
+    {
+        try {
+            $qb = $this->qb('meta');
+            $value = $qb->addSelectLiteral('MAX(schema_version)')->from('meta')
+                ->executeQuery()->fetchOne();
+            return $value === null ? null : (int)$value;
+        } catch (\Throwable) {
+            return null; // Spalte existiert nicht: Bestands-DB einer aelteren Ingestion
+        }
     }
 
     /**

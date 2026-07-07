@@ -62,6 +62,17 @@ final class HealthCommand extends Command
             return $this->emit($output, $asJson, 2, 'Keine Sites in der Cube-DB (meta leer)', []);
         }
 
+        // DB-Vertrag (docs/SCHEMA.md): neuere Schreiber-Version als CRIT melden,
+        // bevor Freshness geprueft wird -- die Zahlen waeren nicht vertrauenswuerdig.
+        $schema = $this->repo->schemaVersion();
+        if ($schema !== null && $schema > CubeRepository::SCHEMA_VERSION) {
+            return $this->emit($output, $asJson, 2, sprintf(
+                'Inkompatible Cube-Schema-Version %d (Extension unterstuetzt bis %d) - Extension aktualisieren',
+                $schema,
+                CubeRepository::SCHEMA_VERSION
+            ), []);
+        }
+
         $now = time();
         $worst = 0;
         $details = [];

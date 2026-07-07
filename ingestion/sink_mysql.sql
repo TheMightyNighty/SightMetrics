@@ -11,12 +11,20 @@
 -- Parameter (SET VARIABLE): site_id, site_name
 -- ===========================================================================
 
+-- Versionierter DB-Vertrag zwischen Paket A (Schreiber) und Paket B (Leser).
+-- Bei INKOMPATIBLEN Aenderungen an cube/daily/meta hochzaehlen und docs/SCHEMA.md
+-- fortschreiben; die Extension prueft die Version beim Modulaufbau.
+SET VARIABLE sm_schema_version = 1;
+
 -- Schema (idempotent, multi-site)
 CREATE TABLE IF NOT EXISTS m.${SM_TABLE_CUBE}  (site_id INTEGER, datum DATE, dim VARCHAR, dimkey VARCHAR, pv BIGINT, v BIGINT);
 CREATE TABLE IF NOT EXISTS m.${SM_TABLE_DAILY} (site_id INTEGER, datum DATE, visits BIGINT, pageviews BIGINT, uniques BIGINT, bounces BIGINT, bytes BIGINT);
 CREATE TABLE IF NOT EXISTS m.${SM_TABLE_META}  (site_id INTEGER, site VARCHAR, von VARCHAR, bis VARCHAR,
                                     visits_total BIGINT, pageviews_total BIGINT, uniques_total BIGINT,
-                                    bounces_total BIGINT, bytes_total BIGINT, erzeugt VARCHAR);
+                                    bounces_total BIGINT, bytes_total BIGINT, erzeugt VARCHAR,
+                                    schema_version INTEGER);
+-- Bestands-DBs (vor Schema-Version) nachziehen; MariaDB versteht IF NOT EXISTS.
+CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_META} ADD COLUMN IF NOT EXISTS schema_version INTEGER');
 
 -- Datumsbereich des zu ersetzenden Batches (VARCHAR 'YYYY-MM-DD').
 -- Vorrang hat ein explizit gesetzter Bereich range_from/range_to (Matomo-Pfad
@@ -53,7 +61,8 @@ INSERT INTO m.${SM_TABLE_META}
          CAST(MIN(datum) AS VARCHAR), CAST(MAX(datum) AS VARCHAR),
          SUM(visits)::BIGINT, SUM(pageviews)::BIGINT, SUM(uniques)::BIGINT,
          SUM(bounces)::BIGINT, SUM(bytes)::BIGINT,
-         strftime(now(), '%Y-%m-%d %H:%M')
+         strftime(now(), '%Y-%m-%d %H:%M'),
+         getvariable('sm_schema_version')::INTEGER
   FROM m.${SM_TABLE_DAILY} WHERE site_id = getvariable('site_id')::INTEGER;
 
 SELECT 'cube_rows_this_site' k, (SELECT count(*) FROM m.${SM_TABLE_CUBE} WHERE site_id = getvariable('site_id')::INTEGER) n
