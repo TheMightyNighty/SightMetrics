@@ -63,6 +63,11 @@ spec:
                 # optional: device-detector bot list (tools/fetch_bot_list.sh,
                 # runbook §3) mount as a volume and enable here:
                 # - { name: SM_BOT_RE_PATH, value: /bots/bot_regex.list }
+                # optional: device-detector browser/OS lists (tools/fetch_ua_lists.sh):
+                # - { name: SM_UA_BROWSERS_PATH, value: /ua/browsers.tsv }
+                # - { name: SM_UA_OSS_PATH,      value: /ua/oss.tsv }
+                # optional: IPv6 geo ranges (start_ip,end_ip,cc; e.g. the DB-IP CSV):
+                # - { name: SM_GEO6_PATH, value: /geo/dbip-country-lite.csv }
                 # optional: heartbeat (healthchecks.io or similar), alert webhook
                 # - { name: HEALTHCHECK_URL, value: "https://hc-ping.com/…" }
                 # - { name: ALERT_WEBHOOK,   value: "https://hooks.slack.com/…" }
