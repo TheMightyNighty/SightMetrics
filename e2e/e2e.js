@@ -82,7 +82,8 @@ function check(name, cond) {
     return {
       options: sel ? sel.options.length : 0,
       customHidden: !!(custom && custom.hidden),
-      hasYear: sel ? Array.from(sel.options).some(o => /^Jahr /.test(o.textContent)) : false,
+      // Label ist lokalisiert (en "Year …", de "Jahr …") – beide akzeptieren.
+      hasYear: sel ? Array.from(sel.options).some(o => /^(Jahr|Year) /.test(o.textContent)) : false,
     };
   });
   check('Zeitraum-Dropdown mit Vorgaben', preset.options >= 8);

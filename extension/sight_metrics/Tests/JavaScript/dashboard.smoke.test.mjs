@@ -16,6 +16,21 @@ const EXT_ROOT = join(HERE, '..', '..');
 const TEMPLATE_PATH = join(EXT_ROOT, 'Resources/Private/Templates/Dashboard/Index.html');
 const DASHBOARD_JS_PATH = join(EXT_ROOT, 'Resources/Public/JavaScript/dashboard.js');
 
+// dashboard.js ist ein natives ES-Modul (import aus ./modules/*) -- window.eval()
+// kann keine Module ausfuehren. Stattdessen: jsdom-Objekte als Node-Globals
+// exponieren und das Modul per dynamic import laden. Cache-Buster (?t=...) noetig,
+// weil Nodes ESM-Cache dasselbe Modul sonst nur einmal (fuer den ersten Test) laeuft.
+async function loadDashboard(window) {
+  for (const key of ['window', 'document', 'location', 'Chart', 'L', 'SM_WORLD']) {
+    globalThis[key] = window[key];
+  }
+  // fetch: spaet gebunden, damit Tests window.fetch nach buildDom() stubben koennen.
+  globalThis.fetch = (...args) => window.fetch(...args);
+  const { pathToFileURL } = await import('node:url');
+  await import(pathToFileURL(DASHBOARD_JS_PATH).href + '?t=' + Date.now() + Math.random());
+  await waitForReady(window);
+}
+
 // Kleines, aber realistisches Payload -- deckt Tages-Serie, Cube-Zeilen (inkl. country-Dimension
 // fuer die Karte) und Multi-Site-Auswahl ab.
 const FAKE_PAYLOAD = {
@@ -65,9 +80,8 @@ function buildDom(payload) {
     JSON.stringify(payload || FAKE_PAYLOAD).replace(/</g, '\\u003c')
   );
 
-  // runScripts:'dangerously' noetig, damit window.eval() spaeter mit vollem Zugriff auf
-  // window/document laeuft (Standardverhalten von jsdom ohne diese Option ist sandboxed).
-  // Unbedenklich hier: wir evaluieren nur unseren eigenen, lokalen dashboard.js-Quelltext.
+  // runScripts:'dangerously' laesst Event-Handler/Timer im jsdom-Fenster laufen;
+  // das Modul selbst wird via loadDashboard() (Node-ESM + jsdom-Globals) geladen.
   const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
     url: 'http://localhost/',
     runScripts: 'dangerously',
@@ -127,12 +141,10 @@ function buildDom(payload) {
 
 test('dashboard.js laedt Payload, rendert KPIs, Linien-/Balkenchart und Karte ohne Fehler', async () => {
   const { window, chartInstances, geoJsonCalls, windowErrors } = buildDom();
-  const source = readFileSync(DASHBOARD_JS_PATH, 'utf8');
 
   // dashboard.js registriert bei 'loading' seinen eigenen DOMContentLoaded-Listener (init())
   // und laeuft danach genau wie im echten Browser -- hier mitwarten statt synchron zu pruefen.
-  window.eval(source);
-  await waitForReady(window);
+  await loadDashboard(window);
 
   assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
 
@@ -182,17 +194,15 @@ test('Top-N-Barliste (z. B. Keyword) rendert Server-Top-N und laedt "+ N weitere
       }),
     });
   };
-
-  const source = readFileSync(DASHBOARD_JS_PATH, 'utf8');
-  window.eval(source);
-  await waitForReady(window);
+  await loadDashboard(window);
   assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
 
   const keywordEl = window.document.getElementById('bl-keyword');
   assert.ok(keywordEl.textContent.includes('rathaus'), 'initiale Top-N-Zeilen aus dem Payload muessen gerendert werden');
   const more = keywordEl.querySelector('.bl-more-click');
   assert.ok(more, '"+ N weitere" muss angezeigt werden, wenn total.count > geladene Zeilen');
-  assert.equal(more.textContent, '+ 3 weitere');
+  // Ohne lang-Map im Payload greift der englische Fallback (Default-Sprache der XLF).
+  assert.equal(more.textContent, '+ 3 more');
 
   more.click();
   await new Promise((r) => setTimeout(r, 0));
@@ -230,10 +240,7 @@ test('Drill-down (Browser -> Version) laedt Kinder per parentKey nach, wenn eine
       }),
     });
   };
-
-  const source = readFileSync(DASHBOARD_JS_PATH, 'utf8');
-  window.eval(source);
-  await waitForReady(window);
+  await loadDashboard(window);
   assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
 
   const browserEl = window.document.getElementById('bl-browser');
@@ -286,10 +293,7 @@ test('Seitenbaum rendert vorgeladene 2 Ebenen und laedt tiefere Aeste per path-F
       }),
     });
   };
-
-  const source = readFileSync(DASHBOARD_JS_PATH, 'utf8');
-  window.eval(source);
-  await waitForReady(window);
+  await loadDashboard(window);
   assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
 
   const treeEl = window.document.getElementById('w-tree');
@@ -313,10 +317,8 @@ test('dashboard.js bricht sauber ab, wenn Chart.js/Leaflet fehlen (kein Wurf, ke
   const { window, windowErrors } = buildDom();
   delete window.Chart;
   delete window.L;
-  const source = readFileSync(DASHBOARD_JS_PATH, 'utf8');
 
-  window.eval(source);
-  await waitForReady(window);
+  await loadDashboard(window);
 
   assert.deepEqual(windowErrors, [], 'ohne Chart.js/Leaflet darf dashboard.js nicht werfen, nur fruehzeitig abbrechen');
 });

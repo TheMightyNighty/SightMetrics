@@ -1,14 +1,14 @@
-# cat=fehlerseite//10; type=string; label=Titel der Fehlerseite (DB nicht erreichbar)
-errorTitle = Auswertung derzeit nicht verfügbar
+# cat=errorpage//10; type=string; label=Error page title (database unreachable). Empty = built-in default.
+errorTitle =
 
-# cat=fehlerseite//20; type=text; label=Text der Fehlerseite
-errorMessage = Die Verbindung zur Auswertungs-Datenbank ist zurzeit unterbrochen. Bitte versuchen Sie es später erneut oder informieren Sie den Betrieb.
+# cat=errorpage//20; type=text; label=Error page text. Empty = built-in default.
+errorMessage =
 
-# cat=fehlerseite//30; type=boolean; label=Technische Fehlermeldung anzeigen (nur fuer Admins/Debug)
+# cat=errorpage//30; type=boolean; label=Show technical error message (admins only)
 showTechnical = 0
 
-# cat=leistung//10; type=int+; label=Zeitfenster in Tagen: nur dieses Fenster wird aus der Cube-DB geladen (begrenzt das Transfervolumen unabhaengig von der Retention). 0 = unbegrenzt.
+# cat=performance//10; type=int+; label=Time window in days: only this window is loaded from the cube DB (limits transfer volume independent of retention). 0 = unlimited.
 windowDays = 92
 
-# cat=leistung//20; type=int+; label=Cache-TTL in Sekunden fuer daily()/cube()-Reads aus der Cube-DB (TYPO3-Cache-Framework, Cache "sight_metrics"). 0 = kein Caching, jeder Aufruf liest frisch.
+# cat=performance//20; type=int+; label=Cache TTL in seconds for daily()/cube() reads from the cube DB (TYPO3 caching framework, cache "sight_metrics"). 0 = no caching, every call reads fresh.
 cacheLifetime = 60

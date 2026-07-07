@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.3.0 (2026-07-07)
+
+### Qualitaets-Offensive (Notenschnitt-Massnahmen 1-5)
+- **Versionierter DB-Vertrag** (`docs/SCHEMA.md`): Ingestion stempelt
+  `meta.schema_version`; `CubeRepository::SCHEMA_VERSION` prueft beim Modulaufbau
+  und im `sightmetrics:health`-Command -- eine NEUERE Schreiber-Version bricht mit
+  klarer Meldung ab, Legacy-DBs (ohne Spalte) bleiben kompatibel.
+- **Onboarding-Seite**: leeres Cube -> gefuehrte 3-Schritte-Seite statt leerem
+  Dashboard; eigener "Kein Zugriff"-Hinweis bei Webmount-Sperre (beides lokalisiert).
+- **Bot-Erkennung auf Datenbasis**: `ingestion/tools/fetch_bot_list.sh` baut aus
+  matomo/device-detector (`bots.yml`) eine validierte RE2-Liste (~800 Muster,
+  `SM_BOT_RE_PATH`); ohne Liste greift weiter die eingebaute Heuristik.
+- **Screenshots** in der ReST-Doku (`Documentation/Images/`), deutsches Handbuch
+  verweist auf die ReST-Doku als massgebliche Quelle.
+- **Frontend als native ES-Module** (`Configuration/JavaScriptModules.php`,
+  `loadJavaScriptModule()`): dashboard.js + `modules/{util,i18n,export}.js`;
+  `tsc --checkJs`-Typpruefung (`npm run typecheck`) und JS-Tests in der CI;
+  referrer_type-Datenwerte werden fuer die Anzeige lokalisiert.
+
+### TER-Vorbereitung
+- **Vollstaendige Lokalisierung**: alle UI-Texte (Template, dashboard.js, Fehlerseite)
+  aus `locallang_mod.xlf` (Default Englisch) mit deutscher Uebersetzung
+  (`de.locallang_mod.xlf`). dashboard.js erhaelt die Labels als `lang`-Map im Payload
+  (`DashboardController::jsLabels()`), Laendernamen via `Intl.DisplayNames` in der
+  Sprache des BE-Benutzers, Zahlenformate via BE-User-Locale.
+- **ReST-Dokumentation** unter `Documentation/` (docs.typo3.org-Format, Englisch):
+  Introduction, Installation, Configuration, Usage, Known Problems – inkl. deutlichem
+  Hinweis, dass die separat betriebene SightMetrics-Ingestion Voraussetzung ist.
+- **Formalia**: Author/E-Mail in `ext_emconf.php`/`composer.json`, `support`-Links,
+  englische Extension-Beschreibung; `ext_conf_template.txt`-Labels englisch,
+  Fehlerseiten-Defaults englisch (per Extension-Konfiguration ueberschreibbar).
+
+### Geaendert (Ingestion, Paket A)
+- Tagesgrenzen-Cut im inkrementellen Import (kein Datenverlust an der Tagesgrenze;
+  ein Tag erscheint erst nach Abschluss), Bot-/Crawler-Filter (`SM_BOT_FILTER`),
+  IPv6-robustes Parsing (Land `??`), Statuscode-Panel zeigt 4xx/5xx,
+  Edge/Opera-Erkennung, verankerte Referrer-Heuristik, `SM_TZ` fuer Besuchszeiten,
+  konfigurierbare Download-Endungen (`SM_DOWNLOAD_RE`).
+- Container gehaertet (non-root UID 10001, readOnlyRootFilesystem-tauglich),
+  vollstaendige k8s-Manifeste (`ingestion/scheduling/k8s/`), GHCR-Image-Workflow.
+
 ## 1.2.0 (2026-07-03)
 
 ### Sicherheit

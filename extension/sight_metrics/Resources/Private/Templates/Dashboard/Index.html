@@ -3,6 +3,9 @@
     data-namespace-typo3-fluid="true"
 >
 
+<f:comment>Alle Labels aus locallang_mod.xlf (Default Englisch, de.locallang_mod.xlf Deutsch).</f:comment>
+<f:variable name="ll" value="LLL:EXT:sight_metrics/Resources/Private/Language/locallang_mod.xlf:" />
+
 <f:if condition="{error}">
 <f:then>
     <div style="max-width:680px;margin:48px auto;padding:32px 36px;text-align:center;
@@ -19,74 +22,119 @@
 </f:then>
 <f:else>
 
+<f:if condition="{noAccess}">
+<f:then>
+    <div style="max-width:680px;margin:48px auto;padding:32px 36px;text-align:center;
+                border:1px solid #e3e8ef;border-radius:12px;background:#fff;
+                font:15px/1.5 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#1d2733">
+        <div style="font-size:46px;line-height:1;color:#67758a" aria-hidden="true">🔒</div>
+        <h1 style="font-size:20px;margin:14px 0 8px"><f:translate key="{ll}tpl.noAccess.title" /></h1>
+        <p style="color:#67758a;margin:0"><f:translate key="{ll}tpl.noAccess.text" /></p>
+    </div>
+</f:then>
+<f:else>
+<f:if condition="{onboarding}">
+<f:then>
+    <div style="max-width:760px;margin:48px auto;padding:32px 40px;
+                border:1px solid #e3e8ef;border-radius:12px;background:#fff;
+                font:15px/1.6 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#1d2733">
+        <div style="font-size:46px;line-height:1" aria-hidden="true">📊</div>
+        <h1 style="font-size:22px;margin:14px 0 6px"><f:translate key="{ll}tpl.ob.title" /></h1>
+        <p style="color:#67758a;margin:0 0 22px"><f:translate key="{ll}tpl.ob.intro" /></p>
+        <ol style="margin:0;padding-left:22px">
+            <li style="margin-bottom:14px">
+                <strong><f:translate key="{ll}tpl.ob.step1.title" /></strong><br>
+                <span style="color:#67758a"><f:translate key="{ll}tpl.ob.step1.text" /></span>
+            </li>
+            <li style="margin-bottom:14px">
+                <strong><f:translate key="{ll}tpl.ob.step2.title" /></strong><br>
+                <span style="color:#67758a"><f:translate key="{ll}tpl.ob.step2.text" /></span>
+            </li>
+            <li style="margin-bottom:14px">
+                <strong><f:translate key="{ll}tpl.ob.step3.title" /></strong><br>
+                <span style="color:#67758a"><f:translate key="{ll}tpl.ob.step3.text" /></span><br>
+                <code style="display:inline-block;margin-top:6px;padding:3px 8px;background:#f4f6f9;border-radius:4px;font-size:13px">vendor/bin/typo3 sightmetrics:health</code>
+            </li>
+        </ol>
+        <p style="margin:22px 0 0">
+            <a href="https://github.com/TheMIghtyNighty/SightMetrics" target="_blank" rel="noopener noreferrer">
+                <f:translate key="{ll}tpl.ob.docs" /></a>
+        </p>
+    </div>
+</f:then>
+<f:else>
+
 <script type="application/json" id="sm-data"><f:format.raw>{payload}</f:format.raw></script>
 
 <div id="sightmetrics">
     <div class="sm-bar">
         <div class="sm-site" id="w-site">–</div>
-        <select id="w-siteselect" class="sm-siteselect" aria-label="Website wählen"></select>
+        <select id="w-siteselect" class="sm-siteselect" aria-label="{f:translate(key: '{ll}tpl.siteSelect')}"></select>
         <div class="sm-spacer"></div>
-        <label for="w-preset">Zeitraum</label>
-        <select id="w-preset" class="sm-preset" aria-label="Zeitraum wählen"></select>
+        <label for="w-preset"><f:translate key="{ll}tpl.period" /></label>
+        <select id="w-preset" class="sm-preset" aria-label="{f:translate(key: '{ll}tpl.periodSelect')}"></select>
         <span id="w-custom" class="sm-custom" hidden>
-            <label for="w-month">Monat</label>
-            <input type="month" id="w-month" aria-label="Bestimmten Monat wählen">
-            <label for="w-from" style="margin-left:8px">von</label><input type="date" id="w-from">
-            <label for="w-to" style="margin-left:8px">bis</label><input type="date" id="w-to">
+            <label for="w-month"><f:translate key="{ll}tpl.month" /></label>
+            <input type="month" id="w-month" aria-label="{f:translate(key: '{ll}tpl.monthPick')}">
+            <label for="w-from" style="margin-left:8px"><f:translate key="{ll}tpl.from" /></label><input type="date" id="w-from">
+            <label for="w-to" style="margin-left:8px"><f:translate key="{ll}tpl.to" /></label><input type="date" id="w-to">
         </span>
-        <label class="sm-cmp"><input type="checkbox" id="w-cmp"> Vorperiode vergleichen</label>
-        <button type="button" id="w-csv" class="sm-btn" title="Aktuellen Zeitraum als CSV exportieren">CSV</button>
-        <button type="button" id="w-pdf" class="sm-btn" title="Als PDF drucken/speichern">PDF</button>
+        <label class="sm-cmp"><input type="checkbox" id="w-cmp"> <f:translate key="{ll}tpl.compare" /></label>
+        <button type="button" id="w-csv" class="sm-btn" title="{f:translate(key: '{ll}tpl.csvTitle')}">CSV</button>
+        <button type="button" id="w-pdf" class="sm-btn" title="{f:translate(key: '{ll}tpl.pdfTitle')}">PDF</button>
         <span class="sm-gen" id="w-gen"></span>
     </div>
 
-    <div class="sm-kpis" role="region" aria-label="Kennzahlen">
-        <div class="sm-kpi"><div class="v" id="k-visits">–</div><div class="d" id="d-visits"></div><div class="l">Besuche</div></div>
-        <div class="sm-kpi"><div class="v" id="k-uniq">–</div><div class="d" id="d-uniq"></div><div class="l">Eindeutige Besucher*</div></div>
-        <div class="sm-kpi"><div class="v" id="k-pv">–</div><div class="d" id="d-pv"></div><div class="l">Seitenaufrufe</div></div>
-        <div class="sm-kpi"><div class="v" id="k-bounce">–</div><div class="d" id="d-bounce"></div><div class="l">Absprungrate</div></div>
-        <div class="sm-kpi"><div class="v" id="k-band">–</div><div class="d" id="d-band"></div><div class="l">Bandbreite</div></div>
+    <div class="sm-kpis" role="region" aria-label="{f:translate(key: '{ll}tpl.kpiRegion')}">
+        <div class="sm-kpi"><div class="v" id="k-visits">–</div><div class="d" id="d-visits"></div><div class="l"><f:translate key="{ll}tpl.kpi.visits" /></div></div>
+        <div class="sm-kpi"><div class="v" id="k-uniq">–</div><div class="d" id="d-uniq"></div><div class="l"><f:translate key="{ll}tpl.kpi.uniques" /></div></div>
+        <div class="sm-kpi"><div class="v" id="k-pv">–</div><div class="d" id="d-pv"></div><div class="l"><f:translate key="{ll}tpl.kpi.pageviews" /></div></div>
+        <div class="sm-kpi"><div class="v" id="k-bounce">–</div><div class="d" id="d-bounce"></div><div class="l"><f:translate key="{ll}tpl.kpi.bounce" /></div></div>
+        <div class="sm-kpi"><div class="v" id="k-band">–</div><div class="d" id="d-band"></div><div class="l"><f:translate key="{ll}tpl.kpi.bandwidth" /></div></div>
     </div>
 
-    <div class="sm-card"><h2>Verlauf</h2><div class="sm-chart"><canvas id="w-time" role="img" aria-label="Verlaufsgrafik: Seitenaufrufe, Besuche und Eindeutige Besucher"></canvas></div></div>
+    <div class="sm-card"><h2><f:translate key="{ll}tpl.sec.trend" /></h2><div class="sm-chart"><canvas id="w-time" role="img" aria-label="{f:translate(key: '{ll}tpl.aria.trend')}"></canvas></div></div>
 
-    <h2 class="sm-sec">Besucher</h2>
-    <div class="sm-card"><h3>Besucherkarte</h3><div id="w-map" class="sm-chart map" role="img" aria-label="Weltkarte: Besuche nach Land"></div></div>
+    <h2 class="sm-sec"><f:translate key="{ll}tpl.sec.visitors" /></h2>
+    <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.map" /></h3><div id="w-map" class="sm-chart map" role="img" aria-label="{f:translate(key: '{ll}tpl.aria.map')}"></div></div>
     <div class="sm-grid sm-g2">
-        <div class="sm-card"><h3>Länder</h3><div id="bl-country" class="barlist"></div></div>
-        <div class="sm-card"><h3>Besuchszeiten (Stunde)</h3><div class="sm-chart"><canvas id="w-hour" role="img" aria-label="Balkendiagramm: Seitenaufrufe nach Tagesstunde"></canvas></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.countries" /></h3><div id="bl-country" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.hours" /></h3><div class="sm-chart"><canvas id="w-hour" role="img" aria-label="{f:translate(key: '{ll}tpl.aria.hours')}"></canvas></div></div>
     </div>
     <div class="sm-grid sm-g3">
-        <div class="sm-card"><h3>Browser <span class="sm-hint">▸ klicken für Versionen</span></h3><div id="bl-browser" class="barlist"></div></div>
-        <div class="sm-card"><h3>Betriebssystem <span class="sm-hint">▸ klicken für Versionen</span></h3><div id="bl-os" class="barlist"></div></div>
-        <div class="sm-card"><h3>Gerätetyp <span class="sm-hint">▸ klicken für Modelle</span></h3><div id="bl-device" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.browser" /> <span class="sm-hint"><f:translate key="{ll}tpl.hint.versions" /></span></h3><div id="bl-browser" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.os" /> <span class="sm-hint"><f:translate key="{ll}tpl.hint.versions" /></span></h3><div id="bl-os" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.device" /> <span class="sm-hint"><f:translate key="{ll}tpl.hint.models" /></span></h3><div id="bl-device" class="barlist"></div></div>
     </div>
 
-    <h2 class="sm-sec">Akquise</h2>
+    <h2 class="sm-sec"><f:translate key="{ll}tpl.sec.acquisition" /></h2>
     <div class="sm-grid sm-g3">
-        <div class="sm-card"><h3>Referrer-Typen <span class="sm-hint">▸ klicken für Quellen</span></h3><div id="bl-reftype" class="barlist"></div></div>
-        <div class="sm-card"><h3>Referrer-URLs</h3><div id="bl-refurl" class="barlist"></div></div>
-        <div class="sm-card"><h3>Suchbegriffe</h3><div id="bl-keyword" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.refTypes" /> <span class="sm-hint"><f:translate key="{ll}tpl.hint.sources" /></span></h3><div id="bl-reftype" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.refUrls" /></h3><div id="bl-refurl" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.keywords" /></h3><div id="bl-keyword" class="barlist"></div></div>
     </div>
 
-    <h2 class="sm-sec">Verhalten</h2>
+    <h2 class="sm-sec"><f:translate key="{ll}tpl.sec.behavior" /></h2>
     <div class="sm-grid sm-g23">
-        <div class="sm-card"><h3>Seiten (Drill-down)</h3><div id="w-tree" class="sm-tree"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.pages" /></h3><div id="w-tree" class="sm-tree"></div></div>
         <div>
-            <div class="sm-card"><h3>Einstiegsseiten</h3><div id="bl-entry" class="barlist"></div></div>
-            <div class="sm-card"><h3>Ausstiegsseiten</h3><div id="bl-exit" class="barlist"></div></div>
+            <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.entry" /></h3><div id="bl-entry" class="barlist"></div></div>
+            <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.exit" /></h3><div id="bl-exit" class="barlist"></div></div>
         </div>
     </div>
     <div class="sm-grid sm-g3">
-        <div class="sm-card"><h3>Downloads</h3><div id="bl-download" class="barlist"></div></div>
-        <div class="sm-card"><h3>Statuscodes</h3><div id="bl-status" class="barlist"></div></div>
-        <div class="sm-card"><h3>HTTP-Methoden</h3><div id="bl-method" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.downloads" /></h3><div id="bl-download" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.status" /></h3><div id="bl-status" class="barlist"></div></div>
+        <div class="sm-card"><h3><f:translate key="{ll}tpl.panel.methods" /></h3><div id="bl-method" class="barlist"></div></div>
     </div>
 
-    <p class="sm-foot">* Eindeutige Besucher ueber einen Mehrtages-Zeitraum sind als Summe der
-       Tageswerte angenaehert (additiv nicht exakt; produktiv via HyperLogLog). Tageswerte exakt.
-       Daten read-only aus der Cube-DB.</p>
+    <p class="sm-foot"><f:translate key="{ll}tpl.foot" /></p>
 </div>
+
+</f:else>
+</f:if>
+</f:else>
+</f:if>
 
 </f:else>
 </f:if>

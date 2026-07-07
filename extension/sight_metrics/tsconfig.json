@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "noEmit": true,
+        "target": "es2019",
+        "module": "es2022",
+        "moduleResolution": "bundler",
+        "lib": ["es2020", "dom", "dom.iterable"],
+        "skipLibCheck": true,
+        "strict": false
+    },
+    "include": [
+        "Resources/Public/JavaScript/dashboard.js",
+        "Resources/Public/JavaScript/modules/*.js",
+        "Resources/Public/JavaScript/types.d.ts"
+    ]
+}

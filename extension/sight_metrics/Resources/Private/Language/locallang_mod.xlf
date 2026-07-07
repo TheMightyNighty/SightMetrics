@@ -1,7 +1,122 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<xliff version="1.0"><file source-language="en" datatype="plaintext" original="messages" date="2026-06-24T00:00:00Z" product-name="sight_metrics">
-  <header/><body>
-    <trans-unit id="mlang_tabs_tab"><source>SightMetrics</source></trans-unit>
-    <trans-unit id="mlang_labels_tablabel"><source>SightMetrics</source></trans-unit>
-    <trans-unit id="mlang_labels_tabdescr"><source>Zugriffs-Auswertung aus der Cube-DB (read-only).</source></trans-unit>
-  </body></file></xliff>
+<xliff version="1.0">
+  <file source-language="en" datatype="plaintext" original="EXT:sight_metrics/Resources/Private/Language/locallang_mod.xlf" date="2026-07-06T00:00:00Z" product-name="sight_metrics">
+    <header/>
+    <body>
+      <trans-unit id="mlang_tabs_tab"><source>SightMetrics</source></trans-unit>
+      <trans-unit id="mlang_labels_tablabel"><source>SightMetrics</source></trans-unit>
+      <trans-unit id="mlang_labels_tabdescr"><source>Access analytics from the cube database (read-only).</source></trans-unit>
+
+      <!-- Template (Dashboard/Index.html) -->
+      <trans-unit id="tpl.siteSelect"><source>Choose website</source></trans-unit>
+      <trans-unit id="tpl.period"><source>Period</source></trans-unit>
+      <trans-unit id="tpl.periodSelect"><source>Choose period</source></trans-unit>
+      <trans-unit id="tpl.month"><source>Month</source></trans-unit>
+      <trans-unit id="tpl.monthPick"><source>Choose a specific month</source></trans-unit>
+      <trans-unit id="tpl.from"><source>from</source></trans-unit>
+      <trans-unit id="tpl.to"><source>to</source></trans-unit>
+      <trans-unit id="tpl.compare"><source>Compare previous period</source></trans-unit>
+      <trans-unit id="tpl.csvTitle"><source>Export current period as CSV</source></trans-unit>
+      <trans-unit id="tpl.pdfTitle"><source>Print/save as PDF</source></trans-unit>
+      <trans-unit id="tpl.kpiRegion"><source>Key figures</source></trans-unit>
+      <trans-unit id="tpl.kpi.visits"><source>Visits</source></trans-unit>
+      <trans-unit id="tpl.kpi.uniques"><source>Unique visitors*</source></trans-unit>
+      <trans-unit id="tpl.kpi.pageviews"><source>Page views</source></trans-unit>
+      <trans-unit id="tpl.kpi.bounce"><source>Bounce rate</source></trans-unit>
+      <trans-unit id="tpl.kpi.bandwidth"><source>Bandwidth</source></trans-unit>
+      <trans-unit id="tpl.sec.trend"><source>Trend</source></trans-unit>
+      <trans-unit id="tpl.sec.visitors"><source>Visitors</source></trans-unit>
+      <trans-unit id="tpl.sec.acquisition"><source>Acquisition</source></trans-unit>
+      <trans-unit id="tpl.sec.behavior"><source>Behaviour</source></trans-unit>
+      <trans-unit id="tpl.panel.map"><source>Visitor map</source></trans-unit>
+      <trans-unit id="tpl.panel.countries"><source>Countries</source></trans-unit>
+      <trans-unit id="tpl.panel.hours"><source>Visiting hours (hour of day)</source></trans-unit>
+      <trans-unit id="tpl.panel.browser"><source>Browsers</source></trans-unit>
+      <trans-unit id="tpl.panel.os"><source>Operating systems</source></trans-unit>
+      <trans-unit id="tpl.panel.device"><source>Device types</source></trans-unit>
+      <trans-unit id="tpl.panel.refTypes"><source>Referrer types</source></trans-unit>
+      <trans-unit id="tpl.panel.refUrls"><source>Referrer URLs</source></trans-unit>
+      <trans-unit id="tpl.panel.keywords"><source>Search keywords</source></trans-unit>
+      <trans-unit id="tpl.panel.pages"><source>Pages (drill-down)</source></trans-unit>
+      <trans-unit id="tpl.panel.entry"><source>Entry pages</source></trans-unit>
+      <trans-unit id="tpl.panel.exit"><source>Exit pages</source></trans-unit>
+      <trans-unit id="tpl.panel.downloads"><source>Downloads</source></trans-unit>
+      <trans-unit id="tpl.panel.status"><source>Status codes</source></trans-unit>
+      <trans-unit id="tpl.panel.methods"><source>HTTP methods</source></trans-unit>
+      <trans-unit id="tpl.hint.versions"><source>▸ click for versions</source></trans-unit>
+      <trans-unit id="tpl.hint.models"><source>▸ click for models</source></trans-unit>
+      <trans-unit id="tpl.hint.sources"><source>▸ click for sources</source></trans-unit>
+      <trans-unit id="tpl.aria.trend"><source>Trend chart: page views, visits and unique visitors</source></trans-unit>
+      <trans-unit id="tpl.aria.map"><source>World map: visits by country</source></trans-unit>
+      <trans-unit id="tpl.aria.hours"><source>Bar chart: page views by hour of day</source></trans-unit>
+      <trans-unit id="tpl.foot"><source>* Unique visitors over multi-day ranges are approximated as the sum of daily values (not exact when added up). Daily values are exact. Data is read-only from the cube database.</source></trans-unit>
+
+      <!-- Onboarding (cube DB empty) / no access -->
+      <trans-unit id="tpl.noAccess.title"><source>No access to any analytics site</source></trans-unit>
+      <trans-unit id="tpl.noAccess.text"><source>Site mappings are configured, but your backend account has no web mount on any mapped site. Ask an administrator to grant access to the page tree of the site you need.</source></trans-unit>
+      <trans-unit id="tpl.ob.title"><source>No data yet – set up the ingestion pipeline</source></trans-unit>
+      <trans-unit id="tpl.ob.intro"><source>This module only reads pre-aggregated data. It needs the SightMetrics ingestion pipeline (a separate DuckDB-based container/cron job outside TYPO3) to fill the cube database – three steps:</source></trans-unit>
+      <trans-unit id="tpl.ob.step1.title"><source>Create the cube database</source></trans-unit>
+      <trans-unit id="tpl.ob.step1.text"><source>A MariaDB/MySQL database (e.g. "analytics") with a write user for the ingestion (cube_rw) and a SELECT-only user for this module (report_ro).</source></trans-unit>
+      <trans-unit id="tpl.ob.step2.title"><source>Run the ingestion nightly</source></trans-unit>
+      <trans-unit id="tpl.ob.step2.text"><source>Deploy the ingestion container (or cron job) with your sites.conf and the CUBE_DSN secret; it parses the web server logs and writes daily aggregates. Kubernetes manifests and a runbook are included in the repository.</source></trans-unit>
+      <trans-unit id="tpl.ob.step3.title"><source>Connect TYPO3</source></trans-unit>
+      <trans-unit id="tpl.ob.step3.text"><source>Configure the read-only "cube" database connection in additional.php and map your TYPO3 sites via sightmetrics_site_id. Then verify the setup:</source></trans-unit>
+      <trans-unit id="tpl.ob.docs"><source>Documentation and ingestion pipeline on GitHub →</source></trans-unit>
+
+      <!-- JavaScript (dashboard.js, delivered via payload) -->
+      <trans-unit id="js.loading"><source>loading …</source></trans-unit>
+      <trans-unit id="js.more"><source>+ %s more</source></trans-unit>
+      <trans-unit id="js.noData"><source>no data</source></trans-unit>
+      <trans-unit id="js.new"><source>new</source></trans-unit>
+      <trans-unit id="js.asOf"><source>As of: %s</source></trans-unit>
+      <trans-unit id="js.visits"><source>Visits</source></trans-unit>
+      <trans-unit id="js.pageviews"><source>Page views</source></trans-unit>
+      <trans-unit id="js.uniques"><source>Unique visitors</source></trans-unit>
+      <trans-unit id="js.pageviewsPrev"><source>Page views (previous period)</source></trans-unit>
+      <trans-unit id="js.unknown"><source>Unknown</source></trans-unit>
+      <!-- Anzeige-Labels fuer die (deutschen) referrer_type-Datenwerte aus dem Cube -->
+      <trans-unit id="js.ref.direct"><source>Direct</source></trans-unit>
+      <trans-unit id="js.ref.search"><source>Search engines</source></trans-unit>
+      <trans-unit id="js.ref.social"><source>Social media</source></trans-unit>
+      <trans-unit id="js.ref.website"><source>Websites</source></trans-unit>
+      <trans-unit id="js.csv.website"><source>Website</source></trans-unit>
+      <trans-unit id="js.csv.period"><source>Period</source></trans-unit>
+      <trans-unit id="js.csv.to"><source>to</source></trans-unit>
+      <trans-unit id="js.csv.daily"><source>Trend (daily)</source></trans-unit>
+      <trans-unit id="js.csv.date"><source>Date</source></trans-unit>
+      <trans-unit id="js.csv.bounces"><source>Bounces</source></trans-unit>
+      <trans-unit id="js.csv.bytes"><source>Bytes</source></trans-unit>
+      <trans-unit id="js.csv.value"><source>Value</source></trans-unit>
+      <trans-unit id="js.csv.partial"><source>– loaded subset only, see "+ N more" in the dashboard</source></trans-unit>
+      <trans-unit id="js.csv.pages"><source>Pages (subtree totals) – loaded subset only, see page tree in the dashboard</source></trans-unit>
+      <trans-unit id="js.csv.path"><source>Path</source></trans-unit>
+      <trans-unit id="js.dim.country"><source>Countries</source></trans-unit>
+      <trans-unit id="js.dim.browser"><source>Browsers</source></trans-unit>
+      <trans-unit id="js.dim.os"><source>Operating systems</source></trans-unit>
+      <trans-unit id="js.dim.device"><source>Device types</source></trans-unit>
+      <trans-unit id="js.dim.refTypes"><source>Referrer types</source></trans-unit>
+      <trans-unit id="js.dim.refUrls"><source>Referrer URLs</source></trans-unit>
+      <trans-unit id="js.dim.keywords"><source>Search keywords</source></trans-unit>
+      <trans-unit id="js.dim.entry"><source>Entry pages</source></trans-unit>
+      <trans-unit id="js.dim.exit"><source>Exit pages</source></trans-unit>
+      <trans-unit id="js.dim.downloads"><source>Downloads</source></trans-unit>
+      <trans-unit id="js.dim.status"><source>Status codes</source></trans-unit>
+      <trans-unit id="js.dim.methods"><source>HTTP methods</source></trans-unit>
+      <trans-unit id="js.dim.hours"><source>Visiting hours (hour of day)</source></trans-unit>
+      <trans-unit id="js.preset.all"><source>Entire period</source></trans-unit>
+      <trans-unit id="js.preset.window"><source>Last %s days</source></trans-unit>
+      <trans-unit id="js.preset.today"><source>Today</source></trans-unit>
+      <trans-unit id="js.preset.yesterday"><source>Yesterday</source></trans-unit>
+      <trans-unit id="js.preset.last7"><source>Last 7 days</source></trans-unit>
+      <trans-unit id="js.preset.last30"><source>Last 30 days</source></trans-unit>
+      <trans-unit id="js.preset.last90"><source>Last 90 days</source></trans-unit>
+      <trans-unit id="js.preset.thisMonth"><source>This month</source></trans-unit>
+      <trans-unit id="js.preset.lastMonth"><source>Last month</source></trans-unit>
+      <trans-unit id="js.preset.thisYear"><source>This year</source></trans-unit>
+      <trans-unit id="js.preset.lastYear"><source>Last year</source></trans-unit>
+      <trans-unit id="js.preset.year"><source>Year %s</source></trans-unit>
+      <trans-unit id="js.preset.custom"><source>Custom …</source></trans-unit>
+    </body>
+  </file>
+</xliff>

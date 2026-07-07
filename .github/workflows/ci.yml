@@ -52,6 +52,16 @@ jobs:
         working-directory: extension/sight_metrics
         run: vendor/bin/phpunit -c phpunit.xml.dist
 
+      # JS: Typpruefung (tsc --checkJs) + jsdom-Smoke-Tests der ES-Module.
+      # Nur einmal je Matrix noetig -> auf PHP 8.3 begrenzt.
+      - name: npm ci + typecheck + JS-Tests
+        if: matrix.php == '8.3'
+        working-directory: extension/sight_metrics
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+          npm test
+
   # ---- Job 2: DuckDB Pipeline-Test (selbst-contained) -----------------------
   pipeline:
     name: "Pipeline (DuckDB)"

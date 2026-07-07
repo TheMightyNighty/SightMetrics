@@ -1,11 +1,12 @@
 <?php
 $EM_CONF[$_EXTKEY] = [
-    'title' => 'SightMetrics – Zugriffsauswertung',
-    'description' => 'Backend-Modul: liest read-only die DuckDB-Cube-DB und zeigt die Auswertung (Verlauf, Seitenbaum, Geo/Technik, Top-Listen).',
+    'title' => 'SightMetrics – Web access analytics',
+    'description' => 'Privacy-friendly, log-file based web analytics backend module. Reads pre-aggregated data (read-only) from a cube database filled by the separately deployed SightMetrics ingestion pipeline (DuckDB) – no tracker, no cookies.',
     'category' => 'module',
-    'author' => 'SightMetrics',
+    'author' => 'Robert Schleiermacher',
+    'author_email' => 'robert.schleiermacher@gmail.com',
     'state' => 'stable',
-    'version' => '1.2.0',
+    'version' => '1.3.0',
     'constraints' => [
         'depends' => [
             'typo3' => '13.4.0-14.99.99',

@@ -1,8 +1,20 @@
 {
     "name": "sightmetrics/sight-metrics",
     "type": "typo3-cms-extension",
-    "description": "SightMetrics – Zugriffsauswertung als TYPO3-Backend-Modul (read-only auf die Cube-DB)",
+    "description": "SightMetrics – privacy-friendly, log-file based web analytics as a TYPO3 backend module (read-only on the cube DB; requires the separately deployed SightMetrics ingestion pipeline)",
     "license": "GPL-2.0-or-later",
+    "authors": [
+        {
+            "name": "Robert Schleiermacher",
+            "email": "robert.schleiermacher@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/TheMIghtyNighty/SightMetrics/issues",
+        "source": "https://github.com/TheMIghtyNighty/SightMetrics",
+        "docs": "https://docs.typo3.org/p/sightmetrics/sight-metrics/main/en-us/"
+    },
     "require": {
         "php": "^8.2",
         "typo3/cms-core": "^13.4 || ^14.0",

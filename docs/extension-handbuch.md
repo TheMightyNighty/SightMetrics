@@ -1,5 +1,12 @@
 # SightMetrics – Extension-Handbuch (Paket B)
 
+> **Hinweis / Note:** Die maßgebliche, gepflegte Extension-Dokumentation ist die
+> englische ReST-Doku in
+> [`extension/sight_metrics/Documentation/`](../extension/sight_metrics/Documentation/)
+> (für docs.typo3.org). Dieses deutsche Handbuch bleibt als Betreiber-Leitfaden
+> erhalten; bei Widersprüchen gilt die ReST-Doku bzw. [`docs/SCHEMA.md`](SCHEMA.md)
+> für den DB-Vertrag.
+
 TYPO3-Backend-Modul für Webzugriffsauswertung. Liest **ausschließlich read-only** die
 Cube-DB (MariaDB, User `report_ro`); kein DuckDB, kein Schreiben.
 
@@ -407,6 +414,19 @@ Zwei Buttons in der Leiste, rein clientseitig (kein Server-Roundtrip, CSP-konfor
 | Statuscodes | `status` |
 | HTTP-Methoden | `method` |
 | Seitenbaum | `url` (mit Drill-down) |
+| Besuchszeiten (Stunde) | `hour` |
+
+Hinweise zur Semantik (Details: Ingestion-Runbook §3/§8):
+
+- **Statuscodes** enthalten auch 4xx/5xx (Fehlerdiagnose); `v` ist dort die Zahl
+  *betroffener Besucher*, nicht Visits. Alle übrigen Panels zählen nur
+  erfolgreiche Zugriffe (Status < 400).
+- **Bots/Crawler** sind bereits in der Ingestion per User-Agent-Heuristik
+  ausgefiltert (`SM_BOT_FILTER`).
+- **Besuchszeiten** werden in der Ingestion-Zeitzone `SM_TZ` ausgewiesen
+  (Standard UTC; für deutsche Installationen `SM_TZ=Europe/Berlin` setzen).
+- Ein Tag erscheint erst **nach seinem Abschluss** (Tagesgrenzen-Cut des
+  inkrementellen Imports) – beim nächtlichen Lauf also jeweils der Vortag.
 
 ### Drill-down
 

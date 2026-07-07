@@ -17,6 +17,7 @@ use TYPO3\CMS\Backend\Routing\UriBuilder;
 use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
+use TYPO3\CMS\Core\Localization\LanguageServiceFactory;
 use TYPO3\CMS\Core\Page\PageRenderer;
 use TYPO3\CMS\Core\Site\SiteFinder;
 
@@ -32,6 +33,27 @@ final class DashboardController implements LoggerAwareInterface
 {
     use LoggerAwareTrait;
 
+    private const LL = 'LLL:EXT:sight_metrics/Resources/Private/Language/locallang_mod.xlf:';
+
+    /**
+     * Label-Schluessel, die dashboard.js braucht (Praefix js. in locallang_mod.xlf).
+     * Werden serverseitig aufgeloest und als 'lang'-Map in den JSON-Payload gelegt --
+     * das JS bleibt frei von TYPO3-APIs und faellt ohne Map auf Englisch zurueck.
+     */
+    private const JS_LABEL_KEYS = [
+        'loading', 'more', 'noData', 'new', 'asOf',
+        'visits', 'pageviews', 'uniques', 'pageviewsPrev', 'unknown',
+        'ref.direct', 'ref.search', 'ref.social', 'ref.website',
+        'csv.website', 'csv.period', 'csv.to', 'csv.daily', 'csv.date', 'csv.bounces',
+        'csv.bytes', 'csv.value', 'csv.partial', 'csv.pages', 'csv.path',
+        'dim.country', 'dim.browser', 'dim.os', 'dim.device', 'dim.refTypes', 'dim.refUrls',
+        'dim.keywords', 'dim.entry', 'dim.exit', 'dim.downloads', 'dim.status', 'dim.methods', 'dim.hours',
+        'preset.all', 'preset.window', 'preset.today', 'preset.yesterday',
+        'preset.last7', 'preset.last30', 'preset.last90',
+        'preset.thisMonth', 'preset.lastMonth', 'preset.thisYear', 'preset.lastYear',
+        'preset.year', 'preset.custom',
+    ];
+
     public function __construct(
         private readonly ModuleTemplateFactory $moduleTemplateFactory,
         private readonly PageRenderer $pageRenderer,
@@ -39,6 +61,7 @@ final class DashboardController implements LoggerAwareInterface
         private readonly ExtensionConfiguration $extensionConfiguration,
         private readonly SiteFinder $siteFinder,
         private readonly UriBuilder $uriBuilder,
+        private readonly LanguageServiceFactory $languageServiceFactory,
     ) {}
 
     public function handleRequest(ServerRequestInterface $request): ResponseInterface
@@ -47,6 +70,7 @@ final class DashboardController implements LoggerAwareInterface
         $view->setTitle('SightMetrics');
 
         $technical = null;
+        $noAccess = false;
         $payload = ['meta' => new \stdClass(), 'daily' => [], 'cube' => [], 'sites' => [], 'siteId' => 0, 'window' => null];
         try {
             $params = $request->getQueryParams();
@@ -54,7 +78,9 @@ final class DashboardController implements LoggerAwareInterface
             // [] = Mappings existieren, Benutzer darf nichts sehen -> leere Site-Liste
             // (NICHT filterlos, sonst Mandantentrennungs-Bypass, siehe SiteSelector).
             $allowedIds = SiteSelector::allowedSiteIds($this->siteFinder, $this->beUser());
-            $sites = $allowedIds === [] ? [] : $this->cubeRepository->sites($allowedIds ?? []);
+            $noAccess = ($allowedIds === []);
+            $sites = $noAccess ? [] : $this->cubeRepository->sites($allowedIds ?? []);
+            $this->assertSchemaCompatible();
             $siteId = SiteSelector::resolve($sites, (int)($params['site'] ?? 0));
             // Leere Site-Liste (kein Zugriff oder Cube leer): meta(0) nicht abfragen,
             // damit ein Cube mit tatsaechlicher site_id 0 nicht doch durchsickert.
@@ -100,6 +126,10 @@ final class DashboardController implements LoggerAwareInterface
                 'sites' => $sites,
                 'siteId' => $siteId,
                 'window' => ['von' => $from, 'bis' => $bis],
+                // UI-Sprache des BE-Benutzers: Label-Map + Locale (Zahlenformat,
+                // Intl.DisplayNames-Laendernamen) fuer dashboard.js.
+                'lang' => $this->jsLabels(),
+                'locale' => $this->beUserLocale(),
             ];
         } catch (\Throwable $e) {
             $technical = $e->getMessage();
@@ -123,6 +153,17 @@ final class DashboardController implements LoggerAwareInterface
             return $view->renderResponse('Dashboard/Index');
         }
 
+        // Leere Site-Liste, aber kein Fehler: statt eines leeren Dashboards eine
+        // gefuehrte Seite rendern -- entweder "kein Zugriff" (Mappings existieren,
+        // Benutzer hat keinen Webmount) oder Onboarding (Cube-DB noch ohne Daten,
+        // typisch: Extension installiert, Ingestion noch nicht eingerichtet).
+        if ($payload['sites'] === []) {
+            $view->assign('error', null);
+            $view->assign('noAccess', $noAccess);
+            $view->assign('onboarding', !$noAccess);
+            return $view->renderResponse('Dashboard/Index');
+        }
+
         // Erfolgsfall: Daten als CSP-sicherer JSON-Datenblock + Assets.
         // JSON_INVALID_UTF8_SUBSTITUTE: url/referrer/ua stammen roh aus Webserver-Logs
         // und koennen ungueltige UTF-8-Bytes enthalten (z. B. Bots); ohne dieses Flag
@@ -143,7 +184,10 @@ final class DashboardController implements LoggerAwareInterface
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/chart.umd.min.js');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/leaflet.js');
         $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/Vendor/world.js');
-        $this->pageRenderer->addJsFooterFile('EXT:sight_metrics/Resources/Public/JavaScript/dashboard.js');
+        // Dashboard als natives ES-Modul (Configuration/JavaScriptModules.php);
+        // Module sind deferred und laufen daher NACH den klassischen Vendor-Skripten
+        // oben -- Chart/L/SM_WORLD sind beim Modulstart als Globals verfuegbar.
+        $this->pageRenderer->loadJavaScriptModule('@sightmetrics/dashboard.js');
 
         $view->assign('payload', $json);
         $view->assign('error', null);
@@ -163,6 +207,62 @@ final class DashboardController implements LoggerAwareInterface
             throw new \RuntimeException('Kein Backend-Benutzer im Request-Kontext.');
         }
         return $beUser;
+    }
+
+    /**
+     * DB-Vertrag pruefen (docs/SCHEMA.md): Schreibt eine NEUERE Ingestion in die
+     * Cube-DB, als diese Extension versteht, wird hart mit klarer Meldung
+     * abgebrochen (landet auf der Fehlerseite; Details fuer Admins) statt mit
+     * kryptischen Query-Fehlern oder still falschen Zahlen weiterzulaufen.
+     * Aeltere/fehlende Version (Legacy) bleibt kompatibel.
+     */
+    private function assertSchemaCompatible(): void
+    {
+        $found = $this->cubeRepository->schemaVersion();
+        if ($found !== null && $found > CubeRepository::SCHEMA_VERSION) {
+            throw new \RuntimeException(sprintf(
+                'Incompatible cube schema: ingestion writes schema version %d, this extension supports up to %d. Update the sight_metrics extension (see docs/SCHEMA.md).',
+                $found,
+                CubeRepository::SCHEMA_VERSION
+            ));
+        }
+    }
+
+    /**
+     * Loest die js.*-Labels in der Sprache des BE-Benutzers auf. Fehlertolerant:
+     * ohne Language-Service (Tests) bleibt die Map leer, dashboard.js nutzt dann
+     * seine englischen Fallbacks.
+     *
+     * @return array<string,string>
+     */
+    private function jsLabels(): array
+    {
+        $labels = [];
+        try {
+            $languageService = $this->languageServiceFactory->createFromUserPreferences($this->beUser());
+            foreach (self::JS_LABEL_KEYS as $key) {
+                $label = $languageService->sL(self::LL . 'js.' . $key);
+                if ($label !== '') {
+                    $labels[$key] = $label;
+                }
+            }
+        } catch (\Throwable) {
+        }
+        return $labels;
+    }
+
+    /**
+     * Sprach-/Locale-Kennung des BE-Benutzers (z. B. 'de'), 'en' als Fallback --
+     * fuer toLocaleString()/Intl.DisplayNames im Frontend.
+     */
+    private function beUserLocale(): string
+    {
+        try {
+            $lang = (string)($this->beUser()->user['lang'] ?? '');
+        } catch (\Throwable) {
+            $lang = '';
+        }
+        return $lang !== '' && $lang !== 'default' ? $lang : 'en';
     }
 
     /**

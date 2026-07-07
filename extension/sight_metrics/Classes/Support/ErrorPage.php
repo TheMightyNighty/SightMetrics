@@ -9,8 +9,8 @@ namespace SightMetrics\Support;
  */
 final class ErrorPage
 {
-    public const DEFAULT_TITLE = 'Auswertung derzeit nicht verfügbar';
-    public const DEFAULT_MESSAGE = 'Die Verbindung zur Auswertungs-Datenbank ist zurzeit unterbrochen.';
+    public const DEFAULT_TITLE = 'Analytics currently unavailable';
+    public const DEFAULT_MESSAGE = 'The connection to the analytics database is currently interrupted.';
 
     /**
      * @param array<string,mixed> $conf Extension-Konfiguration (ext_conf_template)

@@ -1,13 +1,20 @@
-/* SightMetrics – TYPO3-Backend-Modul. Liest den CSP-sicheren JSON-Datenblock
+/* SightMetrics – TYPO3-Backend-Modul (natives ES-Modul, geladen ueber
+   Configuration/JavaScriptModules.php). Liest den CSP-sicheren JSON-Datenblock
    (read-only DBAL aus der Cube-DB) und rendert client-seitig. Matomo-nah:
-   Barlisten mit Drill-down (Klick -> Subtabelle) + Choropleth-Weltkarte. */
+   Barlisten mit Drill-down (Klick -> Subtabelle) + Choropleth-Weltkarte.
+   Chart.js/Leaflet/world.js bleiben klassische (globale) Vendor-Skripte. */
+import { DAY, SEP, esc, fmtBytes, hex2rgb, inR, lastSeg, lerpColor, toDate, toStr } from './modules/util.js';
+import { createI18n } from './modules/i18n.js';
+import { createCsvExport } from './modules/export.js';
+
 (function () {
   'use strict';
-  var SEP = ''; // Eltern|Kind-Trenner aus dem Cube
   var DATA = null, el0 = document.getElementById('sm-data');
   try { DATA = el0 ? JSON.parse(el0.textContent) : (window.SM_DATA || null); }
   catch (e) { DATA = window.SM_DATA || null; }
   if (!DATA) return;
+  var i18n = createI18n(DATA);
+  var t = i18n.t, tf = i18n.tf, nf = i18n.nf, landName = i18n.landName;
   var META = DATA.meta || {};
   var DAILY = (DATA.daily || []).map(function (d) {
     return {datum: d.datum, visits: +d.visits || 0, pageviews: +d.pageviews || 0,
@@ -46,7 +53,8 @@
   var TOPN_URL = DATA.topNUrl || null;
   var TOPN_WIN = DATA.window || {von: META.von, bis: META.bis};
   var CUR_A = TOPN_WIN.von, CUR_B = TOPN_WIN.bis; // aktuell gewaehlter Zeitraum (fuer Kind-Fetches)
-  var TOPN = {}; // dim -> {rows, total:{pv,v,count}, metric, from, to, loading, limit}
+  /** @type {Record<string, any>} dim -> {rows, total:{pv,v,count}, metric, from, to, loading, limit} */
+  var TOPN = {};
   Object.keys(TOPN_ROOT).forEach(function (dim) {
     var meta = TOPN_ROOT[dim], t = (DATA.topN && DATA.topN[dim]) || {};
     TOPN[dim] = {
@@ -65,10 +73,10 @@
     u.searchParams.set('dim', dim);
     u.searchParams.set('from', a);
     u.searchParams.set('to', b);
-    u.searchParams.set('limit', limit);
-    u.searchParams.set('offset', offset);
+    u.searchParams.set('limit', String(limit));
+    u.searchParams.set('offset', String(offset));
     if (parentKey != null) u.searchParams.set('parentKey', parentKey);
-    if (DATA.siteId) u.searchParams.set('site', DATA.siteId);
+    if (DATA.siteId) u.searchParams.set('site', String(DATA.siteId));
     return fetch(u.toString(), {credentials: 'same-origin'}).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
@@ -81,15 +89,15 @@
   function paintTopN(cont, state, rowFactory) {
     cont.innerHTML = '';
     var rows = state.rows;
-    if (!rows.length && !state.loading) { cont.innerHTML = '<div class="bl-more">keine Daten</div>'; return; }
+    if (!rows.length && !state.loading) { cont.innerHTML = '<div class="bl-more">' + esc(t('noData', 'no data')) + '</div>'; return; }
     var total = state.total[state.metric] || 1, max = rows.length ? rows[0][state.metric] : 1;
     rows.forEach(function (r) { rowFactory(cont, r, total, max); });
     var remaining = state.total.count - rows.length;
     if (state.loading) {
-      var l = document.createElement('div'); l.className = 'bl-more'; l.textContent = 'lädt …'; cont.appendChild(l);
+      var l = document.createElement('div'); l.className = 'bl-more'; l.textContent = t('loading', 'loading …'); cont.appendChild(l);
     } else if (remaining > 0) {
       var m = document.createElement('div'); m.className = 'bl-more bl-more-click';
-      m.textContent = '+ ' + nf(remaining) + ' weitere';
+      m.textContent = tf('more', '+ %s more', nf(remaining));
       m.setAttribute('role', 'button'); m.tabIndex = 0;
       var loadMore = function () {
         state.loading = true; paintTopN(cont, state, rowFactory);
@@ -109,12 +117,14 @@
   function topNRowFactory(dim, meta) {
     return function (cont, r, total, max) {
       var label = lastSeg(r.dimkey); // Eltern-Praefix (chr(31)-kodiert) fuer die Anzeige abtrennen
+      // referrer_type-Werte sind deutsche Datenwerte aus dem Cube -> lokalisieren.
+      if (dim === 'referrer_type') label = i18n.refTypeLabel(label);
       var row = rowEl(label, r[meta.metric], total, max, esc, !!meta.child);
       cont.appendChild(row);
       if (!meta.child) return;
       var sub = document.createElement('div'); sub.className = 'bl-sub'; sub.style.display = 'none';
       row.insertAdjacentElement('afterend', sub);
-      var built = false, lbl = row.querySelector('.bl-label');
+      var built = false, lbl = /** @type {any} */ (row.querySelector('.bl-label'));
       function toggleSub() {
         if (!built) {
           built = true;
@@ -181,17 +191,11 @@
     DK:'Denmark',IE:'Ireland',SG:'Singapore',MY:'Malaysia',PK:'Pakistan',BD:'Bangladesh',PH:'Philippines',
     SA:'Saudi Arabia',AE:'United Arab Emirates',IL:'Israel',CZ:'Czechia',HU:'Hungary',CL:'Chile',
     CO:'Colombia',NZ:'New Zealand',TW:'Taiwan',HK:'Hong Kong',KE:'Kenya',MA:'Morocco'};
-  var LAND = {US:'USA',CN:'China',JP:'Japan',KR:'Südkorea',DE:'Deutschland',GB:'Großbritannien',
-    FR:'Frankreich',PH:'Philippinen',IN:'Indien',BR:'Brasilien',CA:'Kanada',RU:'Russland',IT:'Italien',
-    ES:'Spanien',NL:'Niederlande',PL:'Polen',TR:'Türkei',SE:'Schweden',CH:'Schweiz',AT:'Österreich',
-    AU:'Australien',TW:'Taiwan',HK:'Hongkong','??':'Unbekannt'};
-
   var PAL = ['#15508c', '#2f8f5b', '#b9851d'];
   var charts = {};
+  /** DOM-Kurzform; bewusst 'any' (liefert je nach id input/canvas/select).
+      @type {(id: string) => any} */
   var $ = function (id) { return document.getElementById(id); };
-  var nf = function (n) { return Number(n).toLocaleString('de-DE'); };
-  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); };
-  var landName = function (c) { return LAND[c] || c; };
   // Chart.js-Instanz (neu-)erzeugen: einfacher als partielles Update, Datenmenge ist klein.
   function setChart(id, config) {
     if (charts[id]) charts[id].destroy();
@@ -229,13 +233,7 @@
     }
     return cc;
   }
-  function inR(d, a, b) { return d >= a && d <= b; }
-  function fmtBytes(b) { return b >= 1e9 ? (b/1e9).toFixed(2)+' GB' : b >= 1e6 ? (b/1e6).toFixed(1)+' MB' : b >= 1e3 ? (b/1e3).toFixed(0)+' KB' : b+' B'; }
-
   // --- Perioden-Vergleich -------------------------------------------------
-  var DAY = 86400000;
-  function toDate(s) { var p = s.split('-'); return Date.UTC(+p[0], +p[1] - 1, +p[2]); }
-  function toStr(ms) { var d = new Date(ms); return d.toISOString().slice(0, 10); }
   // Unmittelbar vorausgehender Zeitraum gleicher Länge, geklemmt auf verfügbare Daten.
   function prevRange(a, b) {
     var len = Math.round((toDate(b) - toDate(a)) / DAY) + 1;
@@ -248,11 +246,11 @@
   function setDelta(id, cur, prev, invert) {
     var elx = $(id); if (!elx) return;
     if (prev == null) { elx.textContent = ''; elx.className = 'd'; return; }
-    if (prev === 0) { elx.textContent = cur > 0 ? 'neu' : '±0'; elx.className = 'd flat'; return; }
+    if (prev === 0) { elx.textContent = cur > 0 ? t('new', 'new') : '±0'; elx.className = 'd flat'; return; }
     var pct = 100 * (cur - prev) / prev, up = pct > 0.05, down = pct < -0.05;
     var good = invert ? down : up;             // bei Absprungrate ist "runter" gut
     elx.className = 'd ' + (up ? 'up' : down ? 'down' : 'flat') + (good ? ' good' : (up || down ? ' bad' : ''));
-    elx.textContent = (up ? '▲ ' : down ? '▼ ' : '± ') + Math.abs(pct).toFixed(1).replace('.', ',') + ' %';
+    elx.textContent = (up ? '▲ ' : down ? '▼ ' : '± ') + i18n.pct1(pct) + ' %';
   }
   function dailySum(a, b, k) {
     return DAILY.reduce(function (s, d) { return inR(d.datum, a, b) ? s + d[k] : s; }, 0);
@@ -268,8 +266,6 @@
     }
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (x, y) { return y[metric] - x[metric]; });
   }
-  function lastSeg(k) { var i = k.lastIndexOf(SEP); return i < 0 ? k : k.slice(i + 1); }
-
   function rowEl(label, val, total, max, fmt, drillable) {
     var pct = 100 * val / total, w = Math.max(2, 100 * val / max);
     var row = document.createElement('div'); row.className = 'bl-row' + (drillable ? ' bl-drill' : '');
@@ -289,8 +285,8 @@
     top.forEach(function (r) {
       container.appendChild(rowEl(lastSeg(r.key), r[metric], total, max, fmt, false));
     });
-    if (rows.length > limit) { var m = document.createElement('div'); m.className = 'bl-more'; m.textContent = '+ ' + (rows.length - limit) + ' weitere'; container.appendChild(m); }
-    if (!top.length) container.innerHTML = '<div class="bl-more">keine Daten</div>';
+    if (rows.length > limit) { var m = document.createElement('div'); m.className = 'bl-more'; m.textContent = tf('more', '+ %s more', nf(rows.length - limit)); container.appendChild(m); }
+    if (!top.length) container.innerHTML = '<div class="bl-more">' + esc(t('noData', 'no data')) + '</div>';
   }
 
   function barlist(id, dim, a, b, metric, opts) {
@@ -305,12 +301,6 @@
   var leafletMap = null, mapLayer = null, mapLegend = null;
   // Hex -> [r,g,b] und linear interpoliert; kontinuierliche Skala statt fester Stufen,
   // damit die Faerbung tatsaechlich proportional zur Besuchszahl wirkt.
-  function hex2rgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
-  function lerpColor(c0, c1, t) {
-    var a = hex2rgb(c0), b = hex2rgb(c1);
-    var rgb = [0, 1, 2].map(function (i) { return Math.round(a[i] + (b[i] - a[i]) * t); });
-    return 'rgb(' + rgb.join(',') + ')';
-  }
   function renderMap(a, b) {
     if (typeof window.SM_WORLD === 'undefined' || typeof L === 'undefined') return;
     var rows = agg('country', a, b, 'v').filter(function (r) { return r.key !== '??'; });
@@ -344,7 +334,7 @@
       onEachFeature: function (f, layer) {
         var name = (f.properties && (f.properties.name || f.properties.NAME)) || '';
         var v = valueFor(f);
-        layer.bindTooltip(esc(name) + ': ' + nf(v) + ' Besuche', {sticky: true});
+        layer.bindTooltip(esc(name) + ': ' + nf(v) + ' ' + esc(t('visits', 'Visits')), {sticky: true});
         layer.on('mouseover', function () { layer.setStyle({weight: 1.5, color: '#b9851d'}); });
         layer.on('mouseout', function () { layer.setStyle({weight: .5, color: cc.mapBorder}); });
       }
@@ -381,10 +371,10 @@
     u.searchParams.set('path', path);
     u.searchParams.set('from', a);
     u.searchParams.set('to', b);
-    u.searchParams.set('limit', TREE_LIMIT);
-    u.searchParams.set('offset', offset);
-    u.searchParams.set('depth', depth || 1);
-    if (DATA.siteId) u.searchParams.set('site', DATA.siteId);
+    u.searchParams.set('limit', String(TREE_LIMIT));
+    u.searchParams.set('offset', String(offset));
+    u.searchParams.set('depth', String(depth || 1));
+    if (DATA.siteId) u.searchParams.set('site', String(DATA.siteId));
     return fetch(u.toString(), {credentials: 'same-origin'}).then(function (r) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
@@ -428,21 +418,22 @@
         }
       }
       if (open) buildChildren();
-      tog.onclick = function () {
+      var toggleBranch = function () {
         if (!childState) buildChildren();
         var o = ch.classList.toggle('open');
         tog.textContent = o ? '▾' : '▸';
         tog.setAttribute('aria-expanded', o ? 'true' : 'false');
       };
-      tog.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tog.onclick(); } };
+      tog.onclick = toggleBranch;
+      tog.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBranch(); } };
     });
 
     var remaining = (state.total.count || 0) - state.rows.length;
     if (state.loading) {
-      var l = document.createElement('div'); l.className = 'bl-more'; l.textContent = 'lädt …'; container.appendChild(l);
+      var l = document.createElement('div'); l.className = 'bl-more'; l.textContent = t('loading', 'loading …'); container.appendChild(l);
     } else if (remaining > 0) {
       var m = document.createElement('div'); m.className = 'bl-more bl-more-click';
-      m.textContent = '+ ' + nf(remaining) + ' weitere';
+      m.textContent = tf('more', '+ %s more', nf(remaining));
       m.setAttribute('role', 'button'); m.tabIndex = 0;
       var loadMore = function () {
         state.loading = true; paintTreeLevel(container, state, max, depth);
@@ -455,7 +446,7 @@
       m.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loadMore(); } };
       container.appendChild(m);
     } else if (!state.rows.length) {
-      container.innerHTML = '<div class="bl-more">keine Daten</div>';
+      container.innerHTML = '<div class="bl-more">' + esc(t('noData', 'no data')) + '</div>';
     }
   }
 
@@ -508,14 +499,15 @@
       ['d-visits', 'd-uniq', 'd-pv', 'd-bounce', 'd-band'].forEach(function (id) { setDelta(id, 0, null); });
     }
 
+    /** @type {Array<any>} */
     var tDatasets = [
-      {label: 'Seitenaufrufe', data: days.map(function (d) { return d.pageviews; }), borderColor: PAL[0], backgroundColor: PAL[0] + '14', fill: true, tension: .3, pointRadius: 0},
-      {label: 'Besuche', data: days.map(function (d) { return d.visits; }), borderColor: PAL[1], fill: false, tension: .3, pointRadius: 0},
-      {label: 'Eind. Besucher', data: days.map(function (d) { return d.uniques; }), borderColor: PAL[2], fill: false, tension: .3, pointRadius: 0}];
+      {label: t('pageviews', 'Page views'), data: days.map(function (d) { return d.pageviews; }), borderColor: PAL[0], backgroundColor: PAL[0] + '14', fill: true, tension: .3, pointRadius: 0},
+      {label: t('visits', 'Visits'), data: days.map(function (d) { return d.visits; }), borderColor: PAL[1], fill: false, tension: .3, pointRadius: 0},
+      {label: t('uniques', 'Unique visitors'), data: days.map(function (d) { return d.uniques; }), borderColor: PAL[2], fill: false, tension: .3, pointRadius: 0}];
     if (cmp) {
       // Vorperiode positionsweise (Tag 1 zu Tag 1) als gestrichelte Referenz der Seitenaufrufe.
       var pdays = DAILY.filter(function (d) { return inR(d.datum, cmp[0], cmp[1]); });
-      tDatasets.push({label: 'Seitenaufrufe (Vorperiode)', borderColor: '#9aa7b6', borderDash: [4, 3], fill: false, tension: .3, pointRadius: 0,
+      tDatasets.push({label: t('pageviewsPrev', 'Page views (previous period)'), borderColor: '#9aa7b6', borderDash: [4, 3], fill: false, tension: .3, pointRadius: 0,
         data: days.map(function (_, i) { return pdays[i] ? pdays[i].pageviews : null; })});
     }
     var cc = chartColors();
@@ -535,7 +527,7 @@
     var hx = []; for (var i = 0; i < 24; i++) hx.push(('0' + i).slice(-2));
     setChart('w-hour', {
       type: 'bar',
-      data: {labels: hx, datasets: [{label: 'Seitenaufrufe', data: hx.map(function (k) { return hmap[k] || 0; }), backgroundColor: PAL[0], borderRadius: 2}]},
+      data: {labels: hx, datasets: [{label: t('pageviews', 'Page views'), data: hx.map(function (k) { return hmap[k] || 0; }), backgroundColor: PAL[0], borderRadius: 2}]},
       options: {responsive: true, maintainAspectRatio: false,
         plugins: {legend: {display: false}, tooltip: {mode: 'index', intersect: false}},
         scales: {
@@ -555,86 +547,22 @@
     reloadTopNAll(a, b);
   }
 
-  // --- Export -------------------------------------------------------------
-  // Dimensionen für den CSV-Export (Schlüssel im Cube -> lesbare Überschrift + Metrik).
-  var EXPORT_DIMS = [
-    ['country', 'Länder', 'v', landName], ['browser', 'Browser', 'v'], ['os', 'Betriebssystem', 'v'],
-    ['device', 'Gerätetyp', 'v'], ['referrer_type', 'Referrer-Typen', 'v'], ['referrer_url', 'Referrer-URLs', 'v'],
-    ['keyword', 'Suchbegriffe', 'v'], ['entry', 'Einstiegsseiten', 'v'],
-    ['exit', 'Ausstiegsseiten', 'v'], ['download', 'Downloads', 'pv'], ['status', 'Statuscodes', 'pv'],
-    ['method', 'HTTP-Methoden', 'pv'], ['hour', 'Besuchszeiten (Stunde)', 'pv']];
-  // Fuehrende =/+/-/@ (Formel-Praefixe in Excel/LibreOffice/Sheets) mit Apostroph entschaerfen:
-  // url/referrer/keyword stammen roh aus Weblogs und sind angreiferkontrolliert
-  // (CSV-Injection, z.B. Referrer "=HYPERLINK(...)" wird sonst beim Oeffnen ausgefuehrt).
-  function csvCell(s) {
-    s = String(s == null ? '' : s);
-    if (/^[=+\-@]/.test(s)) s = "'" + s;
-    return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }
-  function csvRow(arr) { return arr.map(csvCell).join(';'); }
-  function buildCsv(a, b) {
-    var L = [], days = DAILY.filter(function (d) { return inR(d.datum, a, b); });
-    L.push(csvRow(['SightMetrics-Export']));
-    L.push(csvRow(['Website', META.site || '']));
-    L.push(csvRow(['Zeitraum', a, 'bis', b]));
-    L.push(csvRow(['Stand', META.erzeugt || '']));
-    L.push('');
-    L.push(csvRow(['Verlauf (täglich)']));
-    L.push(csvRow(['Datum', 'Besuche', 'Seitenaufrufe', 'Eind. Besucher', 'Absprünge', 'Bytes']));
-    days.forEach(function (d) { L.push(csvRow([d.datum, d.visits, d.pageviews, d.uniques, d.bounces, d.bytes])); });
-    EXPORT_DIMS.forEach(function (dd) {
-      // Top-N-Dims (siehe TOPN_ROOT): kein vollstaendiges agg() mehr lokal verfuegbar,
-      // Export spiegelt hier bewusst den aktuell geladenen Stand (Top-N + evtl. per
-      // "+ N weitere" nachgeladen), nicht mehr zwingend alle Werte des Zeitraums. Aufgeklappte
-      // Kind-Listen (Browser-Version usw.) sind im Export nicht enthalten -- nur die Root-Ebene.
-      var governed = TOPN_ROOT.hasOwnProperty(dd[0]);
-      var rows = governed
-        ? TOPN[dd[0]].rows.map(function (r) { return {key: r.dimkey, pv: r.pv, v: r.v}; })
-        : agg(dd[0], a, b, dd[2]);
-      rows = rows.filter(function (r) { return r.key != null && r.key !== ''; });
-      if (!rows.length) return;
-      var label = dd[3] || function (x) { return x; };
-      L.push('');
-      var title = dd[1] + ' (' + (dd[2] === 'v' ? 'Besuche' : 'Seitenaufrufe') + ')';
-      if (governed) title += ' – nur geladener Ausschnitt, siehe "+ N weitere" im Dashboard';
-      L.push(csvRow([title]));
-      L.push(csvRow(['Wert', dd[2] === 'v' ? 'Besuche' : 'Seitenaufrufe', 'Seitenaufrufe', 'Besuche']));
-      rows.forEach(function (r) { L.push(csvRow([label(r.key.split(SEP).join(' › ')), r[dd[2]], r.pv, r.v])); });
-    });
-
-    // Seitenbaum: rekursiver Dump des aktuell geladenen Stands (volle Pfade mit
-    // Unterbaum-Summen inkl. der Seite selbst) -- wie bei den Top-N-Dims bewusst nur
-    // der geladene Ausschnitt, kein Vollstaendigkeits-Request beim Export.
-    if (TREE.rows.length) {
-      L.push('');
-      L.push(csvRow(['Seiten (Unterbaum-Summen) – nur geladener Ausschnitt, siehe Seitenbaum im Dashboard']));
-      L.push(csvRow(['Pfad', 'Seitenaufrufe', 'Besuche']));
-      (function dumpTree(rows) {
-        rows.forEach(function (r) {
-          L.push(csvRow([r.path, r.pv, r.v]));
-          if (r.children) dumpTree(r.children);
-        });
-      })(TREE.rows);
-    }
-    return L.join('\r\n');
-  }
-  function download(name, text) {
-    var blob = new Blob(['﻿' + text], {type: 'text/csv;charset=utf-8'});  // BOM für Excel
-    var url = URL.createObjectURL(blob), a = document.createElement('a');
-    a.href = url; a.download = name; document.body.appendChild(a); a.click();
-    document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 0);
-  }
-  function slug(s) { return String(s || 'sightmetrics').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); }
+  // --- Export (modules/export.js) ------------------------------------------
+  // TREE/TOPN sind stabile Objekt-Referenzen (Reloads ersetzen nur .rows/.total),
+  // daher reicht die einmalige Uebergabe an die Factory.
+  var csvExport = createCsvExport({
+    i18n: i18n, META: META, DAILY: DAILY,
+    TOPN: TOPN, TOPN_ROOT: TOPN_ROOT, TREE: TREE, agg: agg,
+  });
   function exportCsv() {
-    var a = $('w-from').value, b = $('w-to').value;
-    download('sightmetrics_' + slug(META.site) + '_' + a + '_' + b + '.csv', buildCsv(a, b));
+    csvExport.exportCsv($('w-from').value, $('w-to').value);
   }
 
   function init() {
     if (typeof Chart === 'undefined') return;
     if (isDark()) { var rootEl = document.getElementById('sightmetrics'); if (rootEl) rootEl.classList.add('sm-dark'); }
     $('w-site').textContent = META.site || 'SightMetrics';
-    $('w-gen').textContent = META.erzeugt ? 'Stand: ' + META.erzeugt : '';
+    $('w-gen').textContent = META.erzeugt ? tf('asOf', 'As of: %s', META.erzeugt) : '';
     // Multi-Site: Auswahl füllen; Wechsel lädt das Modul mit ?site=<id> neu
     var sel = $('w-siteselect'), sites = DATA.sites || [];
     if (sel && sites.length) {
@@ -701,17 +629,18 @@
       var winDays = Math.round((toDate(WIN.bis) - toDate(WIN.von)) / DAY) + 1;
       var opt = [];
       // Default-Eintrag spiegelt den initial geladenen Stand wider (kein Reload beim Anzeigen).
-      if (fullData) opt.push(['all', 'Gesamter Zeitraum']);
-      else opt.push(['window', 'Letzte ' + winDays + ' Tage']);
-      opt.push(['today', 'Heute'], ['yesterday', 'Gestern'],
-        ['last7', 'Letzte 7 Tage'], ['last30', 'Letzte 30 Tage'], ['last90', 'Letzte 90 Tage'],
-        ['thismonth', 'Dieser Monat'], ['lastmonth', 'Letzter Monat'],
-        ['thisyear', 'Dieses Jahr'], ['lastyear', 'Letztes Jahr']);
+      if (fullData) opt.push(['all', t('preset.all', 'Entire period')]);
+      else opt.push(['window', tf('preset.window', 'Last %s days', winDays)]);
+      opt.push(['today', t('preset.today', 'Today')], ['yesterday', t('preset.yesterday', 'Yesterday')],
+        ['last7', t('preset.last7', 'Last 7 days')], ['last30', t('preset.last30', 'Last 30 days')],
+        ['last90', t('preset.last90', 'Last 90 days')],
+        ['thismonth', t('preset.thisMonth', 'This month')], ['lastmonth', t('preset.lastMonth', 'Last month')],
+        ['thisyear', t('preset.thisYear', 'This year')], ['lastyear', t('preset.lastYear', 'Last year')]);
       var y0 = +META.von.slice(0, 4), y1 = +META.bis.slice(0, 4);
-      for (var y = y1; y >= y0; y--) opt.push(['year:' + y, 'Jahr ' + y]);  // konkrete Jahre aus dem Datenbestand
-      if (!fullData) opt.push(['all', 'Gesamter Zeitraum']);
-      opt.push(['custom', 'Benutzerdefiniert …']);
-      sel.innerHTML = opt.map(function (o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('');
+      for (var y = y1; y >= y0; y--) opt.push(['year:' + y, tf('preset.year', 'Year %s', y)]);  // konkrete Jahre aus dem Datenbestand
+      if (!fullData) opt.push(['all', t('preset.all', 'Entire period')]);
+      opt.push(['custom', t('preset.custom', 'Custom …')]);
+      sel.innerHTML = opt.map(function (o) { return '<option value="' + o[0] + '">' + esc(o[1]) + '</option>'; }).join('');
       sel.value = opt[0][0];   // Default = geladener Stand
       sel.onchange = function () { toggleCustom(); if (sel.value !== 'custom') applyPreset(sel.value); };
       toggleCustom();
