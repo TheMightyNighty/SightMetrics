@@ -73,6 +73,9 @@ source "$(pwd)/lib_logformat.sh"
 # ---- Bot list (device-detector, optional; otherwise built-in heuristic) ----
 source "$(pwd)/lib_bots.sh"
 
+# ---- Browser/OS lists (device-detector, optional) ---------------------------
+source "$(pwd)/lib_ua.sh"
+
 # State key: md5(site_id:absolute_log_path) → collision-free filename
 STATE_KEY=$(printf '%s:%s' "$SITEID" "$(realpath "$LOGFILE")" | md5sum | cut -c1-16)
 STATE_FILE="${STATE_DIR}/${STATE_KEY}.offset"
@@ -148,6 +151,8 @@ ${BOT_SQL}
 .read '${GEO_SOURCE_SQL}'
 .read '${LOG_FORMAT_SQL}'
 .read 'day_cut.sql'
+${GEO6_SQL}
+${UA_SQL}
 COPY (SELECT CASE WHEN getvariable('cut_rid') IS NULL THEN -1
              ELSE (SELECT COALESCE(SUM(nbytes), 0) FROM raw_lines
                    WHERE rid < getvariable('cut_rid')) END::BIGINT AS consumed)
@@ -183,3 +188,7 @@ TS_NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 printf 'ts=%s site_id=%s status=ok wall_s=%s cpu_s=%s new_bytes=%s offset=%s logfile=%s\n' \
   "$TS_NOW" "$SITEID" "$WALL" "$CPU" "$NEW_BYTES" "$NEW_OFFSET" "$LOGFILE" \
   | tee "$METRICS_LAST" >> "$METRICS_LOG"
+
+# Prometheus textfile collector (node_exporter) -- see lib_prom.sh / runbook.
+source "$(pwd)/lib_prom.sh"
+prom_site_metrics "$SITEID" "$WALL" "$CPU" "$NEW_BYTES" "$NEW_OFFSET" "file"

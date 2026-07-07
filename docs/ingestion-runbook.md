@@ -170,8 +170,12 @@ einem kompatiblen JSON-Format. Pflichtfelder:
   (§8) schneidet den Batch an der ersten Zeile des noch laufenden Tages ab.
 - **Kein Sampling**: jede Zeile wird gezählt.
 - **Einheitliches Format** über alle Sites und Server (nginx und apache identisch).
-- **IPv6** wird gezählt (Visits/Pageviews/Unique-Hash), hat aber kein
-  GeoIP-Mapping → Land `??`. Der mitgelieferte Geo-Datensatz ist IPv4-only.
+- **IPv6** wird gezählt (Visits/Pageviews/Unique-Hash). GeoIP-Mapping für
+  IPv6 ist optional: `SM_GEO6_PATH` auf eine textuelle Range-Datei zeigen
+  lassen (`start_ip,end_ip,cc`; die DB-IP-CSV enthält IPv4+IPv6 in einer
+  Datei und kann direkt verwendet werden). Ohne v6-Datei → Land `??`.
+  Technisch: DuckDB-`inet`-Extension (im Container-Image enthalten;
+  lokal/CI wird sie beim ersten Lauf nachinstalliert).
 - **Bot-Filter**: Zeilen mit Crawler-/CLI-/Monitoring-User-Agents (Googlebot,
   curl, uptime-Checks, Scanner …) werden **ausgeschlossen** – wie bei Matomo
   zählen nur menschliche Besucher. Zwei Stufen:
@@ -190,6 +194,18 @@ einem kompatiblen JSON-Format. Pflichtfelder:
   Bots bleiben auch dort außen vor.
 - PII in Query-Strings (Tokens, E-Mails) vor dem Import maskieren/herausfiltern.
 
+- **Browser/OS-Erkennung**: Standard ist eine schnelle UA-Heuristik. Für
+  Matomo-identische Namen/Versionen einmalig `./tools/fetch_ua_lists.sh`
+  ausführen – baut aus matomo/device-detector (`browsers.yml`/`oss.yml`,
+  LGPL-3.0-or-later, deshalb nicht im Repo/Image) validierte Listen unter
+  `ua/`. Liegen sie dort (oder unter `SM_UA_BROWSERS_PATH`/`SM_UA_OSS_PATH`),
+  werden sie automatisch genutzt; UAs ohne Listen-Treffer fallen auf die
+  Heuristik zurück. Kosten: der Regex-Abgleich skaliert mit
+  (distinct UAs im Batch) × (~930 Muster) – beim nächtlichen One-Shot
+  unkritisch, bei sehr UA-diversen Großsites Laufzeit beobachten.
+  Gerätetyp/-modell bleibt heuristisch (Device-Erkennung ist in
+  device-detector wesentlich komplexer).
+
 **Auswertungs-Tuning (ENV, optional):**
 
 | Variable | Standard | Wirkung |
@@ -197,6 +213,8 @@ einem kompatiblen JSON-Format. Pflichtfelder:
 | `SM_BOT_FILTER` | `1` | `0` = Bot-/Crawler-Zeilen mitzählen |
 | `SM_TZ` | `UTC` | Zeitzone der `hour`-Dimension (Besuchszeiten-Panel), z. B. `Europe/Berlin`. Tages-Buckets bleiben UTC. |
 | `SM_DOWNLOAD_RE` | pdf/zip/Office/… | Regex (auf lowercase-URL) für die Download-Erkennung |
+| `SM_UA_BROWSERS_PATH` / `SM_UA_OSS_PATH` | `ua/browsers.tsv` / `ua/oss.tsv` | device-detector-Listen für Browser/OS (tools/fetch_ua_lists.sh); ohne Dateien greift die Heuristik |
+| `SM_GEO6_PATH` | – | IPv6-Geo-Ranges (`start_ip,end_ip,cc`, z. B. DB-IP-CSV); ohne Datei bleibt IPv6 bei Land `??` |
 | `SM_COMPLETE_DAYS` | `1` | `0` = Tagesgrenzen-Cut aus (nur für Backfills/Tests, siehe §8) |
 
 ---
@@ -602,6 +620,23 @@ Wiederherstellung: siehe [§17 Rollback](#17-rollback) (Dump entpacken und einsp
 ---
 
 ## 12. Monitoring & Alerting
+
+### Prometheus (node_exporter Textfile-Collector)
+
+Jeder erfolgreiche Import schreibt atomar `.prom`-Dateien ins `STATE_DIR`
+(`sightmetrics_site_<id>.prom` je Site, `sightmetrics_run.prom` je
+`run_all.sh`-Lauf): Zeitstempel des letzten Erfolgs, Dauer/CPU, verarbeitete
+Bytes, Offset bzw. OK/FAIL-Zähler. Einsammeln:
+
+```bash
+node_exporter --collector.textfile.directory=/pfad/zum/state
+```
+
+Typischer Alert: `time() - sightmetrics_import_last_success_timestamp_seconds > 100000`
+(kein erfolgreicher Import seit >27 h). In Kubernetes liegt das STATE_DIR auf dem
+PVC – dort entweder einen node_exporter-Sidecar mit demselben Mount verwenden
+oder die Dateien per Cron in das Textfile-Verzeichnis des Hosts kopieren.
+
 
 Im Wegwerf-Container-Modell kommt das Monitoring aus zwei Quellen:
 

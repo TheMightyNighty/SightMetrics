@@ -120,6 +120,7 @@ hc_ping "/start"
 source "$(pwd)/lib_geo.sh"
 source "$(pwd)/lib_logformat.sh"
 source "$(pwd)/lib_bots.sh"
+source "$(pwd)/lib_ua.sh"
 
 # ---- Secrets -------------------------------------------------------------
 if [ -z "${CUBE_DSN:-}" ] && [ -f "${CUBE_DSN_FILE:-/run/secrets/cube_dsn}" ]; then
@@ -250,6 +251,8 @@ SET VARIABLE download_re = '$(sq "${SM_DOWNLOAD_RE:-}")';
 ${BOT_SQL}
 .read '${GEO_SOURCE_SQL}'
 .read '${LOG_FORMAT_SQL}'
+${GEO6_SQL}
+${UA_SQL}
 .read '${SQL_TMP}'
 SQL
 t1=$(date +%s.%N)
@@ -263,6 +266,10 @@ TS_NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 printf 'ts=%s site_id=%s status=ok wall_s=%s new_lines=%s source=loki query=%s\n' \
   "$TS_NOW" "$SITE_ID" "$WALL" "$total" "$LOKI_QUERY" \
   | tee "$METRICS_LAST" >> "$METRICS_LOG"
+
+# Prometheus textfile collector (node_exporter) -- see lib_prom.sh / runbook.
+source "$(pwd)/lib_prom.sh"
+prom_site_metrics "$SITE_ID" "$WALL" "" "" "" "loki"
 
 # ---- Only advance state after a successful import ---------------------------
 echo "$STATE_NS" > "$TS_FILE"

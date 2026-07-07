@@ -155,6 +155,10 @@ if [ "$MISSING" -gt 0 ]; then
   FAIL=$((FAIL + MISSING))
 fi
 
+# Prometheus textfile collector (node_exporter) -- see lib_prom.sh / runbook.
+source "$(dirname "$0")/lib_prom.sh"
+prom_run_metrics "$TOTAL" "$PASS" "$FAIL"
+
 # ---- Summary ------------------------------------------------------------
 log "=== Fertig: ${PASS} OK, ${FAIL} FEHLER von ${TOTAL} Sites ==="
 

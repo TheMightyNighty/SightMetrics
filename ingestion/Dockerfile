@@ -15,14 +15,14 @@ COPY bin/ ./bin/
 COPY geo/ ./geo/
 
 # SQL logic
-COPY transform.sql cube_to_mysql.sql matomo_to_cube.sql sink_mysql.sql day_cut.sql ./
+COPY transform.sql cube_to_mysql.sql matomo_to_cube.sql sink_mysql.sql day_cut.sql ua_lookup.sql ./
 COPY geo_sources/ ./geo_sources/
 COPY log_formats/ ./log_formats/
 
 # Operational scripts (orchestrator + single import + maintenance/alerting)
 COPY run_all.sh load_cube.sh fetch_loki_logs.sh purge_cube.sh backup_cube.sh \
      notify.sh rotate_cube_secret.sh matomo_import.sh generate_logs.py \
-     lib_geo.sh lib_logformat.sh lib_healthcheck.sh lib_bots.sh ./
+     lib_geo.sh lib_logformat.sh lib_healthcheck.sh lib_bots.sh lib_prom.sh lib_ua.sh ./
 # Operator tools (e.g. fetch_bot_list.sh: build the device-detector bot list;
 # the list itself is NOT in the image for license reasons -> mount at runtime).
 COPY tools/ ./tools/
@@ -51,7 +51,7 @@ VOLUME ["/state"]
 # then a no-op (no network download, no write access -> readOnlyRootFilesystem ok).
 # a+rX: also readable for differing runtime UIDs (demo bind mounts, OpenShift).
 USER 10001:10001
-RUN /app/bin/duckdb -c "INSTALL mysql;" \
+RUN /app/bin/duckdb -c "INSTALL mysql; INSTALL inet;" \
  && chmod -R a+rX /home/sightmetrics/.duckdb
 
 # No secret in the image: CUBE_DSN/CUBE_DSN_FILE is injected at runtime.
