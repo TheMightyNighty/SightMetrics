@@ -33,3 +33,16 @@ if [ "$SM_GEO_SOURCE" = "maxmind" ] && [ ! -f "$GEO_LOC" ]; then
   exit 1
 fi
 echo ">> Geo-Quelle: ${SM_GEO_SOURCE} (${GEO})"
+
+# ---- Optional IPv6 geo data (SM_GEO6_PATH) ----------------------------------
+# Textual ranges start_ip,end_ip,cc (native v6 format or the DB-IP CSV, which
+# carries IPv4+IPv6 in one file). When present, GEO6_SQL loads
+# geo_sources/v6_ranges.sql (DuckDB inet extension) and IPv6 visitors get a
+# country; without it they stay '??'. See runbook §3a.
+GEO6="${SM_GEO6_PATH:-}"
+GEO6_SQL=""
+if [ -n "$GEO6" ] && [ -f "$GEO6" ]; then
+  GEO6_SQL="SET VARIABLE geo6path = '${GEO6//\'/\'\'}';
+.read '$(pwd)/geo_sources/v6_ranges.sql'"
+  echo ">> Geo-Quelle IPv6: ${GEO6}"
+fi

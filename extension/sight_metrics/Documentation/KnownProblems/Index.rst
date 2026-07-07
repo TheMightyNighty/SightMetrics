@@ -72,6 +72,8 @@ Data accuracy limitations
   visit that starts before and ends after midnight is counted as two
   sessions, one per day.
 - **GeoIP data is not bundled** with either package. The operator must supply
-  a GeoIP database themselves. By default, only IPv4 lookups are resolved;
-  IPv6 addresses are shown as `??` (unknown country) unless an IPv6-capable
-  data set is configured.
+  a GeoIP database themselves. IPv4 lookups use the configured numeric range
+  file; IPv6 lookups are optional via ``SM_GEO6_PATH`` (textual
+  ``start_ip,end_ip,cc`` ranges, e.g. the DB-IP Country Lite CSV, which
+  contains IPv4 and IPv6 in one file). Without an IPv6 data set, IPv6
+  visitors are shown as ``??`` (unknown country).

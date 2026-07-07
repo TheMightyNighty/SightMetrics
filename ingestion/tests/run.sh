@@ -220,4 +220,51 @@ no_list_sql=$(SM_BOT_RE_PATH="${BOTL_DIR}/nicht_da.list" bash -c 'cd "'"$(pwd)"'
 rm -rf "$BOTL_DIR"
 if [ "$bot_ok" -eq 1 ]; then echo "PASS bot-liste: Listen-Muster filtert, Fallback-Heuristik unveraendert"; else fail=1; fi
 
+# ---- 1.12 IPv6-Geo (geo_sources/v6_ranges.sql, inet extension) ---------------
+echo; echo "== Pipeline: IPv6-Geo (SM_GEO6_PATH) =="
+v6_out=$(./bin/duckdb -noheader -list <<'SQL'
+SET VARIABLE logpath = 'tests/fixture.log';
+SET VARIABLE geopath = 'tests/geo_mini.csv';
+SET VARIABLE geo6path = 'tests/geo_mini_v6.csv';
+SET VARIABLE site_name = 'V6Test'; SET VARIABLE tagessalt = 's';
+.read 'geo_sources/native.sql'
+.read 'log_formats/regex.sql'
+.read 'geo_sources/v6_ranges.sql'
+.read 'transform.sql'
+SELECT dimkey || '=' || v FROM cube_rows WHERE dim='country' AND dimkey IN ('DE','??') ORDER BY dimkey;
+SQL
+)
+if [ "$v6_out" = "DE=1" ]; then
+  echo "PASS ipv6-geo: 2001:db8::1 -> DE (kein '??' mehr)"
+else
+  echo "FAIL ipv6-geo: erwartet 'DE=1', ist '${v6_out}'"; fail=1
+fi
+
+# ---- 1.13 Browser/OS-Listen (ua_lookup.sql, device-detector-Mechanismus) -----
+echo; echo "== Pipeline: Browser/OS-Listen (SM_UA_*_PATH) =="
+UAD=$(mktemp -d)
+printf '1\tEdg[A-Za-z]*/(\\d+[.\\d]*)\tTestEdge\t$1\n' > "$UAD/browsers.tsv"
+printf '1\tWindows NT ([\\d.]+)\tTestWindows\t$1\n' > "$UAD/oss.tsv"
+ua_out=$(./bin/duckdb -noheader -list <<SQL
+SET VARIABLE logpath = 'tests/fixture.log';
+SET VARIABLE geopath = 'tests/geo_mini.csv';
+SET VARIABLE ua_browsers_path = '$UAD/browsers.tsv';
+SET VARIABLE ua_oss_path = '$UAD/oss.tsv';
+SET VARIABLE site_name = 'UA'; SET VARIABLE tagessalt = 's';
+.read 'geo_sources/native.sql'
+.read 'log_formats/regex.sql'
+.read 'ua_lookup.sql'
+.read 'transform.sql'
+SELECT dimkey || '=' || v FROM cube_rows WHERE dim='browser' ORDER BY dimkey;
+SQL
+)
+rm -rf "$UAD"
+expected='Chrome=3
+TestEdge=1'
+if [ "$ua_out" = "$expected" ]; then
+  echo "PASS ua-listen: Listen-Treffer ueberschreibt (TestEdge), Heuristik-Fallback bleibt (Chrome)"
+else
+  echo "FAIL ua-listen: erwartet 'Chrome=3/TestEdge=1', ist '${ua_out}'"; fail=1
+fi
+
 exit "$fail"

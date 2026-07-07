@@ -53,6 +53,8 @@ FROM (
          THEN (split_part(g.ip,'.',1)::BIGINT*16777216 + split_part(g.ip,'.',2)::BIGINT*65536
                  + split_part(g.ip,'.',3)::BIGINT*256 + split_part(g.ip,'.',4)::BIGINT)
     END AS ipint,
+    g.ip AS ip,
+    g.ua AS ua,
     md5(g.ip || '|' || g.ua || '|' || getvariable('tagessalt')) AS vkey,
     -- Bot/crawler detection: pattern from getvariable('botregex') (device-detector
     -- list or built-in heuristic, see variable block above).
@@ -94,9 +96,23 @@ FROM (
 ) WHERE ts IS NOT NULL AND status IS NOT NULL AND NOT is_bot
   AND url NOT SIMILAR TO '.*\.(css|js|png|jpg|jpeg|gif|svg|woff2?|ico|map)$';
 
+-- Optional device-detector browser/OS lookup (ua_lookup.sql via lib_ua.sh);
+-- without it this empty default keeps the LEFT JOIN below a no-op and the
+-- LIKE heuristic from stage 1 stands.
+CREATE TEMP TABLE IF NOT EXISTS ua_lookup (
+  ua VARCHAR, browser VARCHAR, browser_ver VARCHAR, os VARCHAR, os_ver VARCHAR);
+
 -- Successful hits (basis for pageviews/visits/all dimensions except 'status').
+-- Browser/OS columns are overridden by the ua_lookup result where available.
 CREATE OR REPLACE TEMP TABLE hits AS
-SELECT * FROM hits_all WHERE status < 400;
+SELECT h.* REPLACE (
+    COALESCE(u.browser, h.browser) AS browser,
+    COALESCE(u.browser_ver, h.browser_ver) AS browser_ver,
+    COALESCE(u.os, h.os) AS os,
+    COALESCE(u.os_ver, h.os_ver) AS os_ver)
+FROM hits_all h
+LEFT JOIN ua_lookup u ON u.ua = h.ua
+WHERE h.status < 400;
 
 -- ---- 2) Sessionization (one sort + one single pass) -----------------------
 CREATE OR REPLACE TEMP TABLE sess AS
@@ -115,10 +131,14 @@ SELECT ipint, cc FROM (
     ON s.ipint BETWEEN geo.start AND geo."end"
 ) WHERE rn=1;
 
+-- IPv6 geo: filled by geo_sources/v6_ranges.sql when SM_GEO6_PATH is set;
+-- otherwise this empty default keeps the join below a no-op (country '??').
+CREATE TEMP TABLE IF NOT EXISTS ip6_country (ip VARCHAR, cc VARCHAR);
+
 CREATE OR REPLACE TEMP TABLE visits AS
 -- Referrer classification: anchored on the host (domain end), so
 -- 'nichtgoogle.example' or similar isn't falsely counted as a search engine.
-SELECT v.*, COALESCE(gc.cc,'??') AS country,
+SELECT v.*, COALESCE(gc.cc, gc6.cc, '??') AS country,
   CASE WHEN v.referrer IN ('','-') THEN 'Direkt'
        WHEN regexp_matches(v.ref_host,'(^|\.)(google|bing|duckduckgo|ecosia|startpage|qwant|yandex)\.[a-z.]+$')
             OR v.ref_host = 'search.brave.com' THEN 'Suchmaschine'
@@ -138,14 +158,16 @@ SELECT v.*, COALESCE(gc.cc,'??') AS country,
 FROM (
   SELECT vkey, seq, strftime(min(ts),'%Y-%m-%d') AS datum, count(*) AS pageviews,
          arg_min(url, ts) AS entry_url, arg_max(url, ts) AS exit_url,
-         arg_min(ipint, ts) AS ipint, arg_min(browser, ts) AS browser,
-         arg_min(browser, ts) || ' ' || arg_min(browser_ver, ts) AS browser_version,
+         arg_min(ipint, ts) AS ipint, arg_min(ip, ts) AS ip,
+         arg_min(browser, ts) AS browser,
+         trim(arg_min(browser, ts) || ' ' || arg_min(browser_ver, ts)) AS browser_version,
          arg_min(os, ts) AS os, arg_min(os_ver, ts) AS os_version,
          arg_min(device, ts) AS device, arg_min(device_model, ts) AS device_model,
          arg_min(referrer, ts) AS referrer, arg_min(ref_host, ts) AS ref_host,
          arg_min(keyword, ts) AS keyword
   FROM sess GROUP BY vkey, seq
-) v LEFT JOIN ip_country gc ON gc.ipint = v.ipint;
+) v LEFT JOIN ip_country gc ON gc.ipint = v.ipint
+  LEFT JOIN ip6_country gc6 ON gc6.ip = v.ip;
 
 -- ---- 3) Result temp tables (sink-neutral) ----------------------------------
 CREATE OR REPLACE TEMP TABLE daily_rows AS
