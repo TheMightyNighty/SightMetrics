@@ -159,12 +159,13 @@ for range in "${CHUNKS[@]}"; do
   # Tage, auch wenn Matomo fuer einzelne Tage keine Daten liefert (sauberes
   # Ersetzen statt nur MIN/MAX der zurueckgegebenen Daten).
   c_from="${range%%,*}"; c_to="${range##*,}"
+  # Einfache Anfuehrungszeichen fuer DuckDB-Stringliterale verdoppeln.
   "$DUCKDB" <<SQL
 INSTALL mysql; LOAD mysql;
-ATTACH '${DSN}' AS m (TYPE mysql);
+ATTACH '${DSN//\'/\'\'}' AS m (TYPE mysql);
 SET VARIABLE jsondir    = '${jdir}';
 SET VARIABLE site_id    = '${SITE_ID}';
-SET VARIABLE site_name  = '${SITE_NAME}';
+SET VARIABLE site_name  = '${SITE_NAME//\'/\'\'}';
 SET VARIABLE range_from = '${c_from}';
 SET VARIABLE range_to   = '${c_to}';
 .read '${SQL_TMP}'

@@ -5,3 +5,5 @@
 1.1.1.1 - - [10/Jan/2026:10:30:00 +0000] "GET /a HTTP/1.1" 200 1200 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 8.8.8.8 - - [10/Jan/2026:10:31:00 +0000] "GET /style.css HTTP/1.1" 200 300 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
 8.8.8.8 - - [10/Jan/2026:10:32:00 +0000] "GET /missing HTTP/1.1" 404 0 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+66.249.66.1 - - [10/Jan/2026:12:00:00 +0000] "GET /a HTTP/1.1" 200 5000 "-" "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+2001:db8::1 - - [10/Jan/2026:13:00:00 +0000] "GET /a HTTP/1.1" 200 500 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0"

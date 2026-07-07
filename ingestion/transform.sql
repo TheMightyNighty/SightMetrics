@@ -2,7 +2,8 @@
 -- SightMetrics – Auswertungslogik (sink-neutral). Parse -> Sessionisierung -> Cube.
 -- Erzeugt die TEMP-Tabellen cube_rows / daily_rows / meta_row.
 -- Genutzt von cube_to_mysql.sql (Import) UND tests/pipeline_test.sql.
--- Parameter (SET VARIABLE): logpath, site_name, tagessalt, tsformat
+-- Parameter (SET VARIABLE): logpath, site_name, tagessalt, tsformat,
+--   tz (hour-Dimension), botfilter ('0' = aus), download_re (Download-Regex)
 -- Geo: setzt voraus, dass die TEMP VIEW 'geo_ranges' (start,"end",cc) bereits
 --      existiert -> wird von load_cube.sh/tests via geo_sources/<quelle>.sql
 --      angelegt (SM_GEO_SOURCE: native, ip2location, dbip, maxmind).
@@ -16,24 +17,57 @@
 -- tsformat: strptime-Format fuer den Timestamp-String g.tsraw (von log_formats/*.sql
 -- gesetzt; Default hier nur als Fallback, falls direkt ohne lib_logformat.sh genutzt).
 SET VARIABLE tsformat = COALESCE(getvariable('tsformat'), '%d/%b/%Y:%H:%M:%S %z');
+-- tz: Zeitzone fuer die 'hour'-Dimension (Besuchszeiten-Panel). datum bleibt bewusst
+-- UTC (stabile Tagesgrenzen fuer Offset-/Batch-Logik), nur die Stunde wird lokal
+-- ausgewiesen. Von load_cube.sh/fetch_loki_logs.sh via SM_TZ gesetzt.
+SET VARIABLE tz = COALESCE(NULLIF(getvariable('tz'), ''), 'UTC');
+-- botfilter: '0' deaktiviert den UA-basierten Bot-/Crawler-Ausschluss (Debug/Vergleich).
+SET VARIABLE botfilter = COALESCE(NULLIF(getvariable('botfilter'), ''), '1');
+-- botregex: Bot-Erkennungsmuster. Wird vom Aufrufer gesetzt, wenn eine
+-- device-detector-Bot-Liste vorliegt (SM_BOT_RE_PATH, siehe tools/fetch_bot_list.sh
+-- und Runbook §3); sonst greift die eingebaute Heuristik (Crawler, CLI-Clients,
+-- Monitoring/Scanner). Leere UAs zaehlen bewusst NICHT als Bot (Format 'common').
+SET VARIABLE botregex = COALESCE(NULLIF(getvariable('botregex'), ''),
+  '(?i)bot|crawl|spider|slurp|curl|wget|python-requests|python/|go-http-client|okhttp|java/|libwww|httpclient|headless|phantomjs|lighthouse|pingdom|uptimerobot|statuscake|monitor|nagios|zabbix|masscan|nmap|zgrab|facebookexternalhit|feedfetcher|archive\.org');
+-- download_re: Regex (auf lowercase-URL) fuer die Download-Erkennung, ueberschreibbar
+-- via SM_DOWNLOAD_RE. Query-String/Fragment hinter der Endung ist erlaubt.
+SET VARIABLE download_re = COALESCE(NULLIF(getvariable('download_re'), ''),
+  '\.(pdf|zip|7z|gz|tgz|tar|rar|docx?|xlsx?|pptx?|od[tsp]|csv|rtf|ics|epub|mp[34])([?#]|$)');
 
 -- ---- 1) Parse + lesbare Dimensionen ---------------------------------------
-CREATE OR REPLACE TEMP TABLE hits AS
-SELECT * FROM (
+-- hits_all: geparste Zeilen OHNE Bots/Assets, aber INKLUSIVE Fehler-Statuscodes
+-- (Basis der 'status'-Dimension). hits: davon nur status < 400 (Basis aller
+-- uebrigen Auswertungen). try_strptime/TRY_CAST: eine unparsbare Zeile (Bot-Muell,
+-- IPv6 bei ipint, kaputte Timestamps) verwirft nur die Zeile, nicht den Import.
+CREATE OR REPLACE TEMP TABLE hits_all AS
+SELECT *, strftime(ts,'%Y-%m-%d') AS datum,
+       extract('hour' FROM ts_local) AS stunde
+FROM (
   SELECT
-    timezone('UTC', strptime(g.tsraw, getvariable('tsformat'))) AS ts,
-    g.url AS url, CAST(g.status AS INTEGER) AS status, g.referrer AS referrer,
-    g.method AS method, CAST(g.size AS BIGINT) AS bytes,
-    (split_part(g.ip,'.',1)::BIGINT*16777216 + split_part(g.ip,'.',2)::BIGINT*65536
-       + split_part(g.ip,'.',3)::BIGINT*256 + split_part(g.ip,'.',4)::BIGINT) AS ipint,
+    timezone('UTC', tstz) AS ts,
+    timezone(getvariable('tz'), tstz) AS ts_local,
+    g.url AS url, TRY_CAST(g.status AS INTEGER) AS status, g.referrer AS referrer,
+    g.method AS method, COALESCE(TRY_CAST(g.size AS BIGINT), 0) AS bytes,
+    -- ipint nur fuer IPv4 (GeoIP-Lookup); IPv6/sonstige -> NULL -> Land '??'.
+    CASE WHEN regexp_matches(g.ip, '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
+         THEN (split_part(g.ip,'.',1)::BIGINT*16777216 + split_part(g.ip,'.',2)::BIGINT*65536
+                 + split_part(g.ip,'.',3)::BIGINT*256 + split_part(g.ip,'.',4)::BIGINT)
+    END AS ipint,
     md5(g.ip || '|' || g.ua || '|' || getvariable('tagessalt')) AS vkey,
-    g.url LIKE '%.pdf' AS is_download,
+    -- Bot-/Crawler-Erkennung: Muster aus getvariable('botregex') (device-detector-
+    -- Liste oder eingebaute Heuristik, siehe Variablen-Block oben).
+    (getvariable('botfilter') <> '0' AND regexp_matches(g.ua, getvariable('botregex'))) AS is_bot,
+    regexp_matches(lower(g.url), getvariable('download_re')) AS is_download,
     CASE WHEN g.ua LIKE '%Firefox%' THEN 'Firefox'
+         WHEN g.ua LIKE '%Edg%' THEN 'Edge'
+         WHEN g.ua LIKE '%OPR/%' OR g.ua LIKE '%Opera%' THEN 'Opera'
          WHEN g.ua LIKE '%Chrome%' AND g.ua LIKE '%Mobile%' THEN 'Chrome Mobile'
          WHEN g.ua LIKE '%Chrome%' THEN 'Chrome'
          WHEN g.ua LIKE '%iPhone%' THEN 'Mobile Safari'
          WHEN g.ua LIKE '%Safari%' THEN 'Safari' ELSE 'Andere' END AS browser,
     CASE WHEN g.ua LIKE '%Firefox%' THEN regexp_extract(g.ua,'Firefox/([0-9.]+)',1)
+         WHEN g.ua LIKE '%Edg%' THEN regexp_extract(g.ua,'Edg[A-Za-z]*/([0-9.]+)',1)
+         WHEN g.ua LIKE '%OPR/%' THEN regexp_extract(g.ua,'OPR/([0-9.]+)',1)
          WHEN g.ua LIKE '%Chrome%'  THEN regexp_extract(g.ua,'Chrome/([0-9.]+)',1)
          WHEN g.ua LIKE '%Version/%' THEN regexp_extract(g.ua,'Version/([0-9.]+)',1)
          ELSE '' END AS browser_ver,
@@ -56,14 +90,17 @@ SELECT * FROM (
     regexp_replace(g.referrer,'^https?://([^/]+).*','\1') AS ref_host,
     CASE WHEN regexp_matches(g.referrer,'[?&]q=')
          THEN replace(regexp_extract(g.referrer,'[?&]q=([^&]+)',1),'+',' ') END AS keyword
-  FROM parsed_lines
-) WHERE ts IS NOT NULL AND status < 400
+  FROM (SELECT g, try_strptime(g.tsraw, getvariable('tsformat')) AS tstz FROM parsed_lines)
+) WHERE ts IS NOT NULL AND status IS NOT NULL AND NOT is_bot
   AND url NOT SIMILAR TO '.*\.(css|js|png|jpg|jpeg|gif|svg|woff2?|ico|map)$';
+
+-- Erfolgs-Hits (Basis fuer Pageviews/Visits/alle Dimensionen ausser 'status').
+CREATE OR REPLACE TEMP TABLE hits AS
+SELECT * FROM hits_all WHERE status < 400;
 
 -- ---- 2) Sessionisierung (ein Sort + ein Single-Pass) ----------------------
 CREATE OR REPLACE TEMP TABLE sess AS
-SELECT *, strftime(ts,'%Y-%m-%d') AS datum, extract('hour' FROM ts) AS stunde,
-       sum(new_session) OVER (PARTITION BY vkey ORDER BY ts) AS seq
+SELECT *, sum(new_session) OVER (PARTITION BY vkey ORDER BY ts) AS seq
 FROM (
   SELECT *, CASE WHEN ts - lag(ts) OVER w > INTERVAL 30 MINUTE OR lag(ts) OVER w IS NULL
                  THEN 1 ELSE 0 END AS new_session
@@ -79,17 +116,25 @@ SELECT ipint, cc FROM (
 ) WHERE rn=1;
 
 CREATE OR REPLACE TEMP TABLE visits AS
+-- Referrer-Klassifikation: verankert auf den Host (Domain-Ende), damit
+-- 'nichtgoogle.example' o.ae. nicht faelschlich als Suchmaschine zaehlt.
 SELECT v.*, COALESCE(gc.cc,'??') AS country,
   CASE WHEN v.referrer IN ('','-') THEN 'Direkt'
-       WHEN v.ref_host LIKE '%google%' OR v.ref_host LIKE '%bing%' OR v.ref_host LIKE '%duckduckgo%' THEN 'Suchmaschine'
-       WHEN v.ref_host LIKE '%t.co%' OR v.ref_host LIKE '%twitter%' OR v.ref_host LIKE '%facebook%' THEN 'Soziale Medien'
+       WHEN regexp_matches(v.ref_host,'(^|\.)(google|bing|duckduckgo|ecosia|startpage|qwant|yandex)\.[a-z.]+$')
+            OR v.ref_host = 'search.brave.com' THEN 'Suchmaschine'
+       WHEN v.ref_host IN ('t.co','x.com')
+            OR regexp_matches(v.ref_host,'(^|\.)(twitter|facebook|instagram|linkedin|youtube|tiktok)\.com$')
+            THEN 'Soziale Medien'
        ELSE 'Website' END AS ref_type,
-  CASE WHEN v.ref_host LIKE '%google%' THEN 'Google'
-       WHEN v.ref_host LIKE '%bing%' THEN 'Bing'
-       WHEN v.ref_host LIKE '%duckduckgo%' THEN 'DuckDuckGo'
-       WHEN v.ref_host LIKE '%t.co%' OR v.ref_host LIKE '%twitter%' THEN 'Twitter'
-       WHEN v.ref_host LIKE '%facebook%' THEN 'Facebook'
-       WHEN v.referrer IN ('','-') THEN NULL ELSE v.ref_host END AS ref_name
+  CASE WHEN v.referrer IN ('','-') THEN NULL
+       WHEN regexp_matches(v.ref_host,'(^|\.)google\.[a-z.]+$') THEN 'Google'
+       WHEN regexp_matches(v.ref_host,'(^|\.)bing\.com$') THEN 'Bing'
+       WHEN regexp_matches(v.ref_host,'(^|\.)duckduckgo\.com$') THEN 'DuckDuckGo'
+       WHEN regexp_matches(v.ref_host,'(^|\.)ecosia\.org$') THEN 'Ecosia'
+       WHEN regexp_matches(v.ref_host,'(^|\.)startpage\.com$') THEN 'Startpage'
+       WHEN v.ref_host IN ('t.co','x.com') OR regexp_matches(v.ref_host,'(^|\.)twitter\.com$') THEN 'Twitter'
+       WHEN regexp_matches(v.ref_host,'(^|\.)facebook\.com$') THEN 'Facebook'
+       ELSE v.ref_host END AS ref_name
 FROM (
   SELECT vkey, seq, strftime(min(ts),'%Y-%m-%d') AS datum, count(*) AS pageviews,
          arg_min(url, ts) AS entry_url, arg_max(url, ts) AS exit_url,
@@ -116,7 +161,9 @@ CREATE OR REPLACE TEMP TABLE daily_rows AS
 CREATE OR REPLACE TEMP TABLE cube_rows AS
   SELECT datum, dim, dimkey, pv::BIGINT AS pv, v::BIGINT AS v FROM (
     SELECT datum,'url' dim, url dimkey, count(*) pv, count(DISTINCT (vkey,seq)) v FROM sess GROUP BY datum,url
-    UNION ALL SELECT datum,'status',CAST(status AS VARCHAR),count(*),count(DISTINCT (vkey,seq)) FROM sess GROUP BY datum,status
+    -- 'status' aus hits_all: enthaelt auch 4xx/5xx (das Panel soll Fehler zeigen);
+    -- v ist hier "betroffene Besucher" (DISTINCT vkey), da Fehler-Hits keine Session haben.
+    UNION ALL SELECT datum,'status',CAST(status AS VARCHAR),count(*),count(DISTINCT vkey) FROM hits_all GROUP BY datum,status
     UNION ALL SELECT datum,'method',method,count(*),count(DISTINCT (vkey,seq)) FROM sess GROUP BY datum,method
     UNION ALL SELECT datum,'hour',lpad(CAST(stunde AS VARCHAR),2,'0'),count(*),count(DISTINCT (vkey,seq)) FROM sess GROUP BY datum,stunde
     UNION ALL SELECT datum,'download',url,count(*),count(DISTINCT (vkey,seq)) FROM sess WHERE is_download GROUP BY datum,url

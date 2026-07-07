@@ -70,6 +70,9 @@ export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META
 # ---- Log-Format ------------------------------------------------------------
 source "$(pwd)/lib_logformat.sh"
 
+# ---- Bot-Liste (device-detector, optional; sonst eingebaute Heuristik) ------
+source "$(pwd)/lib_bots.sh"
+
 # State-Key: md5(site_id:absoluter_log-Pfad) → kollisionsfreier Dateiname
 STATE_KEY=$(printf '%s:%s' "$SITEID" "$(realpath "$LOGFILE")" | md5sum | cut -c1-16)
 STATE_FILE="${STATE_DIR}/${STATE_KEY}.offset"
@@ -94,7 +97,9 @@ fi
 # Neue Zeilen in Temp-Datei schreiben (tail -c +N ist 1-basiert)
 TMPLOG=$(mktemp /tmp/sm_inc_XXXXXX.log)
 SQL_TMP=$(mktemp /tmp/sm_sql_XXXXXX.sql)
-trap 'rm -f "$TMPLOG" "$SQL_TMP"' EXIT
+TIME_TMP=$(mktemp /tmp/sm_time_XXXXXX.txt)      # eigene Datei je Lauf: PARALLEL-sicher
+CONSUMED_TMP=$(mktemp /tmp/sm_consumed_XXXXXX.csv)
+trap 'rm -f "$TMPLOG" "$SQL_TMP" "$TIME_TMP" "$CONSUMED_TMP"' EXIT
 cat "$(pwd)/cube_to_mysql.sql" "$(pwd)/sink_mysql.sql" \
   | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
 tail -c "+$((OFFSET + 1))" "$LOGFILE" > "$TMPLOG"
@@ -106,33 +111,68 @@ if [ "$NEW_BYTES" -eq 0 ]; then
 fi
 echo ">> Verarbeite $((NEW_BYTES / 1024 + 1)) KB neue Daten (~$(wc -l < "$TMPLOG") Zeilen)"
 
+# ---- Tagesgrenzen-Cut (siehe day_cut.sql / Runbook §8) ----------------------
+# Zeilen des noch laufenden Tages (UTC) werden zurueckgehalten und erst beim
+# naechsten Lauf importiert -- sonst wuerde das Bereichs-DELETE des Sinks beim
+# Folgelauf die frueh importierten Stunden dieses Tages verwerfen.
+#   SM_COMPLETE_DAYS=0   deaktiviert den Cut (z. B. fuer Backfills/Tests)
+#   SM_CUTOFF_DATE       Cut-Datum ueberschreiben (Standard: heute, UTC)
+CUTOFF_DATE=""
+if [ "${SM_COMPLETE_DAYS:-1}" != "0" ]; then
+  CUTOFF_DATE="${SM_CUTOFF_DATE:-$(date -u +%Y-%m-%d)}"
+fi
+
+# Einfache Anfuehrungszeichen fuer DuckDB-Stringliterale verdoppeln -- ein
+# Apostroph im Site-Namen/DSN/Regex darf das SQL nicht brechen.
+sq() { printf '%s' "${1//\'/\'\'}"; }
+
 # ---- Import ----------------------------------------------------------------
 echo ">> SightMetrics-Ingestion -> MariaDB (Cube-DB): ${LOGFILE}"
 t0=$(date +%s.%N)
-/usr/bin/time -v -o /tmp/sm_my.time "$DUCKDB" <<SQL
+/usr/bin/time -v -o "$TIME_TMP" "$DUCKDB" <<SQL
 INSTALL mysql; LOAD mysql;
-ATTACH '${DSN}' AS m (TYPE mysql);
-SET VARIABLE logpath   = '${TMPLOG}';
-SET VARIABLE geopath   = '${GEO}';
-SET VARIABLE geolocpath = '${GEO_LOC}';
-SET VARIABLE site_name = '${SITENAME}';
+ATTACH '$(sq "$DSN")' AS m (TYPE mysql);
+SET VARIABLE logpath   = '$(sq "$TMPLOG")';
+SET VARIABLE geopath   = '$(sq "$GEO")';
+SET VARIABLE geolocpath = '$(sq "$GEO_LOC")';
+SET VARIABLE site_name = '$(sq "$SITENAME")';
 SET VARIABLE site_id   = '${SITEID}';
 SET VARIABLE tagessalt = '$(date +%Y%m%d)-sightmetrics';
-SET VARIABLE logregex  = '${SM_LOG_REGEX}';
-SET VARIABLE tsformat  = '${SM_TS_FORMAT}';
+SET VARIABLE logregex  = '$(sq "$SM_LOG_REGEX")';
+SET VARIABLE tsformat  = '$(sq "$SM_TS_FORMAT")';
+SET VARIABLE tz        = '$(sq "${SM_TZ:-UTC}")';
+SET VARIABLE botfilter = '${SM_BOT_FILTER:-1}';
+SET VARIABLE download_re = '$(sq "${SM_DOWNLOAD_RE:-}")';
+SET VARIABLE cutoff_date = '${CUTOFF_DATE}';
+${BOT_SQL}
 .read '${GEO_SOURCE_SQL}'
 .read '${LOG_FORMAT_SQL}'
+.read 'day_cut.sql'
+COPY (SELECT CASE WHEN getvariable('cut_rid') IS NULL THEN -1
+             ELSE (SELECT COALESCE(SUM(nbytes), 0) FROM raw_lines
+                   WHERE rid < getvariable('cut_rid')) END::BIGINT AS consumed)
+TO '${CONSUMED_TMP}' (FORMAT csv, HEADER false);
 .read '${SQL_TMP}'
 SQL
 t1=$(date +%s.%N)
 WALL=$(awk "BEGIN{printf \"%.2f\", $t1-$t0}")
-CPU=$(awk -F': ' '/User time/{u=$2}/System time/{s=$2} END{printf "%.2f", u+s}' /tmp/sm_my.time)
+CPU=$(awk -F': ' '/User time/{u=$2}/System time/{s=$2} END{printf "%.2f", u+s}' "$TIME_TMP")
 echo ">> Ingestion -> MariaDB fertig. Wall=${WALL}s CPU=${CPU}s"
-printf '%s %s\n' "$WALL" "$CPU" > /tmp/sm_my_metrics.txt
 
 # ---- Offset aktualisieren (nur nach erfolgreichem Import) ------------------
-echo "${FILE_SIZE}:${CURRENT_INODE}" > "$STATE_FILE"
-echo ">> Offset gespeichert: ${FILE_SIZE} Byte (Inode ${CURRENT_INODE}, Site ${SITEID})"
+# consumed = -1: kein Cut -> alles verarbeitet, Offset = Dateigroesse (byte-exakt).
+# Sonst: Offset nur bis vor die erste zurueckgehaltene Zeile vorruecken.
+CONSUMED=$(cat "$CONSUMED_TMP" 2>/dev/null || echo -1)
+if [ "$CONSUMED" -ge 0 ] 2>/dev/null; then
+  NEW_OFFSET=$((OFFSET + CONSUMED))
+  [ "$NEW_OFFSET" -gt "$FILE_SIZE" ] && NEW_OFFSET="$FILE_SIZE"
+  HELD=$((FILE_SIZE - NEW_OFFSET))
+  echo ">> Tagesgrenzen-Cut: ${HELD} Byte (Zeilen ab ${CUTOFF_DATE}, UTC) zurueckgestellt bis der Tag abgeschlossen ist."
+else
+  NEW_OFFSET="$FILE_SIZE"
+fi
+echo "${NEW_OFFSET}:${CURRENT_INODE}" > "$STATE_FILE"
+echo ">> Offset gespeichert: ${NEW_OFFSET}/${FILE_SIZE} Byte (Inode ${CURRENT_INODE}, Site ${SITEID})"
 
 # ---- Metriken schreiben (für Monitoring / Alerting) -----------------------
 # site_N.last: letzter Lauf (Overwrite) – Status/Zeitstempel des letzten Imports.
@@ -141,5 +181,5 @@ METRICS_LAST="${STATE_DIR}/site_${SITEID}.last"
 METRICS_LOG="${STATE_DIR}/metrics.log"
 TS_NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 printf 'ts=%s site_id=%s status=ok wall_s=%s cpu_s=%s new_bytes=%s offset=%s logfile=%s\n' \
-  "$TS_NOW" "$SITEID" "$WALL" "$CPU" "$NEW_BYTES" "$FILE_SIZE" "$LOGFILE" \
+  "$TS_NOW" "$SITEID" "$WALL" "$CPU" "$NEW_BYTES" "$NEW_OFFSET" "$LOGFILE" \
   | tee "$METRICS_LAST" >> "$METRICS_LOG"

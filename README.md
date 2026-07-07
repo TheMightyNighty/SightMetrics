@@ -128,6 +128,7 @@ Details, Mapping und Grenzen: [`docs/matomo-import.md`](docs/matomo-import.md).
 - **KPIs** inkl. Absprungrate und Bandbreite
 - **Zeitraum-Auswahl** (ein Matomo-artiges Dropdown: relativ / Kalender / einzelne Jahre / benutzerdefiniert), **Perioden-Vergleich**
 - **CSV- und PDF-Export**, **Dark Mode**
+- **Bot-/Crawler-Filter** (User-Agent-Heuristik, abschaltbar) – gezählt werden nur menschliche Besucher; Statuscodes zeigen auch 4xx/5xx zur Fehlerdiagnose
 
 ---
 

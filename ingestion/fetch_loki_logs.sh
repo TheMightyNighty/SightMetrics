@@ -119,6 +119,7 @@ hc_ping "/start"
 # ---- Geo-Quelle + Log-Format (gemeinsam mit load_cube.sh) -------------------
 source "$(pwd)/lib_geo.sh"
 source "$(pwd)/lib_logformat.sh"
+source "$(pwd)/lib_bots.sh"
 
 # ---- Secrets ----------------------------------------------------------------
 if [ -z "${CUBE_DSN:-}" ] && [ -f "${CUBE_DSN_FILE:-/run/secrets/cube_dsn}" ]; then
@@ -228,18 +229,25 @@ SQL_TMP=$(mktemp /tmp/sm_sql_XXXXXX.sql)
 cat "$(pwd)/cube_to_mysql.sql" "$(pwd)/sink_mysql.sql" \
   | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
 
+# Einfache Anfuehrungszeichen fuer DuckDB-Stringliterale verdoppeln (wie load_cube.sh).
+sq() { printf '%s' "${1//\'/\'\'}"; }
+
 t0=$(date +%s.%N)
 "$DUCKDB" <<SQL
 INSTALL mysql; LOAD mysql;
-ATTACH '${DSN}' AS m (TYPE mysql);
+ATTACH '$(sq "$DSN")' AS m (TYPE mysql);
 SET VARIABLE logpath    = '/dev/fd/${LOGFD}';
-SET VARIABLE geopath    = '${GEO}';
-SET VARIABLE geolocpath = '${GEO_LOC}';
-SET VARIABLE site_name  = '${SITE_NAME}';
+SET VARIABLE geopath    = '$(sq "$GEO")';
+SET VARIABLE geolocpath = '$(sq "$GEO_LOC")';
+SET VARIABLE site_name  = '$(sq "$SITE_NAME")';
 SET VARIABLE site_id    = '${SITE_ID}';
 SET VARIABLE tagessalt  = '$(date +%Y%m%d)-sightmetrics';
-SET VARIABLE logregex   = '${SM_LOG_REGEX}';
-SET VARIABLE tsformat   = '${SM_TS_FORMAT}';
+SET VARIABLE logregex   = '$(sq "$SM_LOG_REGEX")';
+SET VARIABLE tsformat   = '$(sq "$SM_TS_FORMAT")';
+SET VARIABLE tz         = '$(sq "${SM_TZ:-UTC}")';
+SET VARIABLE botfilter  = '${SM_BOT_FILTER:-1}';
+SET VARIABLE download_re = '$(sq "${SM_DOWNLOAD_RE:-}")';
+${BOT_SQL}
 .read '${GEO_SOURCE_SQL}'
 .read '${LOG_FORMAT_SQL}'
 .read '${SQL_TMP}'

@@ -148,4 +148,76 @@ LK_DIR=$(mktemp -d)
 rm -rf "$LK_DIR"
 if [ "$lock_ok" -eq 1 ]; then echo "PASS per-site-lock: zweiter Lauf derselben Site wird übersprungen"; else fail=1; fi
 
+# ---- 1.9 Tagesgrenzen-Cut (day_cut.sql) --------------------------------------
+echo; echo "== Pipeline: day_cut.sql (Byte-genauer Cut am Tageswechsel) =="
+cut_ok=1
+CUT_LOG=$(mktemp /tmp/sm_cut_XXXXXX.log)
+# 2 Zeilen "gestern" (10.), 2 Zeilen "heute" (11.) – Cut bei 2026-01-11 erwartet:
+# konsumierte Bytes = exakt die Laenge der ersten beiden Zeilen.
+head -n 2 tests/fixture.log > "$CUT_LOG"
+sed 's|10/Jan/2026|11/Jan/2026|' tests/fixture.log | head -n 2 >> "$CUT_LOG"
+DAY1_BYTES=$(head -n 2 tests/fixture.log | wc -c)
+
+cut_probe() { # $1=cutoff  -> gibt "consumed remaining" aus
+  ./bin/duckdb -noheader -list <<SQL
+SET VARIABLE logpath = '${CUT_LOG}';
+SET VARIABLE cutoff_date = '$1';
+.read 'log_formats/regex.sql'
+.read 'day_cut.sql'
+SELECT (CASE WHEN getvariable('cut_rid') IS NULL THEN -1
+        ELSE (SELECT COALESCE(SUM(nbytes),0) FROM raw_lines WHERE rid < getvariable('cut_rid')) END)
+       || ' ' || (SELECT count(*) FROM parsed_lines);
+SQL
+}
+
+out=$(cut_probe 2026-01-11)
+[ "$out" = "${DAY1_BYTES} 2" ] \
+  || { echo "FAIL cut@2026-01-11: erwartet '${DAY1_BYTES} 2', ist '${out}'"; cut_ok=0; }
+out=$(cut_probe 2026-01-10)   # alles ist >= cutoff -> nichts konsumieren, nichts importieren
+[ "$out" = "0 0" ] \
+  || { echo "FAIL cut@2026-01-10: erwartet '0 0', ist '${out}'"; cut_ok=0; }
+out=$(cut_probe 2026-01-12)   # alles aelter -> kein Cut (-1 = Aufrufer nutzt Dateigroesse)
+[ "$out" = "-1 4" ] \
+  || { echo "FAIL cut@2026-01-12: erwartet '-1 4', ist '${out}'"; cut_ok=0; }
+rm -f "$CUT_LOG"
+if [ "$cut_ok" -eq 1 ]; then echo "PASS day-cut: Byte-Offset exakt, Zurueckhalten & No-Cut korrekt"; else fail=1; fi
+
+# ---- 1.10 Bot-Liste (lib_bots.sh + botregex-Variable) -------------------------
+echo; echo "== Pipeline: Bot-Liste (device-detector-Mechanismus) =="
+bot_ok=1
+BOTL_DIR=$(mktemp -d)
+BOTL="${BOTL_DIR}/bot_regex.list"
+# Die Liste ERSETZT die Heuristik (kein Mischbetrieb) -> Googlebot muss mit in
+# die Testliste, sonst zaehlt die Googlebot-Fixture-Zeile ploetzlich mit.
+printf '# Kommentar\nAcmeHarvester/[0-9.]+\nGooglebot\n' > "$BOTL"
+BOT_LOG="${BOTL_DIR}/log"
+cp tests/fixture.log "$BOT_LOG"
+# UA, den die eingebaute Heuristik NICHT erkennt -> nur die Liste filtert ihn.
+printf '9.9.9.9 - - [10/Jan/2026:14:00:00 +0000] "GET /a HTTP/1.1" 200 100 "-" "AcmeHarvester/2.1"\n' >> "$BOT_LOG"
+
+bot_probe() { # $1 = zusaetzliches SQL (BOT_SQL oder leer) -> pageviews_total
+  ./bin/duckdb -noheader -list <<SQL
+SET VARIABLE logpath = '${BOT_LOG}';
+SET VARIABLE geopath = 'tests/geo_mini.csv';
+SET VARIABLE site_name = 'BotTest'; SET VARIABLE tagessalt = 's';
+$1
+.read 'geo_sources/native.sql'
+.read 'log_formats/regex.sql'
+.read 'transform.sql'
+SELECT pageviews_total FROM meta_row;
+SQL
+}
+
+SM_BOT_RE_PATH="$BOTL" source ./lib_bots.sh >/dev/null
+[ -n "$BOT_SQL" ] || { echo "FAIL lib_bots: BOT_SQL leer trotz vorhandener Liste"; bot_ok=0; }
+with_list=$(bot_probe "$BOT_SQL")
+without_list=$(bot_probe "")
+[ "$with_list" = "6" ] || { echo "FAIL mit Liste: erwartet 6 Pageviews (AcmeHarvester gefiltert), ist '${with_list}'"; bot_ok=0; }
+[ "$without_list" = "7" ] || { echo "FAIL ohne Liste: erwartet 7 Pageviews (Heuristik kennt AcmeHarvester nicht), ist '${without_list}'"; bot_ok=0; }
+# Fehlende Liste -> BOT_SQL leer (Heuristik-Fallback in transform.sql).
+no_list_sql=$(SM_BOT_RE_PATH="${BOTL_DIR}/nicht_da.list" bash -c 'cd "'"$(pwd)"'" && source ./lib_bots.sh >/dev/null; printf %s "$BOT_SQL"')
+[ -z "$no_list_sql" ] || { echo "FAIL ohne Liste: BOT_SQL muss leer sein"; bot_ok=0; }
+rm -rf "$BOTL_DIR"
+if [ "$bot_ok" -eq 1 ]; then echo "PASS bot-liste: Listen-Muster filtert, Fallback-Heuristik unveraendert"; else fail=1; fi
+
 exit "$fail"

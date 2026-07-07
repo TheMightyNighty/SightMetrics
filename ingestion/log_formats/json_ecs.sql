@@ -21,8 +21,14 @@
 -- Erzeugt TEMP TABLE parsed_lines(g) im selben Schema wie log_formats/regex.sql.
 -- Parameter (SET VARIABLE): logpath, tsformat (Standard siehe lib_logformat.sh)
 -- ===========================================================================
+-- raw_lines: siehe log_formats/regex.sql (Reihenfolge + Byte-Laenge fuer day_cut.sql).
+CREATE OR REPLACE TEMP TABLE raw_lines AS
+SELECT row_number() OVER () AS rid, line, strlen(line) + 1 AS nbytes
+FROM read_csv(getvariable('logpath'),
+     columns={'line':'VARCHAR'}, delim='\t', header=false, quote='', escape='', ignore_errors=true);
+
 CREATE OR REPLACE TEMP TABLE parsed_lines AS
-SELECT struct_pack(
+SELECT rid, struct_pack(
     ip       := json_extract_string(line, '$.client.ip'),
     tsraw    := json_extract_string(line, '$."@timestamp"'),
     method   := json_extract_string(line, '$.http.request.method'),
@@ -32,5 +38,4 @@ SELECT struct_pack(
     referrer := json_extract_string(line, '$.app.req.referer'),
     ua       := json_extract_string(line, '$.user_agent.original')
 ) AS g
-FROM read_csv(getvariable('logpath'),
-     columns={'line':'VARCHAR'}, delim='\t', header=false, quote='', escape='', ignore_errors=true);
+FROM raw_lines;

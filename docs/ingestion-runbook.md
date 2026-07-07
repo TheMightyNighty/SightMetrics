@@ -165,9 +165,39 @@ einem kompatiblen JSON-Format. Pflichtfelder:
   `CF-Connecting-IP` ins Log geschrieben werden, sonst ist GeoIP und
   Visitor-Recognition falsch.
 - **Uhren via NTP synchron** auf allen Webservern.
+- **Chronologische Reihenfolge**: Zeilen müssen zeitlich aufsteigend sein
+  (Standard bei Access-Logs) – der Tagesgrenzen-Cut des inkrementellen Imports
+  (§8) schneidet den Batch an der ersten Zeile des noch laufenden Tages ab.
 - **Kein Sampling**: jede Zeile wird gezählt.
 - **Einheitliches Format** über alle Sites und Server (nginx und apache identisch).
+- **IPv6** wird gezählt (Visits/Pageviews/Unique-Hash), hat aber kein
+  GeoIP-Mapping → Land `??`. Der mitgelieferte Geo-Datensatz ist IPv4-only.
+- **Bot-Filter**: Zeilen mit Crawler-/CLI-/Monitoring-User-Agents (Googlebot,
+  curl, uptime-Checks, Scanner …) werden **ausgeschlossen** – wie bei Matomo
+  zählen nur menschliche Besucher. Zwei Stufen:
+  - **Empfohlen (Matomo-vergleichbar):** einmalig `./tools/fetch_bot_list.sh`
+    ausführen – baut aus [matomo/device-detector](https://github.com/matomo-org/device-detector)
+    (`bots.yml`, LGPL-3.0-or-later, deshalb nicht im Repo/Image) eine validierte
+    Liste `bots/bot_regex.list` (~800 Muster). Liegt die Datei am Standardpfad
+    (oder unter `SM_BOT_RE_PATH`), wird sie automatisch verwendet; die Liste
+    **ersetzt** die Heuristik vollständig. Regelmäßig neu erzeugen (z. B.
+    quartalsweise), im Container als Volume mounten.
+  - **Fallback:** ohne Liste greift eine eingebaute UA-Heuristik.
+
+  `SM_BOT_FILTER=0` deaktiviert den Filter komplett. Leere User-Agents zählen
+  bewusst nicht als Bot (Format `common` hat gar keine UA). Ausnahme: die
+  `status`-Dimension enthält zusätzlich auch 4xx/5xx-Zeilen (Fehlerdiagnose),
+  Bots bleiben auch dort außen vor.
 - PII in Query-Strings (Tokens, E-Mails) vor dem Import maskieren/herausfiltern.
+
+**Auswertungs-Tuning (ENV, optional):**
+
+| Variable | Standard | Wirkung |
+|---|---|---|
+| `SM_BOT_FILTER` | `1` | `0` = Bot-/Crawler-Zeilen mitzählen |
+| `SM_TZ` | `UTC` | Zeitzone der `hour`-Dimension (Besuchszeiten-Panel), z. B. `Europe/Berlin`. Tages-Buckets bleiben UTC. |
+| `SM_DOWNLOAD_RE` | pdf/zip/Office/… | Regex (auf lowercase-URL) für die Download-Erkennung |
+| `SM_COMPLETE_DAYS` | `1` | `0` = Tagesgrenzen-Cut aus (nur für Backfills/Tests, siehe §8) |
 
 ---
 
@@ -423,10 +453,22 @@ Im Scheduler/Container als Umgebungsvariable übergeben:
 - **Idempotenz**: beim Import wird zuerst der Datumsbereich der neuen Daten aus
   der Cube-DB gelöscht (`DELETE WHERE datum BETWEEN ...`), dann die neuen Zeilen
   eingefügt. Wiederholter Import derselben Bytes ist sicher.
+- **Tagesgrenzen-Cut** (`day_cut.sql`): Zeilen des **noch laufenden Tages (UTC)**
+  werden zurückgehalten – der Offset bleibt vor der ersten Zeile dieses Tages
+  stehen, der Folgelauf importiert den Tag dann vollständig. Ohne den Cut würde
+  das Bereichs-DELETE beim Folgelauf die bereits importierten frühen Stunden
+  des Tages verwerfen (Datenverlust an der Tagesgrenze). Konsequenz: **Daten
+  eines Tages erscheinen erst nach dessen Abschluss** im Dashboard (beim
+  nächtlichen Lauf um 02:00 also der komplette Vortag). Mehrere Läufe pro Tag
+  sind damit ebenfalls sicher. `SM_COMPLETE_DAYS=0` deaktiviert den Cut (nur
+  für Backfills abgeschlossener Zeiträume oder Tests sinnvoll);
+  `SM_CUTOFF_DATE=YYYY-MM-DD` überschreibt das Cut-Datum.
 - **Offset wird erst nach erfolgreichem Import gesetzt** — bei Abbruch wird beim
   nächsten Lauf der gleiche Bereich erneut importiert.
 - **Leer-Batch-Guard**: enthält der neue Bereich 0 gültige Zeilen, wird kein
   INSERT ausgeführt und der Offset nicht verändert.
+- **Grenze**: Sessions, die über Mitternacht (UTC) laufen, werden an der
+  Tagesgrenze geteilt (tagesbasiertes Aggregationsmodell).
 
 ---
 
