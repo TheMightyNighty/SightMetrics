@@ -1,5 +1,5 @@
-/* E2E-Test (Suite 3): fährt das echte TYPO3-Backend-Modul an und prüft, dass
-   KPIs, Barlisten, Drill-down und die Weltkarte rendern. Exit 1 bei Fehler. */
+/* E2E test (suite 3): drives the real TYPO3 backend module and checks that
+   KPIs, bar lists, drill-down and the world map render. Exit 1 on failure. */
 const puppeteer = require('puppeteer-core');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8091';
@@ -30,7 +30,7 @@ function check(name, cond) {
   await new Promise(r => setTimeout(r, 2000));
   check('Login erfolgreich (Backend erreicht)', /\/typo3\/module\//.test(page.url()) || !!(await page.$('[data-modulemenu-identifier]')));
 
-  // Modul öffnen
+  // Open module
   const modSel = '[data-modulemenu-identifier="web_sightmetrics"]';
   check('Modul "SightMetrics" registriert', !!(await page.$(modSel)));
   await page.click(modSel);
@@ -41,6 +41,17 @@ function check(name, cond) {
   check('Modul-Iframe geladen', !!f);
   if (!f) { await browser.close(); process.exit(1); }
 
+  // CSP: the module must run without policy violations (assets self-contained,
+  // no inline style attributes, ES modules + JSON data block CSP-compliant).
+  const cspViolations = await f.evaluate(() => new Promise((resolve) => {
+    const hits = [];
+    document.addEventListener('securitypolicyviolation', (e) => {
+      hits.push(e.violatedDirective + ': ' + (e.blockedURI || e.sourceFile || ''));
+    });
+    setTimeout(() => resolve(hits), 1500);
+  }));
+  check('Keine CSP-Verletzungen im Modul' + (cspViolations.length ? ' (' + cspViolations.join('; ') + ')' : ''), cspViolations.length === 0);
+
   const data = await f.evaluate(() => ({
     visits: (document.getElementById('k-visits') || {}).textContent || '',
     pv: (document.getElementById('k-pv') || {}).textContent || '',
@@ -49,8 +60,8 @@ function check(name, cond) {
     browserRows: document.querySelectorAll('#bl-browser .bl-row').length,
     treeNodes: document.querySelectorAll('#w-tree .tnode').length,
     siteOptions: document.querySelectorAll('#w-siteselect option').length,
-    // Chart.js rendert direkt in <canvas id="w-time"> (kein Kind-Canvas wie frueher
-    // bei ECharts); die Leaflet-Karte zeichnet die Laender als SVG-Pfade.
+    // Chart.js renders directly into <canvas id="w-time"> (no child canvas like
+    // previously with ECharts); the Leaflet map draws countries as SVG paths.
     mapSvgPaths: document.querySelectorAll('#w-map svg path').length,
     timeCanvas: (document.getElementById('w-time') || {}).tagName === 'CANVAS'
       && (document.getElementById('w-time') || {}).height > 0,
@@ -65,7 +76,7 @@ function check(name, cond) {
   check('Seitenbaum hat Knoten', data.treeNodes > 0);
   check('Site-Auswahl befüllt (Multi-Site)', data.siteOptions >= 1);
 
-  // Drill-down: Browser-Zeile aufklappen -> Subtabelle erscheint
+  // Drill-down: expand browser row -> subtable appears
   const drill = await f.evaluate(() => {
     const row = document.querySelector('#bl-browser .bl-drill .bl-label');
     if (!row) return { ok: false, reason: 'kein aufklappbarer Browser' };
@@ -76,13 +87,13 @@ function check(name, cond) {
   });
   check('Drill-down öffnet Subtabelle' + (drill.child ? ' (' + drill.child + ')' : ''), drill.ok);
 
-  // Zeitraum-Dropdown: gesammelt (ein Dropdown), Custom-Eingaben anfangs versteckt
+  // Time range dropdown: grouped (one dropdown), custom inputs initially hidden
   const preset = await f.evaluate(() => {
     const sel = document.getElementById('w-preset'), custom = document.getElementById('w-custom');
     return {
       options: sel ? sel.options.length : 0,
       customHidden: !!(custom && custom.hidden),
-      // Label ist lokalisiert (en "Year …", de "Jahr …") – beide akzeptieren.
+      // Label is localized (en "Year ...", de "Jahr ...") -- accept both.
       hasYear: sel ? Array.from(sel.options).some(o => /^(Jahr|Year) /.test(o.textContent)) : false,
     };
   });
@@ -90,7 +101,7 @@ function check(name, cond) {
   check('Custom-Datepicker anfangs eingeklappt', preset.customHidden);
   check('Konkrete Jahre als Vorgabe vorhanden', preset.hasYear);
 
-  // Dark-Mode-Klasse wird bei dunklem Schema gesetzt (per matchMedia geprüft)
+  // Dark mode class is set for a dark scheme (checked via matchMedia)
   const dark = await f.evaluate(() => {
     const root = document.getElementById('sightmetrics');
     const wantDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -100,8 +111,8 @@ function check(name, cond) {
   });
   check('Dark-Mode-Klasse passend zum Schema', dark.ok);
 
-  // Perioden-Vergleich: Zeitraum auf letzten Tag verengen (damit eine Vorperiode existiert),
-  // dann Checkbox aktivieren -> Delta-Badge erscheint.
+  // Period comparison: narrow the time range to the last day (so a previous period exists),
+  // then enable the checkbox -> delta badge appears.
   const cmp = await f.evaluate(() => {
     const cb = document.getElementById('w-cmp'), from = document.getElementById('w-from'), to = document.getElementById('w-to');
     if (!cb || !from || !to) return { present: false };
@@ -113,7 +124,7 @@ function check(name, cond) {
   check('Vergleichs-Checkbox vorhanden', cmp.present);
   check('Perioden-Delta gefüllt' + (cmp.delta ? ' (' + cmp.delta + ')' : ''), !!cmp.delta);
 
-  // Export: Buttons vorhanden
+  // Export: buttons present
   const exp = await f.evaluate(() => ({
     csvBtn: !!document.getElementById('w-csv'),
     pdfBtn: !!document.getElementById('w-pdf'),

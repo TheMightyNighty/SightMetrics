@@ -130,3 +130,15 @@ onboarding page with the three setup steps instead of an empty dashboard:
    :class: with-shadow
 
    The onboarding page shown while the cube database is still empty.
+
+Content Security Policy
+=======================
+
+The backend module is designed to run under TYPO3's backend Content Security
+Policy without any extension-specific mutations: all assets (Chart.js, Leaflet,
+map data, module CSS/JS) are self-hosted, the dashboard data is passed as a
+non-executable JSON data block, the frontend is loaded as a native ES module,
+and the templates use CSS classes instead of inline ``style`` attributes. No
+``Configuration/ContentSecurityPolicies.php`` mutations are required or shipped.
+The end-to-end test suite asserts that the module produces no
+``securitypolicyviolation`` events.

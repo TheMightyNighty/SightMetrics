@@ -3,20 +3,17 @@
     data-namespace-typo3-fluid="true"
 >
 
-<f:comment>Alle Labels aus locallang_mod.xlf (Default Englisch, de.locallang_mod.xlf Deutsch).</f:comment>
+<f:comment>All labels from locallang_mod.xlf (default English, de.locallang_mod.xlf German).</f:comment>
 <f:variable name="ll" value="LLL:EXT:sight_metrics/Resources/Private/Language/locallang_mod.xlf:" />
 
 <f:if condition="{error}">
 <f:then>
-    <div style="max-width:680px;margin:48px auto;padding:32px 36px;text-align:center;
-                border:1px solid #e3e8ef;border-radius:12px;background:#fff;
-                font:15px/1.5 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#1d2733">
-        <div style="font-size:46px;line-height:1;color:#b9851d" aria-hidden="true">⚠</div>
-        <h1 style="font-size:20px;margin:14px 0 8px">{error.title}</h1>
-        <p style="color:#67758a;margin:0">{error.message}</p>
+    <div class="sm-notice">
+        <div class="ico warn" aria-hidden="true">⚠</div>
+        <h1>{error.title}</h1>
+        <p>{error.message}</p>
         <f:if condition="{error.technical}">
-            <pre style="text-align:left;margin-top:18px;padding:10px 12px;background:#f4f6f9;
-                        border-radius:6px;font-size:12px;color:#8a4b3a;white-space:pre-wrap;overflow:auto">{error.technical}</pre>
+            <pre>{error.technical}</pre>
         </f:if>
     </div>
 </f:then>
@@ -24,39 +21,35 @@
 
 <f:if condition="{noAccess}">
 <f:then>
-    <div style="max-width:680px;margin:48px auto;padding:32px 36px;text-align:center;
-                border:1px solid #e3e8ef;border-radius:12px;background:#fff;
-                font:15px/1.5 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#1d2733">
-        <div style="font-size:46px;line-height:1;color:#67758a" aria-hidden="true">🔒</div>
-        <h1 style="font-size:20px;margin:14px 0 8px"><f:translate key="{ll}tpl.noAccess.title" /></h1>
-        <p style="color:#67758a;margin:0"><f:translate key="{ll}tpl.noAccess.text" /></p>
+    <div class="sm-notice">
+        <div class="ico lock" aria-hidden="true">🔒</div>
+        <h1><f:translate key="{ll}tpl.noAccess.title" /></h1>
+        <p><f:translate key="{ll}tpl.noAccess.text" /></p>
     </div>
 </f:then>
 <f:else>
 <f:if condition="{onboarding}">
 <f:then>
-    <div style="max-width:760px;margin:48px auto;padding:32px 40px;
-                border:1px solid #e3e8ef;border-radius:12px;background:#fff;
-                font:15px/1.6 system-ui,Segoe UI,Roboto,Arial,sans-serif;color:#1d2733">
-        <div style="font-size:46px;line-height:1" aria-hidden="true">📊</div>
-        <h1 style="font-size:22px;margin:14px 0 6px"><f:translate key="{ll}tpl.ob.title" /></h1>
-        <p style="color:#67758a;margin:0 0 22px"><f:translate key="{ll}tpl.ob.intro" /></p>
-        <ol style="margin:0;padding-left:22px">
-            <li style="margin-bottom:14px">
+    <div class="sm-notice sm-notice-wide">
+        <div class="ico" aria-hidden="true">📊</div>
+        <h1><f:translate key="{ll}tpl.ob.title" /></h1>
+        <p><f:translate key="{ll}tpl.ob.intro" /></p>
+        <ol>
+            <li>
                 <strong><f:translate key="{ll}tpl.ob.step1.title" /></strong><br>
-                <span style="color:#67758a"><f:translate key="{ll}tpl.ob.step1.text" /></span>
+                <span><f:translate key="{ll}tpl.ob.step1.text" /></span>
             </li>
-            <li style="margin-bottom:14px">
+            <li>
                 <strong><f:translate key="{ll}tpl.ob.step2.title" /></strong><br>
-                <span style="color:#67758a"><f:translate key="{ll}tpl.ob.step2.text" /></span>
+                <span><f:translate key="{ll}tpl.ob.step2.text" /></span>
             </li>
-            <li style="margin-bottom:14px">
+            <li>
                 <strong><f:translate key="{ll}tpl.ob.step3.title" /></strong><br>
-                <span style="color:#67758a"><f:translate key="{ll}tpl.ob.step3.text" /></span><br>
-                <code style="display:inline-block;margin-top:6px;padding:3px 8px;background:#f4f6f9;border-radius:4px;font-size:13px">vendor/bin/typo3 sightmetrics:health</code>
+                <span><f:translate key="{ll}tpl.ob.step3.text" /></span><br>
+                <code>vendor/bin/typo3 sightmetrics:health</code>
             </li>
         </ol>
-        <p style="margin:22px 0 0">
+        <p class="docs">
             <a href="https://github.com/TheMIghtyNighty/SightMetrics" target="_blank" rel="noopener noreferrer">
                 <f:translate key="{ll}tpl.ob.docs" /></a>
         </p>
@@ -76,8 +69,8 @@
         <span id="w-custom" class="sm-custom" hidden>
             <label for="w-month"><f:translate key="{ll}tpl.month" /></label>
             <input type="month" id="w-month" aria-label="{f:translate(key: '{ll}tpl.monthPick')}">
-            <label for="w-from" style="margin-left:8px"><f:translate key="{ll}tpl.from" /></label><input type="date" id="w-from">
-            <label for="w-to" style="margin-left:8px"><f:translate key="{ll}tpl.to" /></label><input type="date" id="w-to">
+            <label for="w-from" class="sm-gap"><f:translate key="{ll}tpl.from" /></label><input type="date" id="w-from">
+            <label for="w-to" class="sm-gap"><f:translate key="{ll}tpl.to" /></label><input type="date" id="w-to">
         </span>
         <label class="sm-cmp"><input type="checkbox" id="w-cmp"> <f:translate key="{ll}tpl.compare" /></label>
         <button type="button" id="w-csv" class="sm-btn" title="{f:translate(key: '{ll}tpl.csvTitle')}">CSV</button>
