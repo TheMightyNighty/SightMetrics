@@ -40,27 +40,39 @@ docker run --rm \
   sightmetrics-ingestion run_all.sh
 ```
 
-```yaml
-# Kubernetes-CronJob (Skizze)
-spec:
-  schedule: "15 2 * * *"          # täglich 02:15
-  jobTemplate:
-    spec:
-      backoffLimit: 1             # Scheduler alarmiert bei Job-Fehler
-      template:
-        spec:
-          restartPolicy: Never
-          containers:
-            - name: import
-              image: sightmetrics-ingestion
-              args: ["run_all.sh"]
-              env:
-                - { name: STATE_DIR, value: /state }
-                - { name: PARALLEL, value: "auto" }
-                - { name: CUBE_DSN_FILE, value: /run/secrets/cube_dsn }
-              volumeMounts:
-                - { name: state, mountPath: /state }
-```
+## Kubernetes (vollständige Manifeste)
+
+Copy-paste-fähige, „restricted"-PSS-konforme Manifeste liegen in
+[`k8s/`](k8s/):
+
+| Datei | Inhalt |
+|---|---|
+| `cronjob.yaml` | CronJob inkl. `securityContext`, `resources`, allen Volumes (State-PVC, Log-Volume, sites.conf-ConfigMap, DSN-Secret, Geo-Volume, /tmp-emptyDir) |
+| `pvc-state.yaml` | Pflicht-PVC für den Offset-State |
+| `secret-cube-dsn.example.yaml` | DSN-Secret (Vorlage) |
+| `configmap-sites.example.yaml` | sites.conf als ConfigMap (Vorlage) |
+
+Wichtige Betriebs-Punkte:
+
+- **Non-root & read-only**: das Image läuft als UID 10001 mit
+  `readOnlyRootFilesystem: true`; beschreibbar sind nur `/state` (PVC) und
+  `/tmp` (emptyDir). Die DuckDB-MySQL-Extension ist ins Image gebacken
+  (kein Laufzeit-Download).
+- **`concurrencyPolicy: Forbid`** ergänzt das `flock` der Skripte auf
+  Scheduler-Ebene. **Achtung NFS:** `flock` ist auf NFS-basierten PVCs
+  unzuverlässig – für `/state` Block-Storage (RWO) verwenden.
+- **Image per Digest pinnen**: `ghcr.io/<org>/sightmetrics-ingestion@sha256:…`
+  – den Digest liefert der CI-Workflow `.github/workflows/image.yml`
+  (baut/pusht bei `v*`-Tags nach GHCR).
+- **GeoIP-Datensatz** ist nicht im Image (lizenzpflichtig, Runbook §3a):
+  als Volume mounten und `SM_GEO_PATH` setzen.
+- **Logs**: entweder als read-only Volume mounten – oder ganz ohne Log-Volume
+  über Loki importieren (`fetch_loki_logs.sh`).
+
+**Tagesgrenze:** Der Import hält Zeilen des noch laufenden Tages (UTC) zurück
+und importiert einen Tag erst, wenn er abgeschlossen ist (Runbook §8). Beim
+nächtlichen Lauf erscheint also jeweils der **komplette Vortag** – mehrere
+Läufe pro Tag sind dadurch ebenfalls sicher (kein Überschreiben von Teil-Tagen).
 
 **Exit-Code:** `run_all.sh` endet mit ≠0, wenn mind. eine Site fehlschlägt →
 der Scheduler (CronJob/`backoffLimit`, Cron-MAILTO) meldet das. Zusätzlich ruft

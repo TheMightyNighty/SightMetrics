@@ -1,0 +1,65 @@
+name: Container-Image
+
+# Baut und veröffentlicht das Ingestion-Image nach GHCR.
+# Trigger: Versions-Tags (v1.2.3) + manuell (workflow_dispatch).
+# Betreiber pinnen das Image per Digest (siehe Job-Ausgabe und
+# ingestion/scheduling/k8s/cronjob.yaml).
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    name: "Ingestion-Image -> GHCR"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Bewusst nicht im Repo (Groesse/Lizenz) -> fuer den Build bereitstellen:
+      # DuckDB-Binary herunterladen (Version identisch zu ci.yml/setup.sh);
+      # geo/ bleibt leer – der GeoIP-Datensatz ist lizenzpflichtig und wird
+      # zur Laufzeit gemountet (SM_GEO_PATH, Runbook §3a).
+      - name: DuckDB v1.5.4 herunterladen
+        run: |
+          mkdir -p ingestion/bin ingestion/geo
+          curl -fsSL -o /tmp/duckdb.zip \
+            https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip
+          unzip -o /tmp/duckdb.zip duckdb -d ingestion/bin/
+          chmod +x ingestion/bin/duckdb
+
+      - name: GHCR-Login
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image-Metadaten (Tags/Labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/sightmetrics-ingestion
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & Push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: ingestion
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Digest fuer Pinning ausgeben
+        run: |
+          echo "Image-Digest (fuer cronjob.yaml):"
+          echo "ghcr.io/${{ github.repository_owner }}/sightmetrics-ingestion@${{ steps.push.outputs.digest }}"

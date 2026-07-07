@@ -58,6 +58,10 @@ services:
     environment:
       CUBE_DSN: "${CUBE_DSN}"
       STATE_DIR: /state
+    # Demo: /state ist ein Bind-Mount des Host-Users -> als dessen UID laufen.
+    # Das Produktions-Image ist non-root (UID 10001, siehe ingestion/Dockerfile);
+    # bei abweichender Host-UID: SIGHTMETRICS_UID/GID in demo/.env setzen.
+    user: "${SIGHTMETRICS_UID:-1000}:${SIGHTMETRICS_GID:-1000}"
     volumes:
       - ../logs:/logs:ro
       - ../state:/state   # Offset-State persistent über Container-Neustarts

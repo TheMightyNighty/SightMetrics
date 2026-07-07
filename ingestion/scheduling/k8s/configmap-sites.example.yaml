@@ -1,0 +1,13 @@
+# sites.conf als ConfigMap (gemountet nach /etc/sightmetrics/sites.conf).
+# Format je Zeile: site_id<TAB>logfile<TAB>site_name  – die Spalten MÜSSEN mit
+# echten Tabs getrennt sein (Vorlage: ingestion/sites.conf.example).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sightmetrics-sites
+  labels:
+    app.kubernetes.io/name: sightmetrics-ingestion
+data:
+  sites.conf: |
+    1	/logs/site1/access.log	Musterbehörde Musterstadt
+    2	/logs/site2/access.log	Schulamt Beispielkreis
