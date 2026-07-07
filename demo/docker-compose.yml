@@ -1,4 +1,4 @@
-name: sightmetrics   # Projektname gepinnt -> bestehendes Volume sightmetrics_dbdata bleibt erhalten
+name: sightmetrics   # project name pinned -> existing volume sightmetrics_dbdata is preserved
 
 services:
   db:
@@ -15,7 +15,7 @@ services:
       - dbdata:/var/lib/mysql
       - ./initdb:/docker-entrypoint-initdb.d:ro
     ports:
-      - "3307:3306"          # Host-DuckDB schreibt den Cube hier ueber
+      - "3307:3306"          # host DuckDB writes the cube here
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -29,25 +29,25 @@ services:
       db:
         condition: service_healthy
     environment:
-      PHP_CLI_SERVER_WORKERS: "6"   # Backend macht parallele Requests
-      TYPO3_CONTEXT: "Development"   # zeigt echte Fehlermeldungen
+      PHP_CLI_SERVER_WORKERS: "6"   # backend makes parallel requests
+      TYPO3_CONTEXT: "Development"   # shows real error messages
       CUBE_RO_PASSWORD: "${CUBE_RO_PASSWORD:-report_ro}"
     volumes:
       - ./app:/var/www/html
-      # Extension-Quelle live gemountet: Aenderungen an extension/sight_metrics/
-      # sind sofort im Container sichtbar, kein Sync-Skript/Kopierschritt noetig.
+      # Extension source mounted live: changes to extension/sight_metrics/
+      # are immediately visible in the container, no sync script/copy step needed.
       - ../extension/sight_metrics:/var/www/html/packages/sight_metrics:ro
     ports:
       - "8091:80"
     working_dir: /var/www/html
-    # Server erst starten, wenn TYPO3 installiert ist (public/ existiert)
+    # Only start the server once TYPO3 is installed (public/ exists)
     command: >
       bash -c "until [ -f /var/www/html/public/index.php ]; do echo 'warte auf TYPO3-Install...'; sleep 5; done;
                echo 'Starte PHP-Server'; php -S 0.0.0.0:80 -t public"
 
-  # Paket A als Container (one-shot). Nur via Profil 'import':
-  #   Alle Sites (Standard):   docker compose --profile import run --rm ingestion
-  #   Einzelimport:            docker compose --profile import run --rm ingestion load_cube.sh /logs/<datei> "Site-Name" <id>
+  # Package A as a container (one-shot). Only via profile 'import':
+  #   All sites (default):   docker compose --profile import run --rm ingestion
+  #   Single import:          docker compose --profile import run --rm ingestion load_cube.sh /logs/<file> "Site-Name" <id>
   ingestion:
     build: ../ingestion
     image: sightmetrics-ingestion
@@ -58,13 +58,13 @@ services:
     environment:
       CUBE_DSN: "${CUBE_DSN}"
       STATE_DIR: /state
-    # Demo: /state ist ein Bind-Mount des Host-Users -> als dessen UID laufen.
-    # Das Produktions-Image ist non-root (UID 10001, siehe ingestion/Dockerfile);
-    # bei abweichender Host-UID: SIGHTMETRICS_UID/GID in demo/.env setzen.
+    # Demo: /state is a bind mount of the host user -> run as that UID.
+    # The production image is non-root (UID 10001, see ingestion/Dockerfile);
+    # for a differing host UID: set SIGHTMETRICS_UID/GID in demo/.env.
     user: "${SIGHTMETRICS_UID:-1000}:${SIGHTMETRICS_GID:-1000}"
     volumes:
       - ../logs:/logs:ro
-      - ../state:/state   # Offset-State persistent über Container-Neustarts
+      - ../state:/state   # offset state persistent across container restarts
 
 volumes:
   dbdata:

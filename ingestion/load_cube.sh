@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics-Ingestion: Log -> DuckDB-Cube -> MariaDB (inkrementell).
-# Einziger Schreiber der Cube-DB (Abschnitt 11.1). Misst Wall + CPU.
+# SightMetrics ingestion: log -> DuckDB cube -> MariaDB (incremental).
+# Sole writer of the cube DB (section 11.1). Measures wall + CPU time.
 #
-# Nutzung:  ./load_cube.sh [LOGDATEI] [SITE-NAME] [SITE-ID]
+# Usage:  ./load_cube.sh [LOGFILE] [SITE-NAME] [SITE-ID]
 #
-# Offset-Tracking: verarbeitet nur neue Zeilen seit dem letzten Lauf.
-#   STATE_DIR         Verzeichnis fuer .offset-Dateien  (Standard: ../state/)
+# Offset tracking: only processes new lines since the last run.
+#   STATE_DIR         directory for .offset files  (default: ../state/)
 #
 # Secrets:
-#   CUBE_DSN          DuckDB-MySQL-DSN  (host=... port=... user=... password=... database=...)
-#   CUBE_DSN_FILE     Pfad zu einer Datei mit dem DSN  (Docker-Secrets-Pattern,
-#                     Standard: /run/secrets/cube_dsn)
+#   CUBE_DSN          DuckDB MySQL DSN  (host=... port=... user=... password=... database=...)
+#   CUBE_DSN_FILE     path to a file containing the DSN  (Docker secrets pattern,
+#                     default: /run/secrets/cube_dsn)
 #
-# Tabellennamen (Standard: cube / daily / meta):
-#   SM_TABLE_CUBE     Name der Cube-Tabelle
-#   SM_TABLE_DAILY    Name der Daily-Tabelle
-#   SM_TABLE_META     Name der Meta-Tabelle
+# Table names (default: cube / daily / meta):
+#   SM_TABLE_CUBE     name of the cube table
+#   SM_TABLE_DAILY    name of the daily table
+#   SM_TABLE_META     name of the meta table
 #
-# GeoIP (TODO für Betreiber: Datei ist NICHT Teil des Repos, siehe
-#        docs/ingestion-runbook.md -> Abschnitt "GeoIP-Datensatz"):
-#   SM_GEO_SOURCE     native (Standard) | ip2location | dbip | maxmind
-#                     legt fest, welches geo_sources/<quelle>.sql geladen wird.
-#   SM_GEO_PATH       Pfad zur Geo-CSV (Standard: geo/country-ipv4-num.csv)
-#   SM_GEO_LOC_PATH   nur SM_GEO_SOURCE=maxmind: Pfad zu
+# GeoIP (TODO for operators: file is NOT part of the repo, see
+#        docs/ingestion-runbook.md -> section "GeoIP dataset"):
+#   SM_GEO_SOURCE     native (default) | ip2location | dbip | maxmind
+#                     determines which geo_sources/<source>.sql is loaded.
+#   SM_GEO_PATH       path to the geo CSV (default: geo/country-ipv4-num.csv)
+#   SM_GEO_LOC_PATH   only SM_GEO_SOURCE=maxmind: path to
 #                     GeoLite2-Country-Locations-en.csv
 # ---------------------------------------------------------------------------
 set -euo pipefail
@@ -35,16 +35,16 @@ LOGFILE="${1:-${REPO}/logs/example_1k.log}"
 SITENAME="${2:-Musterbehörde}"
 SITEID="${3:-1}"
 
-# ---- Offset-Tracking -------------------------------------------------------
+# ---- Offset tracking -------------------------------------------------------
 STATE_DIR="${STATE_DIR:-${REPO}/state}"
 mkdir -p "$STATE_DIR"
 
-# ---- Per-Site-Lock: kein paralleler Doppelimport derselben Site -----------
-# Schützt die Offset-/Meta-Konsistenz, falls sich zwei Läufe für dieselbe Site
-# überschneiden (z. B. manuell + geplanter Lauf). Laeuft VOR Geo/Secrets/
-# Log-Format-Validierung, damit ein Lock-Konflikt sofort und ressourcenfrei
-# abbricht, statt an fehlenden Voraussetzungen zu scheitern, die fuer diesen
-# Lauf gar nicht mehr gebraucht werden.
+# ---- Per-site lock: no parallel double import of the same site -----------
+# Protects offset/meta consistency if two runs for the same site
+# overlap (e.g. manual + scheduled run). Runs BEFORE geo/secrets/
+# log-format validation, so a lock conflict aborts immediately and without
+# using resources, instead of failing on missing prerequisites that
+# aren't needed for this run anyway.
 SITE_LOCK="${STATE_DIR}/site_${SITEID}.lock"
 exec 9>"$SITE_LOCK"
 if ! flock -n 9; then
@@ -52,7 +52,7 @@ if ! flock -n 9; then
   exit 0
 fi
 
-# ---- Geo-Quelle -------------------------------------------------------------
+# ---- Geo source -------------------------------------------------------------
 source "$(pwd)/lib_geo.sh"
 
 # ---- Secrets ---------------------------------------------------------------
@@ -61,19 +61,19 @@ if [ -z "${CUBE_DSN:-}" ] && [ -f "${CUBE_DSN_FILE:-/run/secrets/cube_dsn}" ]; t
 fi
 DSN="${CUBE_DSN:?Fehler: CUBE_DSN nicht gesetzt. Setze CUBE_DSN oder lege die Secret-Datei unter CUBE_DSN_FILE ab.}"
 
-# ---- Tabellennamen ---------------------------------------------------------
+# ---- Table names ------------------------------------------------------------
 SM_TABLE_CUBE="${SM_TABLE_CUBE:-cube}"
 SM_TABLE_DAILY="${SM_TABLE_DAILY:-daily}"
 SM_TABLE_META="${SM_TABLE_META:-meta}"
 export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META
 
-# ---- Log-Format ------------------------------------------------------------
+# ---- Log format -------------------------------------------------------------
 source "$(pwd)/lib_logformat.sh"
 
-# ---- Bot-Liste (device-detector, optional; sonst eingebaute Heuristik) ------
+# ---- Bot list (device-detector, optional; otherwise built-in heuristic) ----
 source "$(pwd)/lib_bots.sh"
 
-# State-Key: md5(site_id:absoluter_log-Pfad) → kollisionsfreier Dateiname
+# State key: md5(site_id:absolute_log_path) → collision-free filename
 STATE_KEY=$(printf '%s:%s' "$SITEID" "$(realpath "$LOGFILE")" | md5sum | cut -c1-16)
 STATE_FILE="${STATE_DIR}/${STATE_KEY}.offset"
 
@@ -94,10 +94,10 @@ else
   echo ">> Offset-Tracking: kein State gefunden → Vollimport (Site ${SITEID})"
 fi
 
-# Neue Zeilen in Temp-Datei schreiben (tail -c +N ist 1-basiert)
+# Write new lines to a temp file (tail -c +N is 1-based)
 TMPLOG=$(mktemp /tmp/sm_inc_XXXXXX.log)
 SQL_TMP=$(mktemp /tmp/sm_sql_XXXXXX.sql)
-TIME_TMP=$(mktemp /tmp/sm_time_XXXXXX.txt)      # eigene Datei je Lauf: PARALLEL-sicher
+TIME_TMP=$(mktemp /tmp/sm_time_XXXXXX.txt)      # separate file per run: PARALLEL-safe
 CONSUMED_TMP=$(mktemp /tmp/sm_consumed_XXXXXX.csv)
 trap 'rm -f "$TMPLOG" "$SQL_TMP" "$TIME_TMP" "$CONSUMED_TMP"' EXIT
 cat "$(pwd)/cube_to_mysql.sql" "$(pwd)/sink_mysql.sql" \
@@ -111,22 +111,22 @@ if [ "$NEW_BYTES" -eq 0 ]; then
 fi
 echo ">> Verarbeite $((NEW_BYTES / 1024 + 1)) KB neue Daten (~$(wc -l < "$TMPLOG") Zeilen)"
 
-# ---- Tagesgrenzen-Cut (siehe day_cut.sql / Runbook §8) ----------------------
-# Zeilen des noch laufenden Tages (UTC) werden zurueckgehalten und erst beim
-# naechsten Lauf importiert -- sonst wuerde das Bereichs-DELETE des Sinks beim
-# Folgelauf die frueh importierten Stunden dieses Tages verwerfen.
-#   SM_COMPLETE_DAYS=0   deaktiviert den Cut (z. B. fuer Backfills/Tests)
-#   SM_CUTOFF_DATE       Cut-Datum ueberschreiben (Standard: heute, UTC)
+# ---- Day-boundary cut (see day_cut.sql / runbook §8) ------------------------
+# Lines from the still-running day (UTC) are held back and only imported on
+# the next run -- otherwise the sink's range DELETE on the following run
+# would discard the hours of this day that were already imported earlier.
+#   SM_COMPLETE_DAYS=0   disables the cut (e.g. for backfills/tests)
+#   SM_CUTOFF_DATE       override the cutoff date (default: today, UTC)
 CUTOFF_DATE=""
 if [ "${SM_COMPLETE_DAYS:-1}" != "0" ]; then
   CUTOFF_DATE="${SM_CUTOFF_DATE:-$(date -u +%Y-%m-%d)}"
 fi
 
-# Einfache Anfuehrungszeichen fuer DuckDB-Stringliterale verdoppeln -- ein
-# Apostroph im Site-Namen/DSN/Regex darf das SQL nicht brechen.
+# Double single quotes for DuckDB string literals -- an apostrophe in the
+# site name/DSN/regex must not break the SQL.
 sq() { printf '%s' "${1//\'/\'\'}"; }
 
-# ---- Import ----------------------------------------------------------------
+# ---- Import -------------------------------------------------------------
 echo ">> SightMetrics-Ingestion -> MariaDB (Cube-DB): ${LOGFILE}"
 t0=$(date +%s.%N)
 /usr/bin/time -v -o "$TIME_TMP" "$DUCKDB" <<SQL
@@ -159,9 +159,9 @@ WALL=$(awk "BEGIN{printf \"%.2f\", $t1-$t0}")
 CPU=$(awk -F': ' '/User time/{u=$2}/System time/{s=$2} END{printf "%.2f", u+s}' "$TIME_TMP")
 echo ">> Ingestion -> MariaDB fertig. Wall=${WALL}s CPU=${CPU}s"
 
-# ---- Offset aktualisieren (nur nach erfolgreichem Import) ------------------
-# consumed = -1: kein Cut -> alles verarbeitet, Offset = Dateigroesse (byte-exakt).
-# Sonst: Offset nur bis vor die erste zurueckgehaltene Zeile vorruecken.
+# ---- Update offset (only after a successful import) ------------------------
+# consumed = -1: no cut -> everything processed, offset = file size (byte-exact).
+# Otherwise: advance offset only up to before the first held-back line.
 CONSUMED=$(cat "$CONSUMED_TMP" 2>/dev/null || echo -1)
 if [ "$CONSUMED" -ge 0 ] 2>/dev/null; then
   NEW_OFFSET=$((OFFSET + CONSUMED))
@@ -174,9 +174,9 @@ fi
 echo "${NEW_OFFSET}:${CURRENT_INODE}" > "$STATE_FILE"
 echo ">> Offset gespeichert: ${NEW_OFFSET}/${FILE_SIZE} Byte (Inode ${CURRENT_INODE}, Site ${SITEID})"
 
-# ---- Metriken schreiben (für Monitoring / Alerting) -----------------------
-# site_N.last: letzter Lauf (Overwrite) – Status/Zeitstempel des letzten Imports.
-# metrics.log: kumulatives Append aller Läufe.
+# ---- Write metrics (for monitoring / alerting) -----------------------------
+# site_N.last: last run (overwrite) – status/timestamp of the last import.
+# metrics.log: cumulative append of all runs.
 METRICS_LAST="${STATE_DIR}/site_${SITEID}.last"
 METRICS_LOG="${STATE_DIR}/metrics.log"
 TS_NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)

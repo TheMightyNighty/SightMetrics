@@ -1,6 +1,6 @@
-/* Globale Vendor-Bibliotheken (klassische Skripte, kein Import):
-   Chart.js, Leaflet und die Weltkarten-Daten. Nur so weit typisiert, wie
-   dashboard.js sie nutzt -- fuer tsc --checkJs (npm run typecheck). */
+/* Global vendor libraries (classic scripts, no import):
+   Chart.js, Leaflet, and the world map data. Only typed as far as
+   dashboard.js uses them -- for tsc --checkJs (npm run typecheck). */
 declare const Chart: any;
 declare const L: any;
 interface Window {

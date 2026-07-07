@@ -1,17 +1,17 @@
 # ===========================================================================
-# SightMetrics Ingestion – nächtlicher One-Shot als Kubernetes-CronJob.
-# Copy-paste-fähig; anzupassen: image (Digest!), Volumes (logs/geo), Namespace.
-# Konform zu Pod-Security-Standard "restricted" (Non-root, read-only RootFS,
-# keine Capabilities, Seccomp RuntimeDefault).
+# SightMetrics ingestion – nightly one-shot as a Kubernetes CronJob.
+# Copy-paste ready; adjust: image (digest!), volumes (logs/geo), namespace.
+# Conforms to Pod Security Standard "restricted" (non-root, read-only rootFS,
+# no capabilities, seccomp RuntimeDefault).
 #
-# Benötigt im selben Namespace:
-#   - PVC        sightmetrics-state      (pvc-state.yaml)          Pflicht
+# Requires in the same namespace:
+#   - PVC        sightmetrics-state      (pvc-state.yaml)          required
 #   - Secret     sightmetrics-cube-dsn   (secret-cube-dsn.example.yaml)
 #   - ConfigMap  sightmetrics-sites      (configmap-sites.example.yaml)
-#   - Zugriff auf die Webserver-Logs (PVC/NFS, read-only) ODER stattdessen
-#     fetch_loki_logs.sh als args nutzen (dann kein logs-Volume nötig)
-#   - GeoIP-Datensatz (nicht im Image, lizenzpflichtig – Runbook §3a):
-#     als PVC/Volume mounten und SM_GEO_PATH setzen
+#   - Access to the webserver logs (PVC/NFS, read-only) OR instead
+#     use fetch_loki_logs.sh as args (then no logs volume needed)
+#   - GeoIP dataset (not in the image, license-restricted – runbook §3a):
+#     mount as a PVC/volume and set SM_GEO_PATH
 # ===========================================================================
 apiVersion: batch/v1
 kind: CronJob
@@ -22,15 +22,15 @@ metadata:
 spec:
   schedule: "15 2 * * *"
   timeZone: "Europe/Berlin"
-  # Forbid ergänzt das flock im Skript: kein zweiter Job, solange einer läuft.
+  # Forbid complements the flock in the script: no second job while one is running.
   concurrencyPolicy: Forbid
   startingDeadlineSeconds: 3600
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      backoffLimit: 1                # 1 Retry, danach Job=failed -> Alerting
-      activeDeadlineSeconds: 7200    # Hänger hart beenden (2 h)
+      backoffLimit: 1                # 1 retry, then job=failed -> alerting
+      activeDeadlineSeconds: 7200    # hard-kill hangs (2 h)
       template:
         metadata:
           labels:
@@ -40,16 +40,16 @@ spec:
           automountServiceAccountToken: false
           securityContext:
             runAsNonRoot: true
-            runAsUser: 10001         # UID/GID aus ingestion/Dockerfile
+            runAsUser: 10001         # UID/GID from ingestion/Dockerfile
             runAsGroup: 10001
-            fsGroup: 10001           # PVC-Dateien für die Gruppe beschreibbar
+            fsGroup: 10001           # PVC files writable for the group
             seccompProfile:
               type: RuntimeDefault
           containers:
             - name: import
-              # IMMER per Digest pinnen (reproduzierbar, kein Tag-Hijacking):
+              # ALWAYS pin by digest (reproducible, no tag hijacking):
               #   ghcr.io/<org>/sightmetrics-ingestion@sha256:<digest>
-              # Digest liefert der CI-Workflow (.github/workflows/image.yml).
+              # The digest is provided by the CI workflow (.github/workflows/image.yml).
               image: ghcr.io/ORG/sightmetrics-ingestion@sha256:DIGEST
               args: ["run_all.sh"]
               env:
@@ -60,10 +60,10 @@ spec:
                 - { name: SITES_CONF,    value: /etc/sightmetrics/sites.conf }
                 - { name: CUBE_DSN_FILE, value: /etc/sightmetrics-secrets/cube_dsn }
                 - { name: SM_GEO_PATH,   value: /geo/country-ipv4-num.csv }
-                # optional: device-detector-Bot-Liste (tools/fetch_bot_list.sh,
-                # Runbook §3) als Volume mounten und hier aktivieren:
+                # optional: device-detector bot list (tools/fetch_bot_list.sh,
+                # runbook §3) mount as a volume and enable here:
                 # - { name: SM_BOT_RE_PATH, value: /bots/bot_regex.list }
-                # optional: Heartbeat (healthchecks.io o. ä.), Alarm-Webhook
+                # optional: heartbeat (healthchecks.io or similar), alert webhook
                 # - { name: HEALTHCHECK_URL, value: "https://hc-ping.com/…" }
                 # - { name: ALERT_WEBHOOK,   value: "https://hooks.slack.com/…" }
               securityContext:
@@ -72,7 +72,7 @@ spec:
                 capabilities:
                   drop: ["ALL"]
               resources:
-                # Richtwert: MaxRSS × PARALLEL (Runbook §10, state/metrics.log)
+                # Guideline: MaxRSS × PARALLEL (runbook §10, state/metrics.log)
                 requests:
                   cpu: 500m
                   memory: 512Mi
@@ -87,19 +87,19 @@ spec:
                 - { name: cube-dsn,   mountPath: /etc/sightmetrics-secrets, readOnly: true }
                 - { name: geo,        mountPath: /geo,                     readOnly: true }
           volumes:
-            # Pflicht: Offset-State persistent, sonst Voll-Reimport je Lauf.
-            # ACHTUNG: flock ist auf NFS-basierten PVCs unzuverlässig – für /state
-            # Block-Storage (RWO) verwenden; concurrencyPolicy: Forbid fängt den
-            # Parallel-Fall auf Scheduler-Ebene zusätzlich ab.
+            # Required: offset state must be persistent, otherwise a full reimport every run.
+            # WARNING: flock is unreliable on NFS-based PVCs – use block storage
+            # (RWO) for /state; concurrencyPolicy: Forbid additionally catches the
+            # parallel case at the scheduler level.
             - name: state
               persistentVolumeClaim:
                 claimName: sightmetrics-state
-            # readOnlyRootFilesystem: /tmp als emptyDir (mktemp-Zwischendateien)
+            # readOnlyRootFilesystem: /tmp as emptyDir (mktemp intermediate files)
             - name: tmp
               emptyDir:
                 sizeLimit: 1Gi
-            # Webserver-Logs read-only – je nach Umgebung PVC, NFS oder hostPath.
-            # Alternative ohne Log-Volume: Loki-Pfad (fetch_loki_logs.sh).
+            # Webserver logs read-only – depending on the environment PVC, NFS or hostPath.
+            # Alternative without a logs volume: Loki path (fetch_loki_logs.sh).
             - name: logs
               persistentVolumeClaim:
                 claimName: webserver-logs
@@ -110,7 +110,7 @@ spec:
             - name: cube-dsn
               secret:
                 secretName: sightmetrics-cube-dsn
-            # GeoIP-CSV (mehrere MB -> PVC statt ConfigMap; Beschaffung: Runbook §3a)
+            # GeoIP CSV (several MB -> PVC instead of ConfigMap; sourcing: runbook §3a)
             - name: geo
               persistentVolumeClaim:
                 claimName: sightmetrics-geo

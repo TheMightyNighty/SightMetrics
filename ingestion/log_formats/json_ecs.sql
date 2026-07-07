@@ -1,8 +1,8 @@
 -- ===========================================================================
--- Log-Format: json_ecs (strukturierte JSON-Logs, ECS-aehnliches Schema, eine
--- JSON-Zeile pro Request, z.B. nginx log_format ... escape=json).
+-- Log format: json_ecs (structured JSON logs, ECS-like schema, one
+-- JSON line per request, e.g. nginx log_format ... escape=json).
 --
--- Erwartetes Schema je Zeile (Auszug, siehe docs/ingestion-runbook.md §7):
+-- Expected schema per line (excerpt, see docs/ingestion-runbook.md §7):
 --   {"@timestamp":"<ISO8601>",
 --    "client":{"ip":"..."},
 --    "http":{"request":{"method":"..."},
@@ -10,18 +10,18 @@
 --    "app":{"url_path":"...","req":{"referer":"..."}},
 --    "user_agent":{"original":"..."}}
 --
--- Die App-Ebene muss "app" heissen, nicht "HTTP": ein zweiter Top-Level-Key,
--- der sich von "http" nur in Gross-/Kleinschreibung unterscheidet, kollidiert
--- mit DuckDBs case-insensitiver Spaltennamens-Aufloesung. Extraktion erfolgt
--- ueber json_extract_string() auf reinen JSON-Pfaden (kein struct-Zugriff,
--- kein read_ndjson-Auto-Typing): das vermeidet die Namenskollision und haelt
--- tsraw als reinen String, kompatibel mit der strptime/tsformat-Logik in
--- transform.sql (wie beim Regex-Pfad).
+-- The app level must be called "app", not "HTTP": a second top-level key
+-- that differs from "http" only in case collides with DuckDB's
+-- case-insensitive column-name resolution. Extraction is done
+-- via json_extract_string() on plain JSON paths (no struct access,
+-- no read_ndjson auto-typing): this avoids the name collision and keeps
+-- tsraw as a plain string, compatible with the strptime/tsformat logic in
+-- transform.sql (as with the regex path).
 --
--- Erzeugt TEMP TABLE parsed_lines(g) im selben Schema wie log_formats/regex.sql.
--- Parameter (SET VARIABLE): logpath, tsformat (Standard siehe lib_logformat.sh)
+-- Creates TEMP TABLE parsed_lines(g) in the same schema as log_formats/regex.sql.
+-- Parameters (SET VARIABLE): logpath, tsformat (default see lib_logformat.sh)
 -- ===========================================================================
--- raw_lines: siehe log_formats/regex.sql (Reihenfolge + Byte-Laenge fuer day_cut.sql).
+-- raw_lines: see log_formats/regex.sql (order + byte length for day_cut.sql).
 CREATE OR REPLACE TEMP TABLE raw_lines AS
 SELECT row_number() OVER () AS rid, line, strlen(line) + 1 AS nbytes
 FROM read_csv(getvariable('logpath'),

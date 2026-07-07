@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gesamt-Testlauf: Lint + alle drei Suiten, aggregiert.
+# Overall test run: lint + all three suites, aggregated.
 set -uo pipefail
 cd "$(dirname "$0")"
 fail=0

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Suite 2: PHP-Tests der Extension.
-#   2a) Unit (PHPUnit-Phar, kein TYPO3 nötig)
-#   2b) Functional (typo3/testing-framework, SQLite, Demo läuft)
-#   2c) Smoke (TYPO3-CLI gegen echte Cube-DB, Demo läuft)
-#   2d) JS-Smoke (Node + jsdom, kein Build-Prozess, kein TYPO3/Demo nötig)
+# Suite 2: PHP tests of the extension.
+#   2a) Unit (PHPUnit phar, no TYPO3 needed)
+#   2b) Functional (typo3/testing-framework, SQLite, demo running)
+#   2c) Smoke (TYPO3 CLI against a real cube DB, demo running)
+#   2d) JS smoke (Node + jsdom, no build process, no TYPO3/demo needed)
 set -uo pipefail
 cd "$(dirname "$0")"          # extension/
 EXT="$(pwd)/sight_metrics"
@@ -18,7 +18,7 @@ docker compose -f "$DEMO/docker-compose.yml" run --rm --no-deps \
   php /phpunit.phar -c /ext/phpunit.xml.dist || fail=1
 
 echo; echo "== 2b: PHP Functional (typo3/testing-framework, SQLite) =="
-# Prüfen ob testing-framework installiert ist (erst nach: composer update in demo/app/)
+# Check whether testing-framework is installed (only after: composer update in demo/app/)
 if docker exec sightmetrics-web test -f /var/www/html/vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php; then
   docker exec sightmetrics-web bash -c \
     "cd /var/www/html && php vendor/bin/phpunit \

@@ -1,5 +1,5 @@
 <?php
-// Leichter PSR-4-Autoloader (ohne TYPO3) fuer die Unit-Tests.
+// Lightweight PSR-4 autoloader (without TYPO3) for the unit tests.
 spl_autoload_register(static function (string $class): void {
     $prefix = 'SightMetrics\\';
     if (strncmp($class, $prefix, strlen($prefix)) !== 0) {

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# Einmaliges Setup des Wegwerf-Demo-Stacks. Holt/erzeugt alles, was nicht im
-# Repo liegt (bewusst gitignored: große Binärdateien, generierte Installationen,
-# lizenzpflichtige Datensätze) und richtet TYPO3 nicht-interaktiv ein.
+# One-time setup of the disposable demo stack. Fetches/generates everything
+# not in the repo (deliberately gitignored: large binary files, generated
+# installations, license-restricted datasets) and sets up TYPO3 non-interactively.
 #
-# Danach: docker compose up -d   (falls nicht schon vom Setup gestartet)
+# Afterwards: docker compose up -d   (unless already started by setup)
 #
-# Kein separater Apache/nginx nötig – der Demo-web-Container nutzt den
-# eingebauten PHP-Dev-Server (siehe docker-compose.yml, Kommando von 'web').
+# No separate Apache/nginx needed – the demo web container uses the
+# built-in PHP dev server (see docker-compose.yml, command of 'web').
 # ---------------------------------------------------------------------------
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -77,10 +77,10 @@ until [ "$(docker inspect -f '{{.State.Health.Status}}' sightmetrics-db 2>/dev/n
 done
 echo " OK"
 
-# TYPO3 gilt nur als installiert, wenn sowohl die Dateien (app/vendor,
-# app/public) ALS AUCH das Datenbankschema vorhanden sind - ein frisches
-# DB-Volume bei vorhandenen Dateien wuerde sonst uebersprungen und mit
-# leerem Schema laufen (HTTP 500).
+# TYPO3 only counts as installed if both the files (app/vendor,
+# app/public) AND the database schema are present - a fresh
+# DB volume with existing files would otherwise be skipped and run
+# with an empty schema (HTTP 500).
 SCHEMA_EXISTS=$(docker compose exec -T db mariadb -uroot -p"${MARIADB_ROOT_PASSWORD:-root}" -N \
   -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='t3' AND table_name='be_users';" 2>/dev/null || echo 0)
 
@@ -106,9 +106,9 @@ fi
 echo ">> Starte kompletten Stack..."
 docker compose up -d
 
-# Extension-Quelle ist per Bind-Mount live eingebunden (siehe docker-compose.yml,
-# ../extension/sight_metrics -> packages/sight_metrics) - kein Sync-/Kopierschritt
-# noetig. Nur den Cache leeren, damit ein frischer Erstinstall sie sofort sieht.
+# Extension source is bind-mounted live (see docker-compose.yml,
+# ../extension/sight_metrics -> packages/sight_metrics) - no sync/copy step
+# needed. Just clear the cache so a fresh first install sees it immediately.
 docker compose exec -T web php vendor/bin/typo3 cache:flush >/dev/null 2>&1 || true
 
 cat <<EOF

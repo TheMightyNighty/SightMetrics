@@ -1,9 +1,9 @@
 -- ===========================================================================
--- Geo-Quelle: DB-IP Country-Lite (CSV, monatlich, Lizenz CC-BY-4.0).
--- Download (kein Account nötig): https://db-ip.com/db/download/ip-to-country-lite
--- Erwartetes Rohformat, ohne Header, 3 Spalten:
---   ip_start,ip_end,country_code   (IPs in Punkt-/Doppelpunktnotation, IPv4+IPv6)
--- SightMetrics wertet nur IPv4 aus -> IPv6-Zeilen (":"-haltig) werden verworfen.
+-- Geo source: DB-IP Country-Lite (CSV, monthly, license CC-BY-4.0).
+-- Download (no account needed): https://db-ip.com/db/download/ip-to-country-lite
+-- Expected raw format, no header, 3 columns:
+--   ip_start,ip_end,country_code   (IPs in dot/colon notation, IPv4+IPv6)
+-- SightMetrics only evaluates IPv4 -> IPv6 lines (containing ":") are discarded.
 -- Parameter (SET VARIABLE): geopath
 -- ===========================================================================
 CREATE OR REPLACE TEMP VIEW geo_ranges AS

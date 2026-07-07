@@ -3,8 +3,8 @@
 use SightMetrics\Controller\DashboardController;
 
 /**
- * Backend-Modul unterhalb von "Web". Nicht-Extbase (einfacher Controller),
- * da die Extension nur liest und keine TCA/Domain-Modelle braucht.
+ * Backend module below "Web". Non-Extbase (plain controller),
+ * since the extension only reads and needs no TCA/domain models.
  */
 return [
     'web_sightmetrics' => [
@@ -13,7 +13,7 @@ return [
         'access' => 'user',
         'iconIdentifier' => 'sight-metrics-module',
         'path' => '/module/web/sight-metrics',
-        // Labels aus der Sprachdatei (mlang_tabs_tab = Titel, mlang_labels_tabdescr = Beschreibung).
+        // Labels from the language file (mlang_tabs_tab = title, mlang_labels_tabdescr = description).
         'labels' => 'LLL:EXT:sight_metrics/Resources/Private/Language/locallang_mod.xlf',
         'routes' => [
             '_default' => [

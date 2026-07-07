@@ -1,6 +1,6 @@
-/* SightMetrics – CSV-Export des Dashboards.
-   Spiegelt bewusst den aktuell GELADENEN Stand (Top-N + Nachgeladenes, Seitenbaum-
-   Ausschnitt), kein Vollstaendigkeits-Request beim Export. */
+/* SightMetrics - CSV export of the dashboard.
+   Deliberately mirrors the currently LOADED state (Top-N + lazy-loaded, page tree
+   subset), no completeness request on export. */
 
 import { csvRow, inR, lastSeg, slug, SEP } from './util.js';
 
@@ -19,8 +19,8 @@ export function createCsvExport(ctx) {
   const { i18n, META, DAILY, TOPN, TOPN_ROOT, TREE, agg } = ctx;
   const t = i18n.t, tf = i18n.tf;
 
-  // Dimensionen fuer den Export (Cube-Schluessel -> lesbare Ueberschrift + Metrik
-  // + optionaler Anzeige-Mapper fuer Rohwerte).
+  // Dimensions for the export (cube key -> readable heading + metric
+  // + optional display mapper for raw values).
   /** @type {Array<[string, string, 'pv'|'v', ((v: string) => string)?]>} */
   const EXPORT_DIMS = [
     ['country', t('dim.country', 'Countries'), 'v', i18n.landName],
@@ -34,7 +34,7 @@ export function createCsvExport(ctx) {
     ['method', t('dim.methods', 'HTTP methods'), 'pv'], ['hour', t('dim.hours', 'Visiting hours (hour of day)'), 'pv'],
   ];
 
-  /** @param {string} a @param {string} b ISO-Zeitraum */
+  /** @param {string} a @param {string} b ISO time range */
   function buildCsv(a, b) {
     const L = [], days = DAILY.filter(function (d) { return inR(d.datum, a, b); });
     L.push(csvRow(['SightMetrics-Export']));
@@ -48,8 +48,8 @@ export function createCsvExport(ctx) {
     days.forEach(function (d) { L.push(csvRow([d.datum, d.visits, d.pageviews, d.uniques, d.bounces, d.bytes])); });
 
     EXPORT_DIMS.forEach(function (dd) {
-      // Top-N-Dims: nur der geladene Ausschnitt (siehe Kopfkommentar); aufgeklappte
-      // Kind-Listen (Browser-Version usw.) sind nicht enthalten -- nur die Root-Ebene.
+      // Top-N dims: only the loaded subset (see header comment); expanded
+      // child lists (browser version etc.) are not included -- only the root level.
       const governed = Object.prototype.hasOwnProperty.call(TOPN_ROOT, dd[0]);
       let rows = governed
         ? TOPN[dd[0]].rows.map(function (r) { return { key: r.dimkey, pv: r.pv, v: r.v }; })
@@ -66,8 +66,8 @@ export function createCsvExport(ctx) {
       rows.forEach(function (r) { L.push(csvRow([label(r.key.split(SEP).join(' › ')), r[dd[2]], r.pv, r.v])); });
     });
 
-    // Seitenbaum: rekursiver Dump des aktuell geladenen Stands (volle Pfade mit
-    // Unterbaum-Summen inkl. der Seite selbst).
+    // Page tree: recursive dump of the currently loaded state (full paths with
+    // subtree totals including the page itself).
     if (TREE.rows.length) {
       L.push('');
       L.push(csvRow([t('csv.pages', 'Pages (subtree totals) – loaded subset only, see page tree in the dashboard')]));
@@ -84,13 +84,13 @@ export function createCsvExport(ctx) {
 
   /** @param {string} name @param {string} text */
   function downloadFile(name, text) {
-    const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }); // BOM für Excel
+    const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }); // BOM for Excel
     const url = URL.createObjectURL(blob), a = document.createElement('a');
     a.href = url; a.download = name; document.body.appendChild(a); a.click();
     document.body.removeChild(a); setTimeout(function () { URL.revokeObjectURL(url); }, 0);
   }
 
-  /** @param {string} a @param {string} b ISO-Zeitraum */
+  /** @param {string} a @param {string} b ISO time range */
   function exportCsv(a, b) {
     downloadFile('sightmetrics_' + slug(META.site) + '_' + a + '_' + b + '.csv', buildCsv(a, b));
   }

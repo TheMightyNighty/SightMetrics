@@ -1,19 +1,19 @@
 -- ===========================================================================
--- SightMetrics – Gemeinsamer MariaDB-Sink (Abschnitt 11).
--- Erwartet die TEMP-Tabellen daily_rows / cube_rows (sink-neutral erzeugt) und
--- ein per ATTACH ... (TYPE mysql) gemountetes Schema 'm'.
--- Genutzt von:
---   * Log-Pfad:    cube_to_mysql.sql + transform.sql   (load_cube.sh)
---   * Matomo-Pfad: matomo_to_cube.sql                  (matomo_import.sh)
--- Beide Treiber haengen diese Datei via `cat ... | envsubst` an ihren
--- Compute-Teil an, daher werden ${SM_TABLE_*} hier korrekt ersetzt.
--- Inkrementell sicher: nur Tage des aktuellen Batches werden ersetzt.
--- Parameter (SET VARIABLE): site_id, site_name
+-- SightMetrics – shared MariaDB sink (section 11).
+-- Expects the TEMP tables daily_rows / cube_rows (created sink-neutral) and
+-- a schema 'm' mounted via ATTACH ... (TYPE mysql).
+-- Used by:
+--   * Log path:    cube_to_mysql.sql + transform.sql   (load_cube.sh)
+--   * Matomo path: matomo_to_cube.sql                  (matomo_import.sh)
+-- Both drivers append this file via `cat ... | envsubst` to their
+-- compute part, so ${SM_TABLE_*} is correctly substituted here.
+-- Incrementally safe: only days of the current batch are replaced.
+-- Parameters (SET VARIABLE): site_id, site_name
 -- ===========================================================================
 
--- Versionierter DB-Vertrag zwischen Paket A (Schreiber) und Paket B (Leser).
--- Bei INKOMPATIBLEN Aenderungen an cube/daily/meta hochzaehlen und docs/SCHEMA.md
--- fortschreiben; die Extension prueft die Version beim Modulaufbau.
+-- Versioned DB contract between package A (writer) and package B (reader).
+-- Bump this on INCOMPATIBLE changes to cube/daily/meta and update docs/SCHEMA.md
+-- accordingly; the extension checks the version when building the module.
 SET VARIABLE sm_schema_version = 1;
 
 -- Schema (idempotent, multi-site)
@@ -23,21 +23,21 @@ CREATE TABLE IF NOT EXISTS m.${SM_TABLE_META}  (site_id INTEGER, site VARCHAR, v
                                     visits_total BIGINT, pageviews_total BIGINT, uniques_total BIGINT,
                                     bounces_total BIGINT, bytes_total BIGINT, erzeugt VARCHAR,
                                     schema_version INTEGER);
--- Bestands-DBs (vor Schema-Version) nachziehen; MariaDB versteht IF NOT EXISTS.
+-- Backfill existing DBs (pre schema version); MariaDB understands IF NOT EXISTS.
 CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_META} ADD COLUMN IF NOT EXISTS schema_version INTEGER');
 
--- Datumsbereich des zu ersetzenden Batches (VARCHAR 'YYYY-MM-DD').
--- Vorrang hat ein explizit gesetzter Bereich range_from/range_to (Matomo-Pfad
--- setzt hier den vollen --from/--to-Chunk, damit auch Tage OHNE neue Daten
--- sauber geleert werden); sonst MIN/MAX der tatsaechlich erzeugten daily_rows
--- (Log-Pfad – range_* ist dort nicht gesetzt -> getvariable() = NULL).
+-- Date range of the batch to be replaced (VARCHAR 'YYYY-MM-DD').
+-- Priority is given to an explicitly set range_from/range_to (the Matomo path
+-- sets the full --from/--to chunk here, so that days WITHOUT new data are
+-- also cleanly cleared); otherwise MIN/MAX of the actually generated daily_rows
+-- (log path – range_* is not set there -> getvariable() = NULL).
 SET VARIABLE d_min = COALESCE(getvariable('range_from'), (SELECT MIN(datum)::VARCHAR FROM daily_rows), '1970-01-01');
 SET VARIABLE d_max = COALESCE(getvariable('range_to'),   (SELECT MAX(datum)::VARCHAR FROM daily_rows), '1970-01-01');
 SET VARIABLE sid   = getvariable('site_id')::INTEGER::VARCHAR;
 
--- Einfaches Bereichs-DELETE ueber mysql_execute() (rohes MariaDB-SQL).
--- CHR(39) = einfaches Anführungszeichen; vermeidet DuckDB-Typ-Annotierungen (::DATE).
--- Beruehrt ausschliesslich Tage dieses Batches; andere Sites/Tage bleiben erhalten.
+-- Simple range DELETE via mysql_execute() (raw MariaDB SQL).
+-- CHR(39) = single quote; avoids DuckDB type annotations (::DATE).
+-- Touches only days of this batch; other sites/days are preserved.
 CALL mysql_execute('m',
   'DELETE FROM ${SM_TABLE_CUBE}  WHERE site_id = ' || getvariable('sid')
   || ' AND datum >= ' || CHR(39) || getvariable('d_min') || CHR(39)
@@ -52,8 +52,8 @@ CALL mysql_execute('m',
 INSERT INTO m.${SM_TABLE_DAILY} SELECT getvariable('site_id')::INTEGER, datum, visits, pageviews, uniques, bounces, bytes FROM daily_rows;
 INSERT INTO m.${SM_TABLE_CUBE}  SELECT getvariable('site_id')::INTEGER, CAST(datum AS DATE), dim, dimkey, pv, v FROM cube_rows;
 
--- Meta: Neuberechnung aus der vollstaendigen Daily-Tabelle.
--- Uniques-Total ist additiv angenahert (Tageswerte summiert).
+-- Meta: recomputed from the full daily table.
+-- Uniques total is an additive approximation (daily values summed).
 CALL mysql_execute('m', 'DELETE FROM ${SM_TABLE_META} WHERE site_id = ' || getvariable('sid'));
 INSERT INTO m.${SM_TABLE_META}
   SELECT getvariable('site_id')::INTEGER,

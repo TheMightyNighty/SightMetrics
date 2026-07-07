@@ -52,7 +52,7 @@ final class SiteSelectorTest extends TestCase
         $finder = $this->createMock(SiteFinder::class);
         $finder->method('getAllSites')->willReturn([]);
 
-        // null = kein Mapping -> Aufrufer duerfen filterlos arbeiten (Rueckwaertskompat.).
+        // null = no mapping -> callers may operate unfiltered (backward compat.).
         self::assertNull(SiteSelector::allowedSiteIds($finder, $this->beUser(false)));
     }
 
@@ -73,7 +73,7 @@ final class SiteSelectorTest extends TestCase
             $this->makeSite(['sightmetrics_site_id' => 7], 2),
         ]);
 
-        // Admin sieht alles, unabhaengig vom Webmount.
+        // Admin sees everything, independent of the webmount.
         self::assertSame([3, 7], SiteSelector::allowedSiteIds($finder, $this->beUser(true)));
     }
 
@@ -107,7 +107,7 @@ final class SiteSelectorTest extends TestCase
             $this->makeSite(['sightmetrics_site_id' => 7], 20),
         ]);
 
-        // Nicht-Admin darf nur rootPageId 10 sehen (Webmount) -> nur Site 3 im Ergebnis.
+        // Non-admin may only see rootPageId 10 (webmount) -> only site 3 in the result.
         $beUser = $this->createMock(BackendUserAuthentication::class);
         $beUser->method('isAdmin')->willReturn(false);
         $beUser->method('isInWebMount')->willReturnCallback(
@@ -128,12 +128,12 @@ final class SiteSelectorTest extends TestCase
         $beUser->method('isAdmin')->willReturn(false);
         $beUser->method('isInWebMount')->willReturn(null);
 
-        // [] (nicht null!): Mapping existiert, Benutzer darf nichts sehen. Aufrufer muessen
-        // das als "keine Sites" behandeln, NICHT als "kein Filter" (Mandantentrennung).
+        // [] (not null!): mapping exists, user may see nothing. Callers must
+        // treat this as "no sites", NOT as "no filter" (tenant separation).
         self::assertSame([], SiteSelector::allowedSiteIds($finder, $beUser));
     }
 
-    /** Die allowedSiteIds-Tests mocken TYPO3-Klassen – im TYPO3-freien Phar-Runner überspringen. */
+    /** The allowedSiteIds tests mock TYPO3 classes -- skip in the TYPO3-free Phar runner. */
     protected function setUp(): void
     {
         parent::setUp();

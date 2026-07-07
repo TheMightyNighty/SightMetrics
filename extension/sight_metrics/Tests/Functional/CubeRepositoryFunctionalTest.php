@@ -12,11 +12,11 @@ use TYPO3\CMS\Core\Database\ConnectionPool;
 use TYPO3\CMS\Core\Utility\GeneralUtility;
 use TYPO3\TestingFramework\Core\Functional\FunctionalTestCase;
 
-// CubeRepository ist ein privater DI-Service → direkt instanziieren statt getContainer()->get()
+// CubeRepository is a private DI service -> instantiate directly instead of getContainer()->get()
 
 /**
- * Functional-Tests für CubeRepository: echte SQLite-Verbindung, kein MariaDB nötig.
- * Prüft: Query-Korrektheit, Site-Filterung, Multi-Site-Isolation.
+ * Functional tests for CubeRepository: real SQLite connection, no MariaDB needed.
+ * Checks: query correctness, site filtering, multi-site isolation.
  */
 final class CubeRepositoryFunctionalTest extends FunctionalTestCase
 {
@@ -35,13 +35,13 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         $c->executeStatement('CREATE TABLE IF NOT EXISTS meta  (site_id INTEGER, site TEXT, von TEXT, bis TEXT, visits_total INTEGER, pageviews_total INTEGER, uniques_total INTEGER, bounces_total INTEGER, bytes_total INTEGER, erzeugt TEXT)');
         $c->executeStatement('CREATE TABLE IF NOT EXISTS daily (site_id INTEGER, datum TEXT, visits INTEGER, pageviews INTEGER, uniques INTEGER, bounces INTEGER, bytes INTEGER)');
         $c->executeStatement('CREATE TABLE IF NOT EXISTS cube  (site_id INTEGER, datum TEXT, dim TEXT, dimkey TEXT, pv INTEGER, v INTEGER)');
-        // ConnectionPool cached die SQLite-Verbindung als Singleton → Daten voheriger Tests löschen
+        // ConnectionPool caches the SQLite connection as a singleton -> delete data from previous tests
         $c->executeStatement('DELETE FROM meta');
         $c->executeStatement('DELETE FROM daily');
         $c->executeStatement('DELETE FROM cube');
     }
 
-    // ---- Fixture-Hilfe -------------------------------------------------------
+    // ---- Fixture helper -------------------------------------------------------
 
     private function cubeConn(): Connection
     {
@@ -50,8 +50,8 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
 
     private function repo(): CubeRepository
     {
-        // Cache "sight_metrics" ist ohne ext_localconf.php nicht registriert -> CubeRepository
-        // faellt fehlertolerant auf Live-Queries zurueck (siehe CubeRepository::cached()).
+        // Cache "sight_metrics" is not registered without ext_localconf.php -> CubeRepository
+        // fault-tolerantly falls back to live queries (see CubeRepository::cached()).
         return new CubeRepository(
             GeneralUtility::makeInstance(ConnectionPool::class),
             GeneralUtility::makeInstance(CacheManager::class),
@@ -133,7 +133,7 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         $this->insertSite(1, 'Site-1', [
             ['dim' => 'browser', 'dimkey' => 'Chrome', 'pv' => 5, 'v' => 3],
         ]);
-        // Zeilen ausserhalb des Fensters (anderer Tag) – muessen ausgeschlossen werden.
+        // Rows outside the window (different day) -- must be excluded.
         $c = $this->cubeConn();
         $c->insert('daily', ['site_id' => 1, 'datum' => '2026-03-15', 'visits' => 9, 'pageviews' => 9, 'uniques' => 9, 'bounces' => 0, 'bytes' => 0]);
         $c->insert('cube', ['site_id' => 1, 'datum' => '2026-03-15', 'dim' => 'browser', 'dimkey' => 'Edge', 'pv' => 9, 'v' => 9]);
@@ -296,7 +296,7 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         self::assertSame(['pv' => 0, 'v' => 0, 'count' => 0], $summary);
     }
 
-    // ---- Drill-down (parentKey), Phase 2 --------------------------------------
+    // ---- Drill-down (parentKey), phase 2 --------------------------------------
 
     public function testTopNWithParentKeyReturnsOnlyMatchingChildren(): void
     {
@@ -315,8 +315,8 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
     public function testTopNParentKeyDoesNotMatchUnrelatedPrefix(): void
     {
         $sep = "\x1f";
-        // "Chromium" beginnt mit "Chrom", darf aber nicht auf parentKey "Chrom" matchen --
-        // der Trenner muss exakt nach dem vollen Elternlabel folgen.
+        // "Chromium" starts with "Chrom", but must not match parentKey "Chrom" --
+        // the separator must follow exactly after the full parent label.
         $this->insertSite(1, 'Site-1', [
             ['dim' => 'browser_version', 'dimkey' => 'Chromium' . $sep . '1', 'pv' => 1, 'v' => 1],
             ['dim' => 'browser_version', 'dimkey' => 'Chrom' . $sep . '1', 'pv' => 1, 'v' => 1],
@@ -330,8 +330,8 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
     public function testTopNParentKeyHandlesMultibyteLabelsCorrectly(): void
     {
         $sep = "\x1f";
-        // Mehrbyte-UTF-8-Praefix (Umlaut): SUBSTR() muss Codepoints zaehlen, nicht Bytes,
-        // sonst wird der dimkey an der falschen Stelle abgeschnitten (siehe applyParentPrefix()).
+        // Multibyte UTF-8 prefix (umlaut): SUBSTR() must count codepoints, not bytes,
+        // otherwise the dimkey is truncated at the wrong position (see applyParentPrefix()).
         $this->insertSite(1, 'Site-1', [
             ['dim' => 'referrer_name', 'dimkey' => 'Bürgeramt' . $sep . 'seite-a', 'pv' => 1, 'v' => 3],
         ]);
@@ -369,7 +369,7 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         self::assertSame(['pv' => 5, 'v' => 3, 'count' => 1], $summary, 'leerer dimkey zaehlt weder in Summen noch in count');
     }
 
-    // ---- Seitenbaum (urlTreeChildren/urlTree) ----------------------------------
+    // ---- Page tree (urlTreeChildren/urlTree) ----------------------------------
 
     public function testUrlTreeChildrenSegmentsAndAggregatesSubtrees(): void
     {
@@ -385,7 +385,7 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         self::assertSame(2, $tree['total']['count']);
         self::assertSame(
             [
-                // '/a' aggregiert Seite selbst (5) + Unterbaum (2+1) = 8, hat Kinder
+                // '/a' aggregates the page itself (5) + subtree (2+1) = 8, has children
                 ['seg' => 'a', 'path' => '/a', 'pv' => 8, 'v' => 5, 'hasChildren' => true],
                 ['seg' => 'b', 'path' => '/b', 'pv' => 4, 'v' => 2, 'hasChildren' => false],
             ],
@@ -461,11 +461,11 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         self::assertSame(['pv' => 2, 'v' => 6, 'count' => 2], $summary);
     }
 
-    // ---- Schema-Version (DB-Vertrag, docs/SCHEMA.md) ---------------------------
+    // ---- Schema version (DB contract, docs/SCHEMA.md) ---------------------------
 
     public function testSchemaVersionIsNullForLegacyDatabases(): void
     {
-        // Fixture-meta ohne schema_version-Wert (Spalte fehlt oder NULL) = Legacy-Ingestion.
+        // Fixture meta without a schema_version value (column missing or NULL) = legacy ingestion.
         $this->insertSite(1, 'Site-1');
 
         self::assertNull($this->repo()->schemaVersion());
@@ -478,7 +478,7 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         try {
             $c->executeStatement('ALTER TABLE meta ADD COLUMN schema_version INTEGER');
         } catch (\Throwable) {
-            // Spalte existiert bereits (Singleton-SQLite-Verbindung ueber Tests hinweg)
+            // Column already exists (singleton SQLite connection persists across tests)
         }
         $c->executeStatement('UPDATE meta SET schema_version = 5');
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Pipeline-Tests (Suite 1): Transform-Logik, Envsubst, Purge-Validierung.
+# Pipeline tests (suite 1): transform logic, envsubst, purge validation.
 set -uo pipefail
-cd "$(dirname "$0")/.."   # -> ingestion/ (damit '.read transform.sql' greift)
+cd "$(dirname "$0")/.."   # -> ingestion/ (so that '.read transform.sql' works)
 fail=0
 
-# ---- 1.1 DuckDB Transform-Logik -----------------------------------------------
+# ---- 1.1 DuckDB transform logic -----------------------------------------------
 echo "== Pipeline: transform.sql gegen Fixture =="
 OUT=$(./bin/duckdb <<'SQL'
 SET VARIABLE logpath   = 'tests/fixture.log';
@@ -23,7 +23,7 @@ else
   echo ">> PIPELINE-TEST: OK"
 fi
 
-# ---- 1.2 Envsubst: SM_TABLE_* ------------------------------------------------
+# ---- 1.2 Envsubst: SM_TABLE_* -----------------------------------------------
 echo; echo "== Pipeline: SM_TABLE_* Envsubst =="
 ENVSUBST_TMP=$(mktemp /tmp/sm_envsubst_XXXXXX.sql)
 trap 'rm -f "$ENVSUBST_TMP"' EXIT
@@ -40,7 +40,7 @@ else
   fail=1
 fi
 
-# ---- 1.3 Purge-Skript: Eingabe-Validierung -----------------------------------
+# ---- 1.3 Purge script: input validation --------------------------------------
 echo; echo "== Pipeline: purge_cube.sh Eingabe-Validierung =="
 purge_out=$(CUBE_DSN=dummy RETENTION_MONTHS=abc bash ./purge_cube.sh 2>&1) && purge_rc=0 || purge_rc=$?
 if [ "$purge_rc" -ne 0 ] && echo "$purge_out" | grep -q 'positive ganze Zahl'; then
@@ -51,10 +51,10 @@ else
   fail=1
 fi
 
-# ---- 1.4 Log-Format: combined_vhost -----------------------------------------
+# ---- 1.4 Log format: combined_vhost ------------------------------------------
 echo; echo "== Pipeline: SM_LOG_FORMAT=combined_vhost =="
 VHOST_LOG=$(mktemp /tmp/sm_vhost_XXXXXX.log)
-# fixture.log mit HOST:PORT-Präfix → gleiche Kennzahlen erwartet
+# fixture.log with HOST:PORT prefix → same metrics expected
 sed 's/^/meinhost.de:443 /' tests/fixture.log > "$VHOST_LOG"
 VHOST_REGEX='^\S+:\d+ (\S+) \S+ \S+ \[([^\]]+)\] "(\S+) (\S+) [^"]*" (\d+) (\d+) "([^"]*)" "([^"]*)"'
 VHOST_OUT=$(./bin/duckdb <<SQL
@@ -77,7 +77,7 @@ else
   echo "PASS combined_vhost: gleiche Kennzahlen wie combined"
 fi
 
-# ---- 1.5 Backup: Konfigurierbarkeit, Rotation, Deaktivierung -----------------
+# ---- 1.5 Backup: configurability, rotation, deactivation ---------------------
 echo; echo "== Pipeline: backup_cube.sh (Stub-mysqldump) =="
 BK_TMP=$(mktemp -d /tmp/sm_bk_XXXXXX)
 BK_BIN="${BK_TMP}/bin"; mkdir -p "$BK_BIN"
@@ -86,12 +86,12 @@ chmod +x "${BK_BIN}/mysqldump"
 BK_DSN="host=db port=3306 user=report_ro password=secret database=analytics"
 backup_ok=1
 
-# Deaktiviert -> No-op, exit 0
+# Disabled -> no-op, exit 0
 out=$(BACKUP_ENABLED=0 CUBE_DSN="$BK_DSN" bash ./backup_cube.sh 2>&1) && rc=0 || rc=$?
 { [ "$rc" -eq 0 ] && echo "$out" | grep -q 'deaktiviert'; } \
   || { echo "FAIL backup deaktiviert nicht respektiert"; backup_ok=0; }
 
-# Drei Läufe mit Retention=2 -> nur 2 Dumps bleiben
+# Three runs with retention=2 -> only 2 dumps remain
 for i in 1 2 3; do
   PATH="$BK_BIN:$PATH" CUBE_DSN="$BK_DSN" BACKUP_DIR="${BK_TMP}/out" STATE_DIR="${BK_TMP}/st" \
     BACKUP_COMPRESS=none BACKUP_RETENTION=2 bash ./backup_cube.sh >/dev/null 2>&1 || { echo "FAIL backup-Lauf $i"; backup_ok=0; }
@@ -101,26 +101,26 @@ n=$(ls -1 "${BK_TMP}/out" 2>/dev/null | wc -l)
 [ "$n" -eq 2 ] || { echo "FAIL Rotation: erwartet 2 Dumps, gefunden ${n}"; backup_ok=0; }
 [ -f "${BK_TMP}/st/backup.last" ] || { echo "FAIL backup.last nicht geschrieben"; backup_ok=0; }
 
-# Fehlendes DSN -> Fehler
+# Missing DSN -> error
 out=$(BACKUP_DIR="${BK_TMP}/out2" CUBE_DSN="" CUBE_DSN_FILE=/nonexistent bash ./backup_cube.sh 2>&1) && rc=0 || rc=$?
 { [ "$rc" -ne 0 ] && echo "$out" | grep -qi 'DSN'; } \
   || { echo "FAIL fehlendes DSN nicht abgelehnt"; backup_ok=0; }
 rm -rf "$BK_TMP"
 if [ "$backup_ok" -eq 1 ]; then echo "PASS backup: Deaktivierung, Rotation (2), backup.last, DSN-Pflicht"; else fail=1; fi
 
-# ---- 1.6 Notify: Schwellen-Logik --------------------------------------------
+# ---- 1.6 Notify: threshold logic ----------------------------------------------
 echo; echo "== Pipeline: notify.sh Schwellen =="
 notify_ok=1
-# OK unter Schwelle WARN -> nichts gesendet (exit 0, Hinweis)
+# OK below threshold WARN -> nothing sent (exit 0, notice)
 out=$(ALERT_MIN_LEVEL=WARN ALERT_EMAIL="" ALERT_WEBHOOK="" bash ./notify.sh OK "test" 2>&1)
 echo "$out" | grep -q 'Schwelle' || { echo "FAIL notify: OK unter Schwelle nicht unterdrückt"; notify_ok=0; }
-# CRIT ohne Kanal -> exit 0 + Meldung ausgegeben
+# CRIT without channel -> exit 0 + message printed
 out=$(ALERT_EMAIL="" ALERT_WEBHOOK="" bash ./notify.sh CRIT "boom" 2>&1) && rc=0 || rc=$?
 { [ "$rc" -eq 0 ] && echo "$out" | grep -q 'Kein Kanal'; } \
   || { echo "FAIL notify: CRIT ohne Kanal unerwartet"; notify_ok=0; }
 if [ "$notify_ok" -eq 1 ]; then echo "PASS notify: Schwellen-Unterdrückung + No-Channel-Hinweis"; else fail=1; fi
 
-# ---- 1.7 Secrets-Rotation: Datei-Logik (ohne DB) ----------------------------
+# ---- 1.7 Secrets rotation: file logic (without DB) ----------------------------
 echo; echo "== Pipeline: rotate_cube_secret.sh (Datei, ROTATE_SKIP_DB) =="
 rot_ok=1
 RT_DIR=$(mktemp -d); RT_FILE="${RT_DIR}/cube_dsn.env"
@@ -137,28 +137,28 @@ perm=$(stat -c '%a' "$RT_FILE"); [ "$perm" = "640" ] || { echo "FAIL Dateirechte
 rm -rf "$RT_DIR"
 if [ "$rot_ok" -eq 1 ]; then echo "PASS rotation: Passwort getauscht, Präfix+Felder erhalten, Backup, Rechte 640"; else fail=1; fi
 
-# ---- 1.8 Per-Site-Lock in load_cube.sh --------------------------------------
+# ---- 1.8 Per-site lock in load_cube.sh ----------------------------------------
 echo; echo "== Pipeline: load_cube.sh Per-Site-Lock =="
 lock_ok=1
 LK_DIR=$(mktemp -d)
-( exec 8>"${LK_DIR}/site_777.lock"; flock -n 8 || exit 1   # Lock von außen halten
+( exec 8>"${LK_DIR}/site_777.lock"; flock -n 8 || exit 1   # hold the lock externally
   out=$(STATE_DIR="$LK_DIR" CUBE_DSN="dummy" bash ./load_cube.sh tests/fixture.log "LockTest" 777 2>&1) && rc=0 || rc=$?
   { [ "$rc" -eq 0 ] && echo "$out" | grep -q 'bereits importiert'; } || { echo "FAIL Lock nicht respektiert (rc=$rc): $out"; exit 2; }
 ) || lock_ok=0
 rm -rf "$LK_DIR"
 if [ "$lock_ok" -eq 1 ]; then echo "PASS per-site-lock: zweiter Lauf derselben Site wird übersprungen"; else fail=1; fi
 
-# ---- 1.9 Tagesgrenzen-Cut (day_cut.sql) --------------------------------------
+# ---- 1.9 Day-boundary cut (day_cut.sql) ---------------------------------------
 echo; echo "== Pipeline: day_cut.sql (Byte-genauer Cut am Tageswechsel) =="
 cut_ok=1
 CUT_LOG=$(mktemp /tmp/sm_cut_XXXXXX.log)
-# 2 Zeilen "gestern" (10.), 2 Zeilen "heute" (11.) – Cut bei 2026-01-11 erwartet:
-# konsumierte Bytes = exakt die Laenge der ersten beiden Zeilen.
+# 2 lines "yesterday" (10th), 2 lines "today" (11th) – cut at 2026-01-11 expected:
+# consumed bytes = exactly the length of the first two lines.
 head -n 2 tests/fixture.log > "$CUT_LOG"
 sed 's|10/Jan/2026|11/Jan/2026|' tests/fixture.log | head -n 2 >> "$CUT_LOG"
 DAY1_BYTES=$(head -n 2 tests/fixture.log | wc -c)
 
-cut_probe() { # $1=cutoff  -> gibt "consumed remaining" aus
+cut_probe() { # $1=cutoff  -> outputs "consumed remaining"
   ./bin/duckdb -noheader -list <<SQL
 SET VARIABLE logpath = '${CUT_LOG}';
 SET VARIABLE cutoff_date = '$1';
@@ -173,29 +173,29 @@ SQL
 out=$(cut_probe 2026-01-11)
 [ "$out" = "${DAY1_BYTES} 2" ] \
   || { echo "FAIL cut@2026-01-11: erwartet '${DAY1_BYTES} 2', ist '${out}'"; cut_ok=0; }
-out=$(cut_probe 2026-01-10)   # alles ist >= cutoff -> nichts konsumieren, nichts importieren
+out=$(cut_probe 2026-01-10)   # everything is >= cutoff -> consume nothing, import nothing
 [ "$out" = "0 0" ] \
   || { echo "FAIL cut@2026-01-10: erwartet '0 0', ist '${out}'"; cut_ok=0; }
-out=$(cut_probe 2026-01-12)   # alles aelter -> kein Cut (-1 = Aufrufer nutzt Dateigroesse)
+out=$(cut_probe 2026-01-12)   # everything is older -> no cut (-1 = caller uses file size)
 [ "$out" = "-1 4" ] \
   || { echo "FAIL cut@2026-01-12: erwartet '-1 4', ist '${out}'"; cut_ok=0; }
 rm -f "$CUT_LOG"
 if [ "$cut_ok" -eq 1 ]; then echo "PASS day-cut: Byte-Offset exakt, Zurueckhalten & No-Cut korrekt"; else fail=1; fi
 
-# ---- 1.10 Bot-Liste (lib_bots.sh + botregex-Variable) -------------------------
+# ---- 1.10 Bot list (lib_bots.sh + botregex variable) ---------------------------
 echo; echo "== Pipeline: Bot-Liste (device-detector-Mechanismus) =="
 bot_ok=1
 BOTL_DIR=$(mktemp -d)
 BOTL="${BOTL_DIR}/bot_regex.list"
-# Die Liste ERSETZT die Heuristik (kein Mischbetrieb) -> Googlebot muss mit in
-# die Testliste, sonst zaehlt die Googlebot-Fixture-Zeile ploetzlich mit.
+# The list REPLACES the heuristic (no mixed operation) -> Googlebot must be
+# included in the test list, otherwise the Googlebot fixture line suddenly counts.
 printf '# Kommentar\nAcmeHarvester/[0-9.]+\nGooglebot\n' > "$BOTL"
 BOT_LOG="${BOTL_DIR}/log"
 cp tests/fixture.log "$BOT_LOG"
-# UA, den die eingebaute Heuristik NICHT erkennt -> nur die Liste filtert ihn.
+# UA that the built-in heuristic does NOT recognize -> only the list filters it.
 printf '9.9.9.9 - - [10/Jan/2026:14:00:00 +0000] "GET /a HTTP/1.1" 200 100 "-" "AcmeHarvester/2.1"\n' >> "$BOT_LOG"
 
-bot_probe() { # $1 = zusaetzliches SQL (BOT_SQL oder leer) -> pageviews_total
+bot_probe() { # $1 = additional SQL (BOT_SQL or empty) -> pageviews_total
   ./bin/duckdb -noheader -list <<SQL
 SET VARIABLE logpath = '${BOT_LOG}';
 SET VARIABLE geopath = 'tests/geo_mini.csv';
@@ -214,7 +214,7 @@ with_list=$(bot_probe "$BOT_SQL")
 without_list=$(bot_probe "")
 [ "$with_list" = "6" ] || { echo "FAIL mit Liste: erwartet 6 Pageviews (AcmeHarvester gefiltert), ist '${with_list}'"; bot_ok=0; }
 [ "$without_list" = "7" ] || { echo "FAIL ohne Liste: erwartet 7 Pageviews (Heuristik kennt AcmeHarvester nicht), ist '${without_list}'"; bot_ok=0; }
-# Fehlende Liste -> BOT_SQL leer (Heuristik-Fallback in transform.sql).
+# Missing list -> BOT_SQL empty (heuristic fallback in transform.sql).
 no_list_sql=$(SM_BOT_RE_PATH="${BOTL_DIR}/nicht_da.list" bash -c 'cd "'"$(pwd)"'" && source ./lib_bots.sh >/dev/null; printf %s "$BOT_SQL"')
 [ -z "$no_list_sql" ] || { echo "FAIL ohne Liste: BOT_SQL muss leer sein"; bot_ok=0; }
 rm -rf "$BOTL_DIR"

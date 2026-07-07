@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Alarmierung (E-Mail und/oder Webhook).
+# SightMetrics – alerting (email and/or webhook).
 #
-# Verschickt eine Meldung an die konfigurierten Kanaele. Wird benutzt von:
-#   – run_all.sh (inline-Alarm bei fehlgeschlagenem Import)
-#   – manuell:   ./notify.sh CRIT "Import fuer site=3 fehlgeschlagen"
+# Sends a message to the configured channels. Used by:
+#   – run_all.sh (inline alert on failed import)
+#   – manually:  ./notify.sh CRIT "Import for site=3 failed"
 #
-# ALLES KONFIGURIERBAR ueber Env-Variablen:
-#   ALERT_EMAIL       Empfaenger-Adresse(n), kommagetrennt   (leer = kein Mail)
-#   ALERT_MAIL_FROM   Absender                               (sightmetrics@$(hostname))
-#   ALERT_MAIL_BIN    mail-Binary                            (mail)
-#   ALERT_WEBHOOK     Webhook-URL (Slack/Teams/generisch)    (leer = kein Webhook)
-#   ALERT_WEBHOOK_FORMAT  slack | teams | json               (slack)
-#   ALERT_MIN_LEVEL   Ab welchem Level alarmieren: OK|WARN|CRIT  (WARN)
-#   ALERT_PREFIX      Betreff-/Text-Praefix                  ([SightMetrics])
+# EVERYTHING CONFIGURABLE via env vars:
+#   ALERT_EMAIL       recipient address(es), comma-separated   (empty = no mail)
+#   ALERT_MAIL_FROM   sender                                   (sightmetrics@$(hostname))
+#   ALERT_MAIL_BIN    mail binary                              (mail)
+#   ALERT_WEBHOOK     webhook URL (Slack/Teams/generic)        (empty = no webhook)
+#   ALERT_WEBHOOK_FORMAT  slack | teams | json                 (slack)
+#   ALERT_MIN_LEVEL   from which level to alert: OK|WARN|CRIT  (WARN)
+#   ALERT_PREFIX      subject/text prefix                      ([SightMetrics])
 #
-# Aufruf:  ./notify.sh <LEVEL> <NACHRICHT...>
-#          LEVEL = OK | WARN | CRIT | UNKNOWN  (oder Zahl 0/1/2/3)
-# Exit:    0 = versendet/kein Kanal noetig, 1 = mind. ein Kanal fehlgeschlagen
+# Call:    ./notify.sh <LEVEL> <MESSAGE...>
+#          LEVEL = OK | WARN | CRIT | UNKNOWN  (or number 0/1/2/3)
+# Exit:    0 = sent/no channel needed, 1 = at least one channel failed
 # ---------------------------------------------------------------------------
 set -uo pipefail
 export LC_ALL=C
@@ -31,7 +31,7 @@ ALERT_WEBHOOK_FORMAT="${ALERT_WEBHOOK_FORMAT:-slack}"
 ALERT_MIN_LEVEL="${ALERT_MIN_LEVEL:-WARN}"
 ALERT_PREFIX="${ALERT_PREFIX:-[SightMetrics]}"
 
-# ---- Level normalisieren (Name oder Zahl) -> Zahl 0..3 ---------------------
+# ---- Normalize level (name or number) -> number 0..3 -----------------------
 to_num() {
   case "${1^^}" in
     OK|0)      echo 0 ;;
@@ -53,7 +53,7 @@ HOST="$(hostname -f 2>/dev/null || hostname)"
 SUBJECT="${ALERT_PREFIX} ${LVL_NAME} @ ${HOST}"
 BODY="${LVL_NAME}: ${MSG} (Host: ${HOST}, $(date -u +%Y-%m-%dT%H:%M:%SZ))"
 
-# Unterhalb der Schwelle (z. B. OK bei MIN=WARN) -> nichts senden.
+# Below the threshold (e.g. OK when MIN=WARN) -> send nothing.
 if [ "$LVL" -lt "$MIN" ]; then
   echo ">> notify: Level ${LVL_NAME} < Schwelle ${ALERT_MIN_LEVEL} – nichts gesendet."
   exit 0
@@ -61,7 +61,7 @@ fi
 
 rc=0
 
-# ---- E-Mail ----------------------------------------------------------------
+# ---- Email -------------------------------------------------------------
 if [ -n "$ALERT_EMAIL" ]; then
   if command -v "$ALERT_MAIL_BIN" >/dev/null 2>&1; then
     if printf '%s\n' "$BODY" | "$ALERT_MAIL_BIN" -s "$SUBJECT" \

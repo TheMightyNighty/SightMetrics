@@ -1,7 +1,7 @@
 -- ===========================================================================
--- Geo-Quelle: native (SightMetrics-eigenes Schema).
--- Erwartet: CSV ohne Header, 3 Spalten: start,end,cc (beide IPs als Integer,
--- Ländercode als ISO-2). Format identisch zu tests/geo_mini.csv.
+-- Geo source: native (SightMetrics' own schema).
+-- Expected: CSV without header, 3 columns: start,end,cc (both IPs as integer,
+-- country code as ISO-2). Format identical to tests/geo_mini.csv.
 -- Parameter (SET VARIABLE): geopath
 -- ===========================================================================
 CREATE OR REPLACE TEMP VIEW geo_ranges AS

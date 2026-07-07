@@ -1,20 +1,20 @@
 # ---------------------------------------------------------------------------
-# Healthchecks.io-Anbindung (Dead-Man's-Switch): meldet, dass ein Lauf
-# stattgefunden hat und ob er erfolgreich war. Ergaenzt notify.sh, das nur bei
-# aktiven Fehlern innerhalb eines Laufs alarmiert, nicht wenn der Scheduler
-# den Lauf gar nicht erst startet.
+# Healthchecks.io integration (dead man's switch): reports that a run has
+# taken place and whether it succeeded. Complements notify.sh, which only
+# alerts on active errors within a run, not when the scheduler doesn't
+# start the run at all.
 #
-# ENV: HEALTHCHECK_URL   z.B. https://hc-ping.com/<uuid> (leer = deaktiviert,
-#      kompatibel zu selbstgehosteten healthchecks-Instanzen)
-#      HEALTHCHECK_URL_FILE   Alternative: Pfad zu einer Datei mit der URL
+# ENV: HEALTHCHECK_URL   e.g. https://hc-ping.com/<uuid> (empty = disabled,
+#      compatible with self-hosted healthchecks instances)
+#      HEALTHCHECK_URL_FILE   alternative: path to a file with the URL
 #
-# Nutzung (source'n, dann):
-#   hc_ping "/start"                 Lauf begonnen (optional, fuer Dauer-Tracking)
-#   hc_ping ""                       Lauf erfolgreich beendet
-#   hc_ping "/fail" "Fehlertext..."  Lauf fehlgeschlagen, Body = Diagnose
+# Usage (source it, then):
+#   hc_ping "/start"                 run started (optional, for duration tracking)
+#   hc_ping ""                       run finished successfully
+#   hc_ping "/fail" "error text..."  run failed, body = diagnostics
 #
-# Ping-Fehler (Netzwerk, Healthchecks nicht erreichbar) brechen den Import
-# nicht ab, nur eine Warnung auf stderr.
+# Ping errors (network, healthchecks unreachable) don't abort the import,
+# just a warning on stderr.
 # ---------------------------------------------------------------------------
 if [ -z "${HEALTHCHECK_URL:-}" ] && [ -f "${HEALTHCHECK_URL_FILE:-/run/secrets/healthcheck_url}" ]; then
   HEALTHCHECK_URL=$(cat "${HEALTHCHECK_URL_FILE:-/run/secrets/healthcheck_url}")

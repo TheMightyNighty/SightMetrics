@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Generator fuer realistische Webserver-Logs (Apache "combined") fuer die
-Gruene-Wiese-/Weg-3-Pipeline.
+"""Generator for realistic webserver logs (Apache "combined") for the
+greenfield/path-3 pipeline.
 
-Session-basiert: ein Besucher (oeffentliche IP + fester User-Agent) erzeugt
-mehrere aufeinanderfolgende Pageviews innerhalb eines Zeitfensters -> echte
-Visits mit >1 Pageview, Einstieg/Ausstieg, Besucherpfade. Wiederkehrende
-Besucher aus einem Pool. KEINE privaten IPs (alles oeffentlich, damit GeoIP
-greift). Tagesgang (diurnal) ueber die Zeit.
+Session-based: one visitor (public IP + fixed user agent) generates
+several consecutive pageviews within a time window -> real
+visits with >1 pageview, entry/exit, visitor paths. Recurring
+visitors from a pool. NO private IPs (all public, so GeoIP
+applies). Diurnal pattern over time.
 
---clean : nur 2xx-Content-Hits (keine Assets/Bots/Redirects) -> muss NICHT
-          mehr vorgefiltert werden. Ideal fuer schnelle Testlaeufe.
+--clean : only 2xx content hits (no assets/bots/redirects) -> does NOT
+          need to be pre-filtered. Ideal for quick test runs.
 
-Beispiele:
+Examples:
     python3 generate_logs.py --clean -n 1000 --days 14 -o logs/example_1k.log
-    python3 generate_logs.py -n 2000000 -o logs/access.log     # mit Rauschen
+    python3 generate_logs.py -n 2000000 -o logs/access.log     # with noise
 """
 import argparse
 import datetime as dt
@@ -22,8 +22,8 @@ import os
 import random
 import sys
 
-# --- Behoerden-Seitenbaum (gut fuer Drill-down-Demo) -------------------------
-# (Pfad, Gewicht) – Gewicht steuert die Popularitaet (Zipf-artig).
+# --- Government site tree (good for drill-down demo) -------------------------
+# (path, weight) – weight controls popularity (Zipf-like).
 CONTENT_PATHS = [
     ("/", 30),
     ("/aktuelles", 12),
@@ -47,14 +47,14 @@ CONTENT_PATHS = [
     ("/bauen-umwelt/abfallkalender", 8),
     ("/suche", 6),
 ]
-# Downloads (eigener Action-Typ, fuer "Downloads"-Top-Liste)
+# Downloads (own action type, for the "downloads" top list)
 DOWNLOAD_PATHS = [
     ("/formulare/antrag-wohngeld.pdf", 5),
     ("/formulare/antrag-elterngeld.pdf", 5),
     ("/amt/abfallkalender-2026.pdf", 6),
     ("/aktuelles/haushaltsplan-2026.pdf", 3),
 ]
-# Einstiegsseiten (typische Landing-Pages aus Suche/extern)
+# Entry pages (typical landing pages from search/external)
 ENTRY_PATHS = ["/", "/buergerservice", "/buergerservice/termin-vereinbaren",
                "/amt/oeffnungszeiten", "/buergerservice/personalausweis",
                "/aktuelles", "/buergerservice/anmeldung-wohnsitz"]
@@ -63,18 +63,18 @@ ASSET_PATHS = ["/static/app.css", "/static/app.js", "/static/logo.svg",
                "/static/fonts/govsans.woff2", "/favicon.ico",
                "/static/hero.jpg", "/static/print.css"]
 
-REFERRERS_EXT = [  # (Referrer, Gewicht) – erster Hit einer Session
-    ("-", 38),                                         # Direkteinstieg
+REFERRERS_EXT = [  # (referrer, weight) – first hit of a session
+    ("-", 38),                                         # direct entry
     ("https://www.google.com/", 26),
     ("https://www.google.com/search?q=personalausweis+amt", 9),
     ("https://www.bing.com/", 6),
     ("https://duckduckgo.com/", 5),
-    ("https://www.service.bund.de/", 7),               # Behoerdenportal -> website
+    ("https://www.service.bund.de/", 7),               # government portal -> website
     ("https://t.co/abc123", 3),                        # social
     ("https://www.facebook.com/", 3),                  # social
 ]
 
-USER_AGENTS = [  # (UA, Gewicht) – mobil-lastig, wie echte Behoerdenseiten
+USER_AGENTS = [  # (UA, weight) – mobile-heavy, like real government sites
     ("Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1", 26),
     ("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Mobile Safari/537.36", 22),
     ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36", 28),
@@ -83,7 +83,7 @@ USER_AGENTS = [  # (UA, Gewicht) – mobil-lastig, wie echte Behoerdenseiten
 ]
 BOT_UA = "Googlebot/2.1 (+http://www.google.com/bot.html)"
 
-# Diurnaler Tagesgang (relatives Gewicht je Stunde, lokal). Nachts wenig.
+# Diurnal pattern (relative weight per hour, local). Low at night.
 HOURLY = [2,1,1,1,1,2,4,7,11,13,14,13,12,12,13,14,13,11,9,8,7,6,4,3]
 
 
@@ -93,14 +93,14 @@ def weighted(rng, pairs):
 
 
 def random_public_ip(rng):
-    """Oeffentliche, nicht-reservierte IPv4 (damit GeoIP greift)."""
+    """Public, non-reserved IPv4 (so GeoIP applies)."""
     while True:
         a = rng.randint(1, 223)
         if a in (10, 127, 0):
             continue
         b, c, d = rng.randint(0, 255), rng.randint(0, 255), rng.randint(1, 254)
-        if a == 172 and 16 <= b <= 31:   continue   # privat
-        if a == 192 and b == 168:        continue   # privat
+        if a == 172 and 16 <= b <= 31:   continue   # private
+        if a == 192 and b == 168:        continue   # private
         if a == 169 and b == 254:        continue   # link-local
         if a == 100 and 64 <= b <= 127:  continue   # CGNAT
         if a == 198 and b in (18, 19):   continue   # benchmark
@@ -118,7 +118,7 @@ def fmt_line(ts, ip, method, path, status, size, referrer, ua):
 
 
 def sample_time(rng, start, end):
-    """Zufaelliger Zeitpunkt im Fenster, nach Tagesgang gewichtet."""
+    """Random point in time within the window, weighted by the diurnal pattern."""
     span_days = max((end - start).days, 1)
     day = start + dt.timedelta(days=rng.randint(0, span_days - 1))
     hour = rng.choices(range(24), weights=HOURLY, k=1)[0]
@@ -127,43 +127,43 @@ def sample_time(rng, start, end):
 
 
 def build_session(rng, visitor, t0, clean):
-    """Erzeugt die Zeilen genau EINER Session (Liste von (ts, line))."""
+    """Generates the lines of exactly ONE session (list of (ts, line))."""
     lines = []
-    # Pageview-Anzahl: Bounce-lastig, langer Tail.
+    # Pageview count: bounce-heavy, long tail.
     r = rng.random()
     n = 1 if r < 0.42 else 2 if r < 0.66 else 3 if r < 0.82 \
         else rng.randint(4, 7) if r < 0.95 else rng.randint(8, 16)
 
     ip, ua = visitor["ip"], visitor["ua"]
     ts = t0
-    referrer = weighted(rng, REFERRERS_EXT)        # nur Einstieg hat Ext-Referrer
-    # Einstiegsseite bevorzugt aus ENTRY_PATHS
+    referrer = weighted(rng, REFERRERS_EXT)        # only the entry hit has an external referrer
+    # Entry page preferably from ENTRY_PATHS
     first_path = rng.choice(ENTRY_PATHS)
     paths = [first_path] + [weighted(rng, CONTENT_PATHS) for _ in range(n - 1)]
 
     for i, path in enumerate(paths):
-        # gelegentlich ein Download als "Pageview"
+        # occasionally a download as a "pageview"
         if i > 0 and rng.random() < 0.06:
             path = weighted(rng, DOWNLOAD_PATHS)
         method = "POST" if path in ("/buergerservice/termin-vereinbaren",
                                     "/suche") and rng.random() < 0.5 else "GET"
         status = 200
         if not clean:
-            # etwas realistisches Rauschen
+            # some realistic noise
             rr = rng.random()
             status = 404 if rr < 0.02 else 301 if rr < 0.05 else 500 if rr < 0.055 else 200
         size = rng.randint(800, 60000) if status == 200 else rng.randint(0, 700)
-        ref = referrer if i == 0 else "-"             # Folge-Hits: intern
+        ref = referrer if i == 0 else "-"             # follow-up hits: internal
         lines.append((ts, fmt_line(ts, ip, method, path, status, size, ref, ua)))
 
-        # Assets nur im "noisy"-Modus (muessten sonst vorgefiltert werden)
+        # assets only in "noisy" mode (would otherwise need to be pre-filtered)
         if not clean and status == 200 and rng.random() < 0.7:
             for _ in range(rng.randint(1, 3)):
                 a = rng.choice(ASSET_PATHS)
                 ats = ts + dt.timedelta(seconds=rng.randint(0, 2))
                 lines.append((ats, fmt_line(ats, ip, "GET", a, 200,
                                             rng.randint(300, 8000), path, ua)))
-        ts += dt.timedelta(seconds=rng.randint(4, 240))    # Verweildauer
+        ts += dt.timedelta(seconds=rng.randint(4, 240))    # dwell time
     return lines
 
 
@@ -200,7 +200,7 @@ def main():
 
     rows = []
     while len(rows) < args.num:
-        # 40 % wiederkehrend (power-law: kleiner Index = haeufiger), sonst neu
+        # 40% recurring (power-law: smaller index = more frequent), otherwise new
         if rng.random() < 0.40:
             idx = int(n_reg * (rng.random() ** 2.2))
             visitor = regulars[min(idx, n_reg - 1)]
@@ -210,7 +210,7 @@ def main():
         rows.extend(build_session(rng, visitor, t0, args.clean))
 
     rows = rows[:args.num]
-    rows.sort(key=lambda x: x[0])                  # wie ein echtes Access-Log
+    rows.sort(key=lambda x: x[0])                  # like a real access log
 
     opener = gzip.open if args.gzip else open
     with opener(out_path, "wt", encoding="utf-8") as fh:

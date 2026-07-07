@@ -1,11 +1,11 @@
-/* SightMetrics – reine Hilfsfunktionen (kein DOM-Zugriff, kein Zustand).
-   Von dashboard.js und modules/export.js importiert; einzeln testbar. */
+/* SightMetrics - pure helper functions (no DOM access, no state).
+   Imported by dashboard.js and modules/export.js; individually testable. */
 
-/** Eltern|Kind-Trenner in dimkey-Werten – exakt chr(31) wie in
-    ingestion/transform.sql und CubeRepository::CHILD_SEP. */
+/** Parent|child separator in dimkey values -- exactly chr(31) like in
+    ingestion/transform.sql and CubeRepository::CHILD_SEP. */
 export const SEP = '\x1f';
 
-/** Ein Tag in Millisekunden (UTC-Datumsarithmetik). */
+/** One day in milliseconds (UTC date arithmetic). */
 export const DAY = 86400000;
 
 /** @param {unknown} s @returns {string} HTML-escaped */
@@ -15,30 +15,30 @@ export function esc(s) {
   });
 }
 
-/** @param {string} d @param {string} a @param {string} b ISO-Daten (lexikographisch vergleichbar) */
+/** @param {string} d @param {string} a @param {string} b ISO dates (lexicographically comparable) */
 export function inR(d, a, b) { return d >= a && d <= b; }
 
-/** @param {number} b Bytes -> lesbare Groesse */
+/** @param {number} b bytes -> readable size */
 export function fmtBytes(b) {
   return b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB'
     : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB'
     : b >= 1e3 ? (b / 1e3).toFixed(0) + ' KB' : b + ' B';
 }
 
-/** @param {string} s ISO-Datum -> UTC-Millisekunden */
+/** @param {string} s ISO date -> UTC milliseconds */
 export function toDate(s) { const p = s.split('-'); return Date.UTC(+p[0], +p[1] - 1, +p[2]); }
 
-/** @param {number} ms UTC-Millisekunden -> ISO-Datum */
+/** @param {number} ms UTC milliseconds -> ISO date */
 export function toStr(ms) { return new Date(ms).toISOString().slice(0, 10); }
 
-/** Letztes Segment eines chr(31)-kodierten dimkey (Anzeige ohne Eltern-Praefix).
+/** Last segment of a chr(31)-encoded dimkey (display without the parent prefix).
     @param {string} k */
 export function lastSeg(k) { const i = k.lastIndexOf(SEP); return i < 0 ? k : k.slice(i + 1); }
 
 /** @param {string} h '#rrggbb' -> [r,g,b] */
 export function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
 
-/** Linear interpolierte Farbe zwischen zwei Hex-Farben (t in [0,1]).
+/** Linearly interpolated color between two hex colors (t in [0,1]).
     @param {string} c0 @param {string} c1 @param {number} t */
 export function lerpColor(c0, c1, t) {
   const a = hex2rgb(c0), b = hex2rgb(c1);
@@ -46,8 +46,8 @@ export function lerpColor(c0, c1, t) {
   return 'rgb(' + rgb.join(',') + ')';
 }
 
-/** CSV-Zelle: Formel-Praefixe entschaerfen (CSV-Injection, url/referrer/keyword sind
-    angreiferkontrolliert) und bei Bedarf quoten. @param {unknown} s */
+/** CSV cell: neutralize formula prefixes (CSV injection, url/referrer/keyword are
+    attacker-controlled) and quote if needed. @param {unknown} s */
 export function csvCell(s) {
   let v = String(s == null ? '' : s);
   if (/^[=+\-@]/.test(v)) v = "'" + v;
@@ -57,7 +57,7 @@ export function csvCell(s) {
 /** @param {Array<unknown>} arr */
 export function csvRow(arr) { return arr.map(csvCell).join(';'); }
 
-/** @param {string|undefined} s Dateiname-tauglicher Slug */
+/** @param {string|undefined} s filename-safe slug */
 export function slug(s) {
   return String(s || 'sightmetrics').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }

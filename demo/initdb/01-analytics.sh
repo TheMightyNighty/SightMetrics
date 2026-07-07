@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Cube-DB anlegen + User mit konfigurierbaren Passwörtern erstellen.
-# Ersetzt 01-analytics.sql; liest Passwörter aus Umgebungsvariablen.
+# Create the cube DB + create users with configurable passwords.
+# Replaces 01-analytics.sql; reads passwords from environment variables.
 #
-# ACHTUNG NUR FUER DIESE LOKALE DEMO, NICHT PRODUKTIV UEBERNEHMEN:
-# Die Grants unten nutzen 'user'@'%' (jeder Host darf sich verbinden), damit der lokale
-# Docker-Compose-Stack ohne feste Container-IP funktioniert. Produktiv den Host auf das
-# tatsaechliche Web-Subnetz/den Web-Host einschraenken (z. B. 'report_ro'@'10.0.1.0/255.255.255.0'
-# oder eine feste IP) und zusaetzlich per Netzwerksegmentierung/Firewall absichern — siehe
-# docs/extension-handbuch.md Abschnitt "Produktions-Haertung".
+# WARNING: FOR THIS LOCAL DEMO ONLY, DO NOT USE IN PRODUCTION:
+# The grants below use 'user'@'%' (any host may connect), so the local
+# Docker Compose stack works without a fixed container IP. In production, restrict
+# the host to the actual web subnet/web host (e.g. 'report_ro'@'10.0.1.0/255.255.255.0'
+# or a fixed IP) and additionally secure it via network segmentation/firewall — see
+# docs/extension-handbuch.md section "Production hardening".
 set -euo pipefail
 
 RW="${CUBE_RW_PASSWORD:-cube_rw}"

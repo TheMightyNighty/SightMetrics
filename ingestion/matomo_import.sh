@@ -1,41 +1,41 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Matomo-Altdaten-Import (einmalig pro Kundensite).
+# SightMetrics – Matomo historical-data import (one-off, per customer site).
 #
-# Zieht historische Reports aus Matomos Reporting-API (JSON) und schreibt sie
-# in dieselbe Cube-/Daily-/Meta-DB wie der taegliche Log-Import. Laeuft
-# unabhaengig neben load_cube.sh – der taegliche Log-Import bleibt der
-# fortlaufende Schreiber, dieser Import fuellt nur die Vergangenheit auf.
+# Pulls historical reports from Matomo's Reporting API (JSON) and writes them
+# into the same cube/daily/meta DB as the daily log import. Runs
+# independently alongside load_cube.sh – the daily log import remains the
+# continuous writer, this import only backfills the past.
 #
-# Aggregat-basiert: skaliert auch fuer Sites mit Millionen Hits/Tag, da die
-# API bereits pro Tag/Dimension aggregierte Zahlen liefert (keine Rohzeilen).
+# Aggregate-based: also scales for sites with millions of hits/day, since the
+# API already returns numbers aggregated per day/dimension (no raw rows).
 #
-# Nutzung:
+# Usage:
 #   ./matomo_import.sh --url https://matomo.example.org \
 #                      --matomo-idsite 7 \
 #                      --site-id 3 --site-name "Musterbehörde" \
 #                      --from 2020-01-01 --to 2024-12-31
 #
 # Token:
-#   MATOMO_TOKEN        Reporting-API token_auth (nur View-Rechte noetig), ODER
-#   MATOMO_TOKEN_FILE   Pfad zu einer Datei mit dem Token (Default:
-#                       /run/secrets/matomo_token). Wird per POST gesendet.
+#   MATOMO_TOKEN        Reporting API token_auth (only view rights needed), OR
+#   MATOMO_TOKEN_FILE   path to a file with the token (default:
+#                       /run/secrets/matomo_token). Sent via POST.
 #
-# Cube-DB (wie load_cube.sh):
-#   CUBE_DSN            DuckDB-MySQL-DSN, ODER
-#   CUBE_DSN_FILE       Pfad zur DSN-Datei (Default: /run/secrets/cube_dsn)
-#   SM_TABLE_CUBE/DAILY/META   Tabellennamen (Default: cube/daily/meta)
+# Cube DB (as in load_cube.sh):
+#   CUBE_DSN            DuckDB MySQL DSN, OR
+#   CUBE_DSN_FILE       path to the DSN file (default: /run/secrets/cube_dsn)
+#   SM_TABLE_CUBE/DAILY/META   table names (default: cube/daily/meta)
 #
 # Tuning:
-#   FILTER_LIMIT_HIGH   Top-N/Tag fuer High-Cardinality-Dims (url/keyword),
-#                       Default 1000. Low-Cardinality-Dims immer vollstaendig.
+#   FILTER_LIMIT_HIGH   top-N/day for high-cardinality dims (url/keyword),
+#                       default 1000. Low-cardinality dims always in full.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 export LC_ALL=C
 cd "$(dirname "$0")"
 DUCKDB="$(pwd)/bin/duckdb"
 
-# ---- Parameter -------------------------------------------------------------
+# ---- Parameters -------------------------------------------------------------
 MATOMO_URL=""; MATOMO_IDSITE=""; SITE_ID=""; SITE_NAME=""; DATE_FROM=""; DATE_TO=""
 JSON_DIR=""; DRY_RUN=0
 while [[ $# -gt 0 ]]; do
@@ -46,9 +46,9 @@ while [[ $# -gt 0 ]]; do
     --site-name)      SITE_NAME="$2"; shift 2 ;;
     --from)           DATE_FROM="$2"; shift 2 ;;
     --to)             DATE_TO="$2"; shift 2 ;;
-    --json-dir)       JSON_DIR="$2"; shift 2 ;;   # heruntergeladene JSONs behalten
-    --dry-run)        DRY_RUN=1; shift ;;          # nur JSON laden, kein DB-Schreiben
-    -h|--help)        sed -n '2,48p' "$0"; exit 0 ;;
+    --json-dir)       JSON_DIR="$2"; shift 2 ;;   # keep downloaded JSONs
+    --dry-run)        DRY_RUN=1; shift ;;          # only load JSON, no DB writes
+    -h|--help)        sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "Unbekannte Option: $1" >&2; exit 1 ;;
   esac
 done
@@ -56,7 +56,7 @@ done
 : "${SITE_ID:?--site-id fehlt}"; : "${SITE_NAME:?--site-name fehlt}"
 : "${DATE_FROM:?--from fehlt (YYYY-MM-DD)}"; : "${DATE_TO:?--to fehlt (YYYY-MM-DD)}"
 
-# ---- Secrets ---------------------------------------------------------------
+# ---- Secrets -------------------------------------------------------------
 if [ -z "${MATOMO_TOKEN:-}" ] && [ -f "${MATOMO_TOKEN_FILE:-/run/secrets/matomo_token}" ]; then
   MATOMO_TOKEN=$(cat "${MATOMO_TOKEN_FILE:-/run/secrets/matomo_token}")
 fi
@@ -77,9 +77,9 @@ FILTER_LIMIT_HIGH="${FILTER_LIMIT_HIGH:-1000}"
 
 API="${MATOMO_URL%/}/index.php"
 
-# ---- Report-Katalog: dim-datei=Methode[:flat][:high] ----------------------
-# high = High-Cardinality -> Top-N (FILTER_LIMIT_HIGH); sonst filter_limit=-1.
-# flat = &flat=1 fuer Actions-Reports (flache URL-Liste statt Baum).
+# ---- Report catalog: dim-file=method[:flat][:high] -------------------------
+# high = high cardinality -> top-N (FILTER_LIMIT_HIGH); otherwise filter_limit=-1.
+# flat = &flat=1 for Actions reports (flat URL list instead of a tree).
 REPORTS=(
   "daily=VisitsSummary.get"
   "url=Actions.getPageUrls:flat:high"
@@ -95,9 +95,9 @@ REPORTS=(
   "hour=VisitTime.getVisitInformationPerLocalTime"
 )
 
-# ---- Monats-Chunks erzeugen (YYYY-MM-DD,YYYY-MM-DD je Monat) ---------------
-# period=day + Range liefert pro Tag gebucketete Ergebnisse in EINEM Call;
-# Monats-Chunking haelt die einzelne Response handlich (statt 5 Jahre am Stueck).
+# ---- Generate month chunks (YYYY-MM-DD,YYYY-MM-DD per month) --------------
+# period=day + range returns per-day bucketed results in ONE call;
+# monthly chunking keeps a single response manageable (instead of 5 years at once).
 mapfile -t CHUNKS < <("$DUCKDB" -noheader -list -c "
   SELECT strftime(greatest(m, DATE '${DATE_FROM}'), '%Y-%m-%d') || ',' ||
          strftime(least(m + INTERVAL 1 MONTH - INTERVAL 1 DAY, DATE '${DATE_TO}'), '%Y-%m-%d')
@@ -119,19 +119,19 @@ fetch() { # $1=method $2=outfile $3=daterange $4=flat(0/1) $5=limit
   local method="$1" out="$2" range="$3" flat="$4" limit="$5"
   local url="${API}?module=API&method=${method}&idSite=${MATOMO_IDSITE}&period=day&date=${range}&format=json&filter_limit=${limit}"
   [ "$flat" = "1" ] && url="${url}&flat=1"
-  # Token im POST-Body (Matomo-Haertung); leere/fehlerhafte Antwort -> '{}'.
+  # Token in the POST body (Matomo hardening); empty/erroneous response -> '{}'.
   if ! curl -fsS "$url" --data-urlencode "token_auth=${TOKEN}" -o "$out" 2>/dev/null; then
     echo "   WARN: ${method} ${range} -> curl-Fehler (Netzwerk/Timeout/HTTP), uebersprungen." >&2
     echo "{}" > "$out"; return
   fi
-  # API-Fehler ("result":"error") ebenfalls zu '{}' degradieren.
+  # Also degrade API errors ("result":"error") to '{}'.
   if grep -q '"result":"error"' "$out" 2>/dev/null; then
     echo "   WARN: ${method} ${range} -> API-Fehler, uebersprungen." >&2
     echo "{}" > "$out"
   fi
 }
 
-# ---- Chunk-Schleife --------------------------------------------------------
+# ---- Chunk loop -------------------------------------------------------------
 n=0
 for range in "${CHUNKS[@]}"; do
   n=$((n+1))
@@ -151,15 +151,15 @@ for range in "${CHUNKS[@]}"; do
     continue
   fi
 
-  # Compute (matomo_to_cube.sql) + gemeinsamer Sink, ein DuckDB-Lauf je Chunk.
+  # Compute (matomo_to_cube.sql) + shared sink, one DuckDB run per chunk.
   SQL_TMP=$(mktemp "${WORK}/sql_XXXXXX.sql")
   cat matomo_to_cube.sql sink_mysql.sql \
     | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
-  # range_from/range_to = voller Chunk-Bereich -> der Sink leert genau diese
-  # Tage, auch wenn Matomo fuer einzelne Tage keine Daten liefert (sauberes
-  # Ersetzen statt nur MIN/MAX der zurueckgegebenen Daten).
+  # range_from/range_to = full chunk range -> the sink clears exactly these
+  # days, even if Matomo returns no data for individual days (clean
+  # replace instead of just MIN/MAX of the returned data).
   c_from="${range%%,*}"; c_to="${range##*,}"
-  # Einfache Anfuehrungszeichen fuer DuckDB-Stringliterale verdoppeln.
+  # Double single quotes for DuckDB string literals.
   "$DUCKDB" <<SQL
 INSTALL mysql; LOAD mysql;
 ATTACH '${DSN//\'/\'\'}' AS m (TYPE mysql);

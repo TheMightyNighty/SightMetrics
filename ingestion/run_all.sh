@@ -1,37 +1,37 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Alle Sites importieren (Orchestrator).
+# SightMetrics – import all sites (orchestrator).
 #
-# Liest sites.conf, ruft load_cube.sh pro Site auf, schreibt ein Log und
-# gibt am Ende eine Zusammenfassung aus.  Exit-Code 1 wenn mind. eine Site
-# fehlschlug (für cron/systemd-Alerting).
+# Reads sites.conf, calls load_cube.sh per site, writes a log and
+# prints a summary at the end.  Exit code 1 if at least one site
+# failed (for cron/systemd alerting).
 #
-# Nutzung:
-#   ./run_all.sh [--parallel N] [--sites /pfad/sites.conf]
+# Usage:
+#   ./run_all.sh [--parallel N] [--sites /path/sites.conf]
 #
-# Env-Variablen:
-#   CUBE_DSN     DuckDB-MySQL-DSN (oder CUBE_DSN_FILE, siehe load_cube.sh)
-#   STATE_DIR    Offset-State-Verzeichnis (Standard: ../state/)
-#   PARALLEL     Parallele Jobs (Standard: 1)
-#   SITES_CONF   Pfad zur sites.conf (Standard: ./sites.conf)
-#   LOG_DIR      Import-Logverzeichnis (Standard: ../logs/import-logs/)
-#   HEALTHCHECK_URL / HEALTHCHECK_URL_FILE   Heartbeat-Ping (healthchecks.io
-#     o.ae., optional, siehe lib_healthcheck.sh) – meldet zusaetzlich zu
-#     notify.sh (aktive Fehler) auch einen AUSBLEIBENDEN Lauf (Scheduler
-#     defekt, Container startet nicht, ...).
+# Env vars:
+#   CUBE_DSN     DuckDB MySQL DSN (or CUBE_DSN_FILE, see load_cube.sh)
+#   STATE_DIR    offset state directory (default: ../state/)
+#   PARALLEL     parallel jobs (default: 1)
+#   SITES_CONF   path to sites.conf (default: ./sites.conf)
+#   LOG_DIR      import log directory (default: ../logs/import-logs/)
+#   HEALTHCHECK_URL / HEALTHCHECK_URL_FILE   heartbeat ping (healthchecks.io
+#     or similar, optional, see lib_healthcheck.sh) – in addition to
+#     notify.sh (active errors), this also reports a MISSING run (scheduler
+#     broken, container won't start, ...).
 #
-# Cron-Beispiel (täglich 02:00 Uhr):
+# Cron example (daily at 02:00):
 #   0 2 * * * /opt/sightmetrics/ingestion/run_all.sh >> /var/log/sightmetrics/cron.log 2>&1
 #
-# Systemd: siehe scheduling/sight_metrics_import.{service,timer}
+# Systemd: see scheduling/sight_metrics_import.{service,timer}
 # ---------------------------------------------------------------------------
 set -euo pipefail
 export LC_ALL=C
 cd "$(dirname "$0")"
 
-# ---- Healthcheck-Heartbeat (healthchecks.io o.ae., optional) ---------------
-# Trap deckt ALLE Exit-Pfade ab (auch fruehe Config-Fehler): liest den
-# tatsaechlichen Exit-Code der Shell beim Beenden aus.
+# ---- Healthcheck heartbeat (healthchecks.io or similar, optional) ---------
+# Trap covers ALL exit paths (including early config errors): reads the
+# actual exit code of the shell on termination.
 source "$(pwd)/lib_healthcheck.sh"
 cleanup_and_ping() {
   local rc=$?
@@ -45,7 +45,7 @@ cleanup_and_ping() {
 trap cleanup_and_ping EXIT
 hc_ping "/start"
 
-# ---- Parameter -------------------------------------------------------------
+# ---- Parameters -------------------------------------------------------------
 PARALLEL="${PARALLEL:-1}"
 SITES_CONF="${SITES_CONF:-$(pwd)/sites.conf}"
 
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# PARALLEL=auto → Kerne automatisch erkennen.
+# PARALLEL=auto → detect cores automatically.
 if [ "$PARALLEL" = "auto" ]; then
   PARALLEL="$(nproc 2>/dev/null || echo 1)"
 fi
@@ -68,9 +68,9 @@ if [ ! -f "$SITES_CONF" ]; then
   exit 1
 fi
 
-# ---- Concurrency-Schutz: nur eine Instanz gleichzeitig --------------------
-# Lockfile im STATE_DIR; flock -n schlägt sofort fehl wenn Lock belegt ist.
-# Exit 0 → systemd/cron meldet keinen Fehler für übersprungenen Lauf.
+# ---- Concurrency protection: only one instance at a time ------------------
+# Lockfile in STATE_DIR; flock -n fails immediately if the lock is held.
+# Exit 0 → systemd/cron reports no error for a skipped run.
 STATE_DIR="${STATE_DIR:-$(cd .. && pwd)/state}"
 mkdir -p "$STATE_DIR"
 LOCKFILE="${STATE_DIR}/run_all.lock"
@@ -80,7 +80,7 @@ if ! flock -n 200; then
   exit 0
 fi
 
-# ---- Log-Datei -------------------------------------------------------------
+# ---- Log file ---------------------------------------------------------------
 LOG_DIR="${LOG_DIR:-$(cd .. && pwd)/logs/import-logs}"
 mkdir -p "$LOG_DIR"
 RUN_TS=$(date +%Y%m%d_%H%M%S)
@@ -93,8 +93,8 @@ log "sites.conf: ${SITES_CONF}"
 log "state:      ${STATE_DIR:-../state/}"
 log "log:        ${RUN_LOG}"
 
-# ---- Sites laden -----------------------------------------------------------
-# Temporäre Datei mit bereinigten Zeilen (Kommentare/Leerzeilen entfernt)
+# ---- Load sites -------------------------------------------------------------
+# Temporary file with cleaned-up lines (comments/blank lines removed)
 SITES_TMP=$(mktemp)
 grep -v '^\s*#' "$SITES_CONF" | grep -v '^\s*$' > "$SITES_TMP" || true
 
@@ -105,7 +105,7 @@ if [ "$TOTAL" -eq 0 ]; then
 fi
 log "Sites gesamt: ${TOTAL}"
 
-# ---- Import-Funktion (wird pro Site aufgerufen, auch via xargs) -----------
+# ---- Import function (called per site, also via xargs) -------------------
 import_site() {
   local site_id="$1" logfile="$2" site_name="$3"
   local site_log="${LOG_DIR}/site_${site_id}_${RUN_TS}.log"
@@ -122,7 +122,7 @@ import_site() {
 export -f import_site
 export LOG_DIR RUN_TS
 
-# ---- Sequenziell oder parallel --------------------------------------------
+# ---- Sequential or parallel -------------------------------------------------
 FAIL=0
 PASS=0
 
@@ -132,7 +132,7 @@ if [ "$PARALLEL" -le 1 ]; then
     log "$result"
   done < "$SITES_TMP"
 else
-  # xargs -P: jede Zeile = ein Job, Ergebnisse nach stdout
+  # xargs -P: each line = one job, results go to stdout
   results=$(
     while IFS=$'\t' read -r site_id logfile site_name; do
       printf '%s\0%s\0%s\0' "$site_id" "$logfile" "$site_name"
@@ -146,21 +146,21 @@ else
   done <<< "$results"
 fi
 
-# Ein Site-Job ohne 'OK '/'FAIL '-Ergebnis (z. B. extern gekillt durch
-# OOM-Killer, docker stop, Host-Reboot) zaehlt oben weder als PASS noch als
-# FAIL; Differenz zu TOTAL wird als Fehler gewertet.
+# A site job without an 'OK '/'FAIL ' result (e.g. killed externally by
+# the OOM killer, docker stop, host reboot) counts above as neither PASS nor
+# FAIL; the difference to TOTAL is counted as an error.
 MISSING=$((TOTAL - PASS - FAIL))
 if [ "$MISSING" -gt 0 ]; then
   log "WARN: ${MISSING} Site(s) ohne Ergebnis-Meldung (Job vermutlich abgebrochen/gekillt) -> als FEHLER gewertet."
   FAIL=$((FAIL + MISSING))
 fi
 
-# ---- Zusammenfassung -------------------------------------------------------
+# ---- Summary ------------------------------------------------------------
 log "=== Fertig: ${PASS} OK, ${FAIL} FEHLER von ${TOTAL} Sites ==="
 
-# Inline-Alarmierung bei Fehlern: passt zum Wegwerf-Container (kein systemd/OnFailure).
-# notify.sh ist ein No-op, solange kein Kanal (ALERT_EMAIL/ALERT_WEBHOOK) gesetzt ist.
-# Healthcheck-Ping (Erfolg/Fehler) uebernimmt der EXIT-Trap oben (cleanup_and_ping).
+# Inline alerting on errors: fits a disposable container (no systemd/OnFailure).
+# notify.sh is a no-op as long as no channel (ALERT_EMAIL/ALERT_WEBHOOK) is set.
+# The healthcheck ping (success/failure) is handled by the EXIT trap above (cleanup_and_ping).
 if [ "$FAIL" -gt 0 ]; then
   bash "$(dirname "$0")/notify.sh" CRIT "Import: ${FAIL} von ${TOTAL} Sites fehlgeschlagen (Log: ${RUN_LOG})" || true
 fi

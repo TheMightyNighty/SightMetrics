@@ -1,8 +1,8 @@
-/* SightMetrics – TYPO3-Backend-Modul (natives ES-Modul, geladen ueber
-   Configuration/JavaScriptModules.php). Liest den CSP-sicheren JSON-Datenblock
-   (read-only DBAL aus der Cube-DB) und rendert client-seitig. Matomo-nah:
-   Barlisten mit Drill-down (Klick -> Subtabelle) + Choropleth-Weltkarte.
-   Chart.js/Leaflet/world.js bleiben klassische (globale) Vendor-Skripte. */
+/* SightMetrics - TYPO3 backend module (native ES module, loaded via
+   Configuration/JavaScriptModules.php). Reads the CSP-safe JSON data block
+   (read-only DBAL from the cube DB) and renders it client-side. Matomo-like:
+   bar lists with drill-down (click -> subtable) + choropleth world map.
+   Chart.js/Leaflet/world.js remain classic (global) vendor scripts. */
 import { DAY, SEP, esc, fmtBytes, hex2rgb, inR, lastSeg, lerpColor, toDate, toStr } from './modules/util.js';
 import { createI18n } from './modules/i18n.js';
 import { createCsvExport } from './modules/export.js';
@@ -24,9 +24,9 @@ import { createCsvExport } from './modules/export.js';
     return {datum: r.datum, dim: r.dim, key: r.dimkey, pv: +r.pv || 0, v: +r.v || 0};
   });
 
-  // Root-Dimensionen, serverseitig auf Top-N begrenzt (ROADMAP.md "Top-N + Nachladen",
-  // Phase 1+2). Land bleibt bewusst aussen vor (Choropleth-Karte braucht alle Laender, ISO-
-  // Kardinalitaet ohnehin begrenzt); "child" markiert Dims mit Drill-down-Kind.
+  // Root dimensions, server-side limited to Top-N (ROADMAP.md "Top-N + lazy loading",
+  // phase 1+2). Country deliberately stays out (choropleth map needs all countries, ISO
+  // cardinality is limited anyway); "child" marks dims with a drill-down child.
   var TOPN_ROOT = {
     keyword: {id: 'bl-keyword', metric: 'v'},
     entry: {id: 'bl-entry', metric: 'v'},
@@ -38,11 +38,11 @@ import { createCsvExport } from './modules/export.js';
     os: {id: 'bl-os', metric: 'v', child: 'os_version', limit: 8},
     device: {id: 'bl-device', metric: 'v', child: 'device_model', limit: 8},
     referrer_type: {id: 'bl-reftype', metric: 'v', child: 'referrer_name', limit: 8},
-    // Eigenstaendige flache Liste (alle referrer_url-Zeilen, nicht nach Eltern gruppiert) --
-    // dieselbe Dimension ist zusaetzlich als Kind von referrer_name erreichbar (s.u.).
+    // Standalone flat list (all referrer_url rows, not grouped by parent) --
+    // the same dimension is additionally reachable as a child of referrer_name (see below).
     referrer_url: {id: 'bl-refurl', metric: 'v', limit: 10},
   };
-  // Kind-Dimensionen: nur ueber parentKey erreichbar, nie im Initial-Payload.
+  // Child dimensions: only reachable via parentKey, never in the initial payload.
   var TOPN_CHILD = {
     browser_version: {metric: 'v'},
     os_version: {metric: 'v'},
@@ -52,7 +52,7 @@ import { createCsvExport } from './modules/export.js';
   };
   var TOPN_URL = DATA.topNUrl || null;
   var TOPN_WIN = DATA.window || {von: META.von, bis: META.bis};
-  var CUR_A = TOPN_WIN.von, CUR_B = TOPN_WIN.bis; // aktuell gewaehlter Zeitraum (fuer Kind-Fetches)
+  var CUR_A = TOPN_WIN.von, CUR_B = TOPN_WIN.bis; // currently selected time range (for child fetches)
   /** @type {Record<string, any>} dim -> {rows, total:{pv,v,count}, metric, from, to, loading, limit} */
   var TOPN = {};
   Object.keys(TOPN_ROOT).forEach(function (dim) {
@@ -83,9 +83,9 @@ import { createCsvExport } from './modules/export.js';
     });
   }
 
-  // Gemeinsamer Renderer fuer Top-N-Zeilen (Root ODER Kind) + "+ N weitere"-Nachladen.
-  // rowFactory(cont, row, total, max) baut/haengt die Zeile an (entscheidet ueber
-  // Drillability); state braucht {dim, from, to, parentKey, rows, total, metric, limit, loading}.
+  // Shared renderer for Top-N rows (root OR child) + "+ N more" lazy-loading.
+  // rowFactory(cont, row, total, max) builds/appends the row (decides
+  // drillability); state needs {dim, from, to, parentKey, rows, total, metric, limit, loading}.
   function paintTopN(cont, state, rowFactory) {
     cont.innerHTML = '';
     var rows = state.rows;
@@ -112,12 +112,12 @@ import { createCsvExport } from './modules/export.js';
     }
   }
 
-  // Baut eine rowFactory fuer eine gegebene Dim (Root oder Kind); haengt bei vorhandenem
-  // Kind (meta.child) einen Aufklapp-Handler an, der beim ersten Klick per Ajax nachlaedt.
+  // Builds a rowFactory for a given dim (root or child); if a child exists
+  // (meta.child), attaches an expand handler that lazy-loads via Ajax on first click.
   function topNRowFactory(dim, meta) {
     return function (cont, r, total, max) {
-      var label = lastSeg(r.dimkey); // Eltern-Praefix (chr(31)-kodiert) fuer die Anzeige abtrennen
-      // referrer_type-Werte sind deutsche Datenwerte aus dem Cube -> lokalisieren.
+      var label = lastSeg(r.dimkey); // strip the parent prefix (chr(31)-encoded) for display
+      // referrer_type values are German data values from the cube -> localize.
       if (dim === 'referrer_type') label = i18n.refTypeLabel(label);
       var row = rowEl(label, r[meta.metric], total, max, esc, !!meta.child);
       cont.appendChild(row);
@@ -156,11 +156,11 @@ import { createCsvExport } from './modules/export.js';
     paintTopN(cont, TOPN[dim], topNRowFactory(dim, meta));
   }
 
-  // Bei Datumsaenderung: aktuellen Stand sofort zeigen, bei abweichendem Zeitraum die
-  // Top-N-Liste per Ajax fuer [a,b] neu laden (offset 0). Race-Guard ueber st.from/st.to,
-  // falls waehrend eines laufenden Fetches erneut der Zeitraum gewechselt wird. Ein
-  // vollstaendiges Neu-Rendern (paintTopN via renderTopNRoot) verwirft dabei immer auch
-  // eventuell aufgeklappte Kind-Listen -- konsistent mit dem bisherigen Drill-down-Verhalten.
+  // On date change: show current state immediately, on a differing time range
+  // reload the Top-N list via Ajax for [a,b] (offset 0). Race guard via st.from/st.to,
+  // in case the time range changes again while a fetch is in flight. A
+  // full re-render (paintTopN via renderTopNRoot) always discards any
+  // expanded child lists in the process -- consistent with the previous drill-down behavior.
   function reloadTopNAll(a, b) {
     CUR_A = a; CUR_B = b;
     Object.keys(TOPN_ROOT).forEach(function (dim) {
@@ -170,7 +170,7 @@ import { createCsvExport } from './modules/export.js';
       st.loading = true; st.from = a; st.to = b;
       renderTopNRoot(dim);
       topNFetch(dim, a, b, 0, st.limit).then(function (res) {
-        if (st.from !== a || st.to !== b) return; // ueberholt durch neueren Zeitraumwechsel
+        if (st.from !== a || st.to !== b) return; // superseded by a newer time range change
         st.rows = res.rows || []; st.total = res.total || {pv: 0, v: 0, count: 0}; st.loading = false;
         renderTopNRoot(dim);
       }).catch(function () {
@@ -180,9 +180,9 @@ import { createCsvExport } from './modules/export.js';
     });
   }
 
-  // ISO-2 -> Laendername in den Weltkarten-Geodaten (world.js, Leaflet-Choroplethe)
-  // Namen muessen exakt zu properties.name in world.js passen (world-atlas/Natural Earth,
-  // siehe Vendor/NOTICE.md). US/KR/CZ weichen von der Alltagsbezeichnung ab.
+  // ISO-2 -> country name in the world map geodata (world.js, Leaflet choropleth)
+  // Names must match properties.name in world.js exactly (world-atlas/Natural Earth,
+  // see Vendor/NOTICE.md). US/KR/CZ differ from the everyday name.
   var ISO2NAME = {US:'United States of America',CN:'China',JP:'Japan',KR:'South Korea',DE:'Germany',GB:'United Kingdom',
     FR:'France',IN:'India',BR:'Brazil',CA:'Canada',RU:'Russia',IT:'Italy',ES:'Spain',NL:'Netherlands',
     PL:'Poland',TR:'Turkey',SE:'Sweden',CH:'Switzerland',AT:'Austria',BE:'Belgium',AU:'Australia',
@@ -193,17 +193,17 @@ import { createCsvExport } from './modules/export.js';
     CO:'Colombia',NZ:'New Zealand',TW:'Taiwan',HK:'Hong Kong',KE:'Kenya',MA:'Morocco'};
   var PAL = ['#15508c', '#2f8f5b', '#b9851d'];
   var charts = {};
-  /** DOM-Kurzform; bewusst 'any' (liefert je nach id input/canvas/select).
+  /** DOM shorthand; deliberately 'any' (returns input/canvas/select depending on id).
       @type {(id: string) => any} */
   var $ = function (id) { return document.getElementById(id); };
-  // Chart.js-Instanz (neu-)erzeugen: einfacher als partielles Update, Datenmenge ist klein.
+  // (Re-)create the Chart.js instance: simpler than a partial update, data volume is small.
   function setChart(id, config) {
     if (charts[id]) charts[id].destroy();
     charts[id] = new Chart($(id).getContext('2d'), config);
     return charts[id];
   }
-  // Dark Mode: TYPO3-Backend-Schema (data-color-scheme an html/body, ggf. im Eltern-Dokument)
-  // bevorzugt, sonst OS-Einstellung (prefers-color-scheme).
+  // Dark mode: TYPO3 backend scheme (data-color-scheme on html/body, possibly in the parent document)
+  // preferred, otherwise OS setting (prefers-color-scheme).
   function isDark() {
     try {
       var docs = [document, window.parent && window.parent !== window ? window.parent.document : null];
@@ -214,12 +214,12 @@ import { createCsvExport } from './modules/export.js';
         if (cs === 'dark') { return true; }
         if (cs === 'light') { return false; }
       }
-    } catch (e) { /* Cross-Origin: ignorieren, Fallback unten */ }
+    } catch (e) { /* cross-origin: ignore, fallback below */ }
     return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   }
-  // Achsen-/Textfarben fuer Chart.js je nach Schema (Default-Dunkelgrau waere auf Dark unlesbar).
-  // Setzt zusaetzlich Chart.defaults, damit auch Elemente ohne explizite Farbangabe
-  // (z.B. die Farbskala-Legende der Weltkarte) dem Theme folgen statt Chart.js-Default (schwarz).
+  // Axis/text colors for Chart.js depending on the scheme (default dark gray would be unreadable on dark).
+  // Also sets Chart.defaults, so elements without an explicit color
+  // (e.g. the world map's color scale legend) follow the theme instead of Chart.js's default (black).
   function chartColors() {
     var cc = isDark()
       ? {text: '#c7d0db', line: '#3a4250', mapArea: '#323a45', mapBorder: '#475063', tooltipBg: '#1a1f27'}
@@ -233,22 +233,22 @@ import { createCsvExport } from './modules/export.js';
     }
     return cc;
   }
-  // --- Perioden-Vergleich -------------------------------------------------
-  // Unmittelbar vorausgehender Zeitraum gleicher Länge, geklemmt auf verfügbare Daten.
+  // --- Period comparison -------------------------------------------------
+  // Immediately preceding time range of the same length, clamped to available data.
   function prevRange(a, b) {
     var len = Math.round((toDate(b) - toDate(a)) / DAY) + 1;
     var pb = toDate(a) - DAY, pa = pb - (len - 1) * DAY;
     var min = toDate(META.von);
-    if (pa < min) return null;                 // keine vollständige Vorperiode vorhanden
+    if (pa < min) return null;                 // no complete previous period available
     return [toStr(pa), toStr(pb)];
   }
-  // Delta-Badge in ein KPI-Element schreiben (Pfeil + Prozent, richtungsgefärbt).
+  // Write a delta badge into a KPI element (arrow + percent, colored by direction).
   function setDelta(id, cur, prev, invert) {
     var elx = $(id); if (!elx) return;
     if (prev == null) { elx.textContent = ''; elx.className = 'd'; return; }
     if (prev === 0) { elx.textContent = cur > 0 ? t('new', 'new') : '±0'; elx.className = 'd flat'; return; }
     var pct = 100 * (cur - prev) / prev, up = pct > 0.05, down = pct < -0.05;
-    var good = invert ? down : up;             // bei Absprungrate ist "runter" gut
+    var good = invert ? down : up;             // for bounce rate, "down" is good
     elx.className = 'd ' + (up ? 'up' : down ? 'down' : 'flat') + (good ? ' good' : (up || down ? ' bad' : ''));
     elx.textContent = (up ? '▲ ' : down ? '▼ ' : '± ') + i18n.pct1(pct) + ' %';
   }
@@ -277,8 +277,8 @@ import { createCsvExport } from './modules/export.js';
     return row;
   }
 
-  // Nur noch fuer Land verwendet (keine Drill-down-Kinder mehr client-seitig -- Browser/OS/
-  // Geraet/Referrer-Typ laufen ueber renderTopNRoot(), siehe oben).
+  // Only still used for country (no more client-side drill-down children -- browser/OS/
+  // device/referrer type run via renderTopNRoot(), see above).
   function renderInto(container, rows, metric, fmt, limit) {
     var total = rows.reduce(function (s, r) { return s + r[metric]; }, 0) || 1;
     var top = rows.slice(0, limit), max = top.length ? top[0][metric] : 1;
@@ -295,12 +295,12 @@ import { createCsvExport } from './modules/export.js';
     renderInto(cont, agg(dim, a, b, metric), metric, opts.fmt || esc, opts.limit || 8);
   }
 
-  // Leaflet-Karte + GeoJSON-Layer bleiben ueber Renders hinweg bestehen (nur restylen/neu binden),
-  // Chart.js-Choropleth-Plugin (chartjs-chart-geo) hat sich als zu unausgereift erwiesen
-  // (Laender wurden nicht eingefaerbt, kein Mouseover, ohne erkennbaren JS-Fehler).
+  // Leaflet map + GeoJSON layer persist across renders (only restyle/rebind),
+  // the Chart.js choropleth plugin (chartjs-chart-geo) turned out to be too immature
+  // (countries weren't colored, no mouseover, no discernible JS error).
   var leafletMap = null, mapLayer = null, mapLegend = null;
-  // Hex -> [r,g,b] und linear interpoliert; kontinuierliche Skala statt fester Stufen,
-  // damit die Faerbung tatsaechlich proportional zur Besuchszahl wirkt.
+  // Hex -> [r,g,b] and linearly interpolated; continuous scale instead of fixed steps,
+  // so the coloring actually appears proportional to the visit count.
   function renderMap(a, b) {
     if (typeof window.SM_WORLD === 'undefined' || typeof L === 'undefined') return;
     var rows = agg('country', a, b, 'v').filter(function (r) { return r.key !== '??'; });
@@ -308,11 +308,11 @@ import { createCsvExport } from './modules/export.js';
     rows.forEach(function (r) { byName[ISO2NAME[r.key] || r.key] = r.v; });
     var max = rows.reduce(function (m, r) { return Math.max(m, r.v); }, 1);
     var cc = chartColors();
-    // Verlauf ans Theme angepasst: im Dark Mode ist ein fuer Light-Mode gedachter
-    // Blauton auf dunklem Kartenhintergrund zu kontrastarm, daher eigene, hellere Stufen.
+    // Gradient adapted to the theme: in dark mode, a blue tone intended for light mode
+    // has too little contrast on a dark map background, hence its own, lighter steps.
     var LO = isDark() ? '#3a5a80' : '#9cc0e0', HI = isDark() ? '#8fc4ff' : '#0d3b6b';
-    // Wurzel-Skalierung: bei stark dominierenden Einzellaendern (z.B. ein Land = 50%+
-    // aller Besuche) blieben sonst fast alle anderen Laender in der hellsten Stufe haengen.
+    // Square-root scaling: with strongly dominant individual countries (e.g. one country = 50%+
+    // of all visits), almost all other countries would otherwise stay stuck at the lightest step.
     function fillFor(v) {
       if (!v) return cc.mapArea;
       var t = max ? Math.sqrt(v / max) : 0;
@@ -354,9 +354,9 @@ import { createCsvExport } from './modules/export.js';
     leafletMap.invalidateSize();
   }
 
-  // --- Seitenbaum: serverseitig segmentiert (CubeRepository::urlTree), lazy nachgeladen ---
-  // Zeilen kommen pro Ebene vorsortiert + gedeckelt vom Server; Aufklappen eines Astes
-  // laedt dessen Kinder einmalig per Ajax (path-Praefix), "+ N weitere" paginiert.
+  // --- Page tree: server-side segmented (CubeRepository::urlTree), lazy-loaded ---
+  // Rows come pre-sorted + capped per level from the server; expanding a branch
+  // loads its children once via Ajax (path prefix), "+ N more" paginates.
   var TREE_URL = DATA.treeUrl || null;
   var TREE_LIMIT = 8;
   var TREE = {
@@ -381,8 +381,8 @@ import { createCsvExport } from './modules/export.js';
     });
   }
 
-  // Rendert eine Baum-Ebene aus state = {path, rows, total:{count}, loading}. max ist das
-  // groesste pv der obersten Ebene (Balkenbreiten sind wie bisher global vergleichbar).
+  // Renders a tree level from state = {path, rows, total:{count}, loading}. max is the
+  // largest pv of the topmost level (bar widths remain globally comparable as before).
   function paintTreeLevel(container, state, max, depth) {
     container.innerHTML = '';
     state.rows.forEach(function (node) {
@@ -395,7 +395,7 @@ import { createCsvExport } from './modules/export.js';
       if (!node.hasChildren) return;
 
       tog.setAttribute('role', 'button'); tog.setAttribute('tabindex', '0');
-      var open = depth < 1; // erste Ebene wie bisher aufgeklappt (Kinder sind vorgeladen)
+      var open = depth < 1; // first level expanded as before (children are preloaded)
       var ch = document.createElement('div'); ch.className = 'children' + (open ? ' open' : '');
       container.appendChild(ch);
       tog.textContent = open ? '▾' : '▸';
@@ -456,8 +456,8 @@ import { createCsvExport } from './modules/export.js';
     paintTreeLevel(tc, {path: '', rows: TREE.rows, total: TREE.total, loading: TREE.loading}, max, 0);
   }
 
-  // Datumswechsel: Wurzel (2 Ebenen) neu laden; aufgeklappte tiefere Aeste werden dabei
-  // verworfen -- konsistent zum Verhalten der Top-N-Barlisten. Race-Guard wie dort.
+  // Date change: reload the root (2 levels); expanded deeper branches are
+  // discarded in the process -- consistent with the Top-N bar list behavior. Race guard as there.
   function reloadTree(a, b) {
     renderTreeRoot();
     if (TREE.from === a && TREE.to === b) return;
@@ -485,7 +485,7 @@ import { createCsvExport } from './modules/export.js';
     $('k-bounce').textContent = visits ? bounceRate.toFixed(1) + ' %' : '–';
     $('k-band').textContent = fmtBytes(sum('bytes'));
 
-    // Perioden-Vergleich: Deltas gegen die unmittelbar vorausgehende Periode gleicher Länge.
+    // Period comparison: deltas against the immediately preceding period of the same length.
     var cmp = $('w-cmp') && $('w-cmp').checked ? prevRange(a, b) : null;
     if (cmp) {
       var pa = cmp[0], pb = cmp[1], pVisits = dailySum(pa, pb, 'visits');
@@ -505,7 +505,7 @@ import { createCsvExport } from './modules/export.js';
       {label: t('visits', 'Visits'), data: days.map(function (d) { return d.visits; }), borderColor: PAL[1], fill: false, tension: .3, pointRadius: 0},
       {label: t('uniques', 'Unique visitors'), data: days.map(function (d) { return d.uniques; }), borderColor: PAL[2], fill: false, tension: .3, pointRadius: 0}];
     if (cmp) {
-      // Vorperiode positionsweise (Tag 1 zu Tag 1) als gestrichelte Referenz der Seitenaufrufe.
+      // Previous period position-wise (day 1 to day 1) as a dashed reference for page views.
       var pdays = DAILY.filter(function (d) { return inR(d.datum, cmp[0], cmp[1]); });
       tDatasets.push({label: t('pageviewsPrev', 'Page views (previous period)'), borderColor: '#9aa7b6', borderDash: [4, 3], fill: false, tension: .3, pointRadius: 0,
         data: days.map(function (_, i) { return pdays[i] ? pdays[i].pageviews : null; })});
@@ -539,17 +539,17 @@ import { createCsvExport } from './modules/export.js';
 
     renderMap(a, b);
 
-    reloadTree(a, b); // Seitenbaum: serverseitig segmentiert + lazy nachgeladen
+    reloadTree(a, b); // page tree: server-side segmented + lazy-loaded
 
     barlist('bl-country', 'country', a, b, 'v', {fmt: function (k) { return esc(landName(k)); }});
-    // Keyword/Entry/Exit/Download/Status/Methode/Browser/OS/Geraet/Referrer-Typ/-URL:
-    // serverseitiges Top-N + Nachladen (siehe TOPN_ROOT/TOPN_CHILD oben).
+    // Keyword/entry/exit/download/status/method/browser/OS/device/referrer type/URL:
+    // server-side Top-N + lazy-loading (see TOPN_ROOT/TOPN_CHILD above).
     reloadTopNAll(a, b);
   }
 
   // --- Export (modules/export.js) ------------------------------------------
-  // TREE/TOPN sind stabile Objekt-Referenzen (Reloads ersetzen nur .rows/.total),
-  // daher reicht die einmalige Uebergabe an die Factory.
+  // TREE/TOPN are stable object references (reloads only replace .rows/.total),
+  // so passing them to the factory once is enough.
   var csvExport = createCsvExport({
     i18n: i18n, META: META, DAILY: DAILY,
     TOPN: TOPN, TOPN_ROOT: TOPN_ROOT, TREE: TREE, agg: agg,
@@ -563,24 +563,24 @@ import { createCsvExport } from './modules/export.js';
     if (isDark()) { var rootEl = document.getElementById('sightmetrics'); if (rootEl) rootEl.classList.add('sm-dark'); }
     $('w-site').textContent = META.site || 'SightMetrics';
     $('w-gen').textContent = META.erzeugt ? tf('asOf', 'As of: %s', META.erzeugt) : '';
-    // Multi-Site: Auswahl füllen; Wechsel lädt das Modul mit ?site=<id> neu
+    // Multi-site: fill the selector; switching reloads the module with ?site=<id>
     var sel = $('w-siteselect'), sites = DATA.sites || [];
     if (sel && sites.length) {
       sel.innerHTML = sites.map(function (s) {
         return '<option value="' + s.site_id + '"' + (+s.site_id === +DATA.siteId ? ' selected' : '') + '>' + esc(s.site) + '</option>';
       }).join('');
       sel.onchange = function () { var u = new URL(location.href); u.searchParams.set('site', sel.value); location.href = u.toString(); };
-      if (sites.length < 2) sel.style.display = 'none';   // bei nur einer Site keine Auswahl nötig
+      if (sites.length < 2) sel.style.display = 'none';   // no selector needed with only one site
     }
-    // Server liefert nur ein Zeitfenster (DATA.window) – das begrenzt das Transfervolumen.
-    // Der Picker spannt aber den ganzen Datenbestand (meta.von/bis); Auswahl ausserhalb des
-    // geladenen Fensters laedt das passende Fenster nach (Reload), innerhalb wird sofort gefiltert.
+    // The server only delivers one time window (DATA.window) -- this limits the transfer volume.
+    // The picker, however, spans the entire dataset (meta.von/bis); a selection outside the
+    // loaded window loads the matching window (reload), within it filters immediately.
     var WIN = DATA.window || {von: META.von, bis: META.bis};
     $('w-from').value = WIN.von; $('w-from').min = META.von; $('w-from').max = META.bis;
     $('w-to').value = WIN.bis; $('w-to').min = META.von; $('w-to').max = META.bis;
     function onDateChange() {
       var a = $('w-from').value, b = $('w-to').value;
-      if (a && b && (a < WIN.von || b > WIN.bis)) {   // ausserhalb des geladenen Fensters -> nachladen
+      if (a && b && (a < WIN.von || b > WIN.bis)) {   // outside the loaded window -> reload
         var u = new URL(location.href);
         u.searchParams.set('from', a); u.searchParams.set('to', b);
         if (DATA.siteId) u.searchParams.set('site', DATA.siteId);
@@ -588,17 +588,17 @@ import { createCsvExport } from './modules/export.js';
       }
       render();
     }
-    // Zeitraum setzen (auf Datenbestand geklemmt) und Auswertung/Reload auslösen.
+    // Set the time range (clamped to the dataset) and trigger evaluation/reload.
     function setRange(a, b) {
       a = a < META.von ? META.von : a; b = b > META.bis ? META.bis : b;
       $('w-from').value = a; $('w-to').value = b;
       onDateChange();
     }
-    // --- Matomo-artige Zeitraum-Vorgaben -----------------------------------
+    // --- Matomo-style time range presets -----------------------------------
     function ymd(y, m, d) { return y + '-' + ('0' + m).slice(-2) + '-' + ('0' + d).slice(-2); }
     function monthRange(y, m) { return [ymd(y, m, 1), toStr(Date.UTC(y, m, 0))]; }  // m = 1..12
-    // Anker für relative Zeiträume: heute, aber nie nach dem neuesten Datenstand.
-    // UTC statt lokaler Browser-Zeit, konsistent mit 'datum' im Backend
+    // Anchor for relative time ranges: today, but never after the latest data.
+    // UTC instead of local browser time, consistent with 'datum' in the backend
     // (transform.sql: timezone('UTC', ...)).
     function anchor() {
       var t = new Date(), today = ymd(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
@@ -616,19 +616,19 @@ import { createCsvExport } from './modules/export.js';
       else if (v === 'thisyear') setRange(ymd(ay, 1, 1), ymd(ay, 12, 31));
       else if (v === 'lastyear') setRange(ymd(ay - 1, 1, 1), ymd(ay - 1, 12, 31));
       else if (v === 'all') setRange(META.von, META.bis);
-      else if (v === 'window') setRange(WIN.von, WIN.bis);   // geladenes Fenster (kein Reload)
+      else if (v === 'window') setRange(WIN.von, WIN.bis);   // loaded window (no reload)
       else if (/^year:/.test(v)) { var y = +v.slice(5); setRange(ymd(y, 1, 1), ymd(y, 12, 31)); }
-      // 'custom' -> keine Aktion (manuelle von/bis-Eingabe)
+      // 'custom' -> no action (manual from/to input)
     }
-    // Custom-Eingaben (von/bis/Monat) nur im Modus „Benutzerdefiniert" zeigen –
-    // sonst ist nur das eine Zeitraum-Dropdown sichtbar (nicht nebeneinander).
+    // Only show custom inputs (from/to/month) in "custom" mode --
+    // otherwise only the single time range dropdown is visible (not side by side).
     function toggleCustom() { var c = $('w-custom'); if (c) c.hidden = ($('w-preset').value !== 'custom'); }
     function buildPresets() {
       var sel = $('w-preset'); if (!sel) return;
       var fullData = (WIN.von <= META.von && WIN.bis >= META.bis);
       var winDays = Math.round((toDate(WIN.bis) - toDate(WIN.von)) / DAY) + 1;
       var opt = [];
-      // Default-Eintrag spiegelt den initial geladenen Stand wider (kein Reload beim Anzeigen).
+      // Default entry reflects the initially loaded state (no reload on display).
       if (fullData) opt.push(['all', t('preset.all', 'Entire period')]);
       else opt.push(['window', tf('preset.window', 'Last %s days', winDays)]);
       opt.push(['today', t('preset.today', 'Today')], ['yesterday', t('preset.yesterday', 'Yesterday')],
@@ -637,17 +637,17 @@ import { createCsvExport } from './modules/export.js';
         ['thismonth', t('preset.thisMonth', 'This month')], ['lastmonth', t('preset.lastMonth', 'Last month')],
         ['thisyear', t('preset.thisYear', 'This year')], ['lastyear', t('preset.lastYear', 'Last year')]);
       var y0 = +META.von.slice(0, 4), y1 = +META.bis.slice(0, 4);
-      for (var y = y1; y >= y0; y--) opt.push(['year:' + y, tf('preset.year', 'Year %s', y)]);  // konkrete Jahre aus dem Datenbestand
+      for (var y = y1; y >= y0; y--) opt.push(['year:' + y, tf('preset.year', 'Year %s', y)]);  // concrete years from the dataset
       if (!fullData) opt.push(['all', t('preset.all', 'Entire period')]);
       opt.push(['custom', t('preset.custom', 'Custom …')]);
       sel.innerHTML = opt.map(function (o) { return '<option value="' + o[0] + '">' + esc(o[1]) + '</option>'; }).join('');
-      sel.value = opt[0][0];   // Default = geladener Stand
+      sel.value = opt[0][0];   // default = loaded state
       sel.onchange = function () { toggleCustom(); if (sel.value !== 'custom') applyPreset(sel.value); };
       toggleCustom();
     }
     function onManualDate() { var p = $('w-preset'); if (p) p.value = 'custom'; toggleCustom(); onDateChange(); }
     $('w-from').onchange = $('w-to').onchange = onManualDate;
-    // Bestimmten Monat (YYYY-MM) direkt anspringen.
+    // Jump directly to a specific month (YYYY-MM).
     if ($('w-month')) {
       $('w-month').min = META.von.slice(0, 7); $('w-month').max = META.bis.slice(0, 7);
       $('w-month').onchange = function () {
@@ -663,7 +663,7 @@ import { createCsvExport } from './modules/export.js';
       if (leafletMap) leafletMap.invalidateSize();
     }
     if ($('w-pdf')) $('w-pdf').onclick = function () {
-      // Charts vor dem Druck neu zeichnen, damit die Canvas-Größe passt; dann Browser-Druckdialog.
+      // Redraw charts before printing so the canvas size fits; then the browser print dialog.
       resizeAll();
       window.print();
     };

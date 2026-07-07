@@ -1,14 +1,14 @@
 -- ===========================================================================
--- Geo-Quelle: MaxMind GeoLite2 Country (CSV, kostenloser Account + Lizenzschlüssel
--- nötig, EULA beachten: https://www.maxmind.com/en/geolite2/eula).
--- Download: GeoLite2-Country-CSV.zip, benötigt daraus zwei Dateien:
+-- Geo source: MaxMind GeoLite2 Country (CSV, free account + license key
+-- required, observe the EULA: https://www.maxmind.com/en/geolite2/eula).
+-- Download: GeoLite2-Country-CSV.zip, needs two files from it:
 --   GeoLite2-Country-Blocks-IPv4.csv     (geopath)
 --   GeoLite2-Country-Locations-en.csv    (geolocpath)
--- Blocks-Format (mit Header): network,geoname_id,registered_country_geoname_id,
+-- Blocks format (with header): network,geoname_id,registered_country_geoname_id,
 --   represented_country_geoname_id,is_anonymous_proxy,is_satellite_provider
--- Locations-Format (mit Header): geoname_id,locale_code,continent_code,
+-- Locations format (with header): geoname_id,locale_code,continent_code,
 --   continent_name,country_iso_code,country_name,is_in_european_union
--- Parameter (SET VARIABLE): geopath, geolocpath
+-- Parameters (SET VARIABLE): geopath, geolocpath
 -- ===========================================================================
 CREATE OR REPLACE TEMP VIEW geo_ranges AS
 WITH loc AS (

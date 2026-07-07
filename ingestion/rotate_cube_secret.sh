@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
-# SightMetrics – Secrets-Rotation für den Cube-DB-Zugang.
+# SightMetrics – secrets rotation for the cube DB access.
 #
-# Setzt das Passwort des DB-Users neu (ALTER USER) und schreibt die DSN-
-# Secret-Datei ATOMAR neu. Da load_cube.sh/run_all.sh/purge_cube.sh/backup_cube.sh
-# das DSN bei JEDEM Lauf frisch aus der Datei lesen, ist die Rotation praktisch
-# unterbrechungsfrei (kein Neustart nötig). Vom alten DSN wird ein Backup behalten.
+# Resets the DB user's password (ALTER USER) and rewrites the DSN
+# secret file ATOMICALLY. Since load_cube.sh/run_all.sh/purge_cube.sh/backup_cube.sh
+# read the DSN fresh from the file on EVERY run, the rotation is practically
+# uninterrupted (no restart needed). A backup of the old DSN is kept.
 #
-# Rotiert den Ingestion-User (Standard: der User aus dem aktuellen DSN, z. B. cube_rw).
-# Den read-only-Reporting-User (report_ro) rotiert man separat und passt dann die
-# TYPO3-Connection an (config/system/additional.php) – siehe Runbook §6.
+# Rotates the ingestion user (default: the user from the current DSN, e.g. cube_rw).
+# The read-only reporting user (report_ro) is rotated separately, then adjust the
+# TYPO3 connection (config/system/additional.php) – see runbook §6.
 #
-# KONFIGURATION (Env):
-#   CUBE_DSN_FILE          Ziel-/Quell-Secret-Datei (Pflicht)
-#   CUBE_DSN               Alternative Quelle, wenn keine Datei (dann --skip-db sinnvoll)
-#   ROTATE_NEW_PASSWORD    Neues Passwort (sonst zufällig via openssl generiert)
-#   ROTATE_USER            DB-User der rotiert wird (Standard: user= aus DSN)
-#   ROTATE_USER_HOST       Host-Teil des DB-Users für ALTER USER (Standard: %)
-#   ROTATE_ADMIN_USER      Admin-User mit ALTER-Recht (Standard: root)
-#   ROTATE_ADMIN_PASSWORD / ROTATE_ADMIN_PASSWORD_FILE   Admin-Passwort
-#   MYSQL                  mysql-Client (Standard: mysql)
-#   ROTATE_KEEP_BACKUPS    Anzahl alter DSN-Backups (Standard: 5)
-#   ROTATE_SKIP_DB         1 = DB nicht ändern, nur Datei neu schreiben (Tests/Sonderfall)
-#   ROTATE_DRY_RUN         1 = nur anzeigen, nichts ändern
+# CONFIGURATION (env):
+#   CUBE_DSN_FILE          target/source secret file (required)
+#   CUBE_DSN               alternative source if no file (then --skip-db makes sense)
+#   ROTATE_NEW_PASSWORD    new password (otherwise generated randomly via openssl)
+#   ROTATE_USER            DB user being rotated (default: user= from DSN)
+#   ROTATE_USER_HOST       host part of the DB user for ALTER USER (default: %)
+#   ROTATE_ADMIN_USER      admin user with ALTER privilege (default: root)
+#   ROTATE_ADMIN_PASSWORD / ROTATE_ADMIN_PASSWORD_FILE   admin password
+#   MYSQL                  mysql client (default: mysql)
+#   ROTATE_KEEP_BACKUPS    number of old DSN backups (default: 5)
+#   ROTATE_SKIP_DB         1 = don't change DB, only rewrite the file (tests/special case)
+#   ROTATE_DRY_RUN         1 = only show, change nothing
 #
-# Nutzung:  CUBE_DSN_FILE=/etc/sightmetrics/cube_dsn.env ./rotate_cube_secret.sh
+# Usage:  CUBE_DSN_FILE=/etc/sightmetrics/cube_dsn.env ./rotate_cube_secret.sh
 # ---------------------------------------------------------------------------
 set -euo pipefail
 export LC_ALL=C
@@ -33,17 +33,17 @@ cd "$(dirname "$0")"
 KEEP="${ROTATE_KEEP_BACKUPS:-5}"
 MYSQL="${MYSQL:-mysql}"
 
-# ---- Quelle: aktuelles DSN -------------------------------------------------
+# ---- Source: current DSN ----------------------------------------------------
 TARGET="${CUBE_DSN_FILE:-}"
 if [ -z "${CUBE_DSN:-}" ] && [ -n "$TARGET" ] && [ -f "$TARGET" ]; then
-  # Dateiinhalt kann "CUBE_DSN=host=..." (env) ODER nur "host=..." sein.
+  # File content can be "CUBE_DSN=host=..." (env) OR just "host=...".
   raw=$(cat "$TARGET")
   CUBE_DSN="${raw#CUBE_DSN=}"
 fi
 DSN="${CUBE_DSN:?Fehler: Kein aktuelles DSN (CUBE_DSN oder CUBE_DSN_FILE setzen).}"
 [ -n "$TARGET" ] || { echo "Fehler: CUBE_DSN_FILE (Zieldatei) muss gesetzt sein." >&2; exit 1; }
 
-# Hatte die Datei das "CUBE_DSN="-Präfix? Beim Neuschreiben beibehalten.
+# Did the file have the "CUBE_DSN=" prefix? Keep it when rewriting.
 PREFIX=""
 if [ -f "$TARGET" ] && grep -q '^CUBE_DSN=' "$TARGET" 2>/dev/null; then PREFIX="CUBE_DSN="; fi
 
@@ -56,14 +56,14 @@ ROTATE_USER="${ROTATE_USER:-$DB_USER}"
 ROTATE_USER_HOST="${ROTATE_USER_HOST:-%}"
 [ -n "$ROTATE_USER" ] || { echo "Fehler: kein DB-User ermittelbar (user= im DSN fehlt)." >&2; exit 1; }
 
-# ---- Neues Passwort --------------------------------------------------------
+# ---- New password ------------------------------------------------------------
 NEWPW="${ROTATE_NEW_PASSWORD:-}"
 if [ -z "$NEWPW" ]; then
   NEWPW=$(openssl rand -base64 24 2>/dev/null | tr -d '/+=' | cut -c1-24)
   [ -n "$NEWPW" ] || { echo "Fehler: konnte kein Passwort generieren (openssl?)." >&2; exit 1; }
 fi
 
-# ---- Neues DSN bauen (password=-Feld ersetzen) -----------------------------
+# ---- Build new DSN (replace password= field) --------------------------------
 if grep -q 'password=' <<<"$DSN"; then
   NEW_DSN=$(sed -E "s/(^|[[:space:]])password=[^[:space:]]+/\1password=${NEWPW}/" <<<"$DSN")
 else
@@ -80,7 +80,7 @@ if [ -n "${ROTATE_DRY_RUN:-}" ]; then
   exit 0
 fi
 
-# ---- DB-Passwort setzen ----------------------------------------------------
+# ---- Set DB password --------------------------------------------------------
 if [ -z "${ROTATE_SKIP_DB:-}" ]; then
   ADMIN_USER="${ROTATE_ADMIN_USER:-root}"
   ADMIN_PW="${ROTATE_ADMIN_PASSWORD:-}"
@@ -100,9 +100,9 @@ if [ -z "${ROTATE_SKIP_DB:-}" ]; then
     | "$MYSQL" --defaults-extra-file="$ADMCNF"
   echo ">> DB-Passwort gesetzt."
 
-  # ---- Verifizieren (mit neuem Passwort verbinden), vor dem Ueberschreiben
-  # der Secret-Datei: schlaegt die Verifikation fehl, bleibt die alte Datei
-  # unangetastet und das Skript bricht mit Exit 1 ab.
+  # ---- Verify (connect with the new password), before overwriting
+  # the secret file: if verification fails, the old file remains
+  # untouched and the script aborts with exit 1.
   echo ">> Verifiziere neues Passwort…"
   VCNF=$(mktemp); chmod 600 "$VCNF"
   { echo "[client]"; echo "host=${DB_HOST}"; echo "port=${DB_PORT}"; echo "user=${ROTATE_USER}"; echo "password=${NEWPW}"; } > "$VCNF"
@@ -120,22 +120,22 @@ else
   echo ">> ROTATE_SKIP_DB=1 – DB nicht geändert, nur Datei wird neu geschrieben."
 fi
 
-# ---- Secret-Datei atomar ersetzen (mit Backup) -----------------------------
-# Wird nur erreicht, wenn die Verifikation oben erfolgreich war (oder
-# ROTATE_SKIP_DB gesetzt ist).
+# ---- Replace secret file atomically (with backup) --------------------------
+# Only reached if the verification above succeeded (or
+# ROTATE_SKIP_DB is set).
 if [ -f "$TARGET" ]; then
   BK="${TARGET}.bak-$(date +%Y%m%d%H%M%S)"
   cp -p "$TARGET" "$BK"
   echo ">> Backup der alten Secret-Datei: ${BK}"
 fi
 TMP=$(mktemp "${TARGET}.XXXXXX")
-# Rechte/Owner der Zieldatei übernehmen, falls vorhanden.
+# Take over permissions/owner of the target file, if it exists.
 if [ -f "$TARGET" ]; then chmod --reference="$TARGET" "$TMP" 2>/dev/null || chmod 640 "$TMP"; else chmod 640 "$TMP"; fi
 printf '%s%s\n' "$PREFIX" "$NEW_DSN" > "$TMP"
 mv -f "$TMP" "$TARGET"
 echo ">> Secret-Datei aktualisiert (atomar): ${TARGET}"
 
-# ---- Alte Backups rotieren -------------------------------------------------
+# ---- Rotate old backups -------------------------------------------------
 if [[ "$KEEP" =~ ^[0-9]+$ ]] && [ "$KEEP" -ge 0 ]; then
   mapfile -t OLD < <(ls -1t "${TARGET}.bak-"* 2>/dev/null | tail -n +"$((KEEP + 1))")
   for f in "${OLD[@]}"; do rm -f "$f" && echo ">> Altes Backup entfernt: ${f}"; done

@@ -1,12 +1,12 @@
 # ---------------------------------------------------------------------------
-# Gemeinsame Geo-Quellen-Auswahl (source'd von load_cube.sh + fetch_loki_logs.sh).
-# Erwartet: Aufrufer steht bereits im ingestion/-Verzeichnis (pwd).
-# Setzt: GEO, GEO_LOC, GEO_SOURCE_SQL. Bricht mit TODO-Hinweis ab, wenn die
-# GeoIP-Datei fehlt (bewusst nicht Teil des Repos, siehe
+# Shared geo source selection (sourced by load_cube.sh + fetch_loki_logs.sh).
+# Expects: caller is already in the ingestion/ directory (pwd).
+# Sets: GEO, GEO_LOC, GEO_SOURCE_SQL. Aborts with a TODO hint if the
+# GeoIP file is missing (deliberately not part of the repo, see
 # docs/ingestion-runbook.md §3a).
 #
-# ENV: SM_GEO_SOURCE (native|ip2location|dbip|maxmind, Standard native),
-#      SM_GEO_PATH, SM_GEO_LOC_PATH (nur maxmind)
+# ENV: SM_GEO_SOURCE (native|ip2location|dbip|maxmind, default native),
+#      SM_GEO_PATH, SM_GEO_LOC_PATH (maxmind only)
 # ---------------------------------------------------------------------------
 SM_GEO_SOURCE="${SM_GEO_SOURCE:-native}"
 case "$SM_GEO_SOURCE" in

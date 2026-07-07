@@ -1,9 +1,9 @@
 -- ===========================================================================
--- Geo-Quelle: IP2Location LITE DB1 (CSV, "IPv4 to Country").
--- Download (Lizenz CC-BY-SA-4.0, Attribution erforderlich):
---   https://lite.ip2location.com/database/ip-country  (kostenloser Account nötig)
--- Erwartetes Rohformat, ohne Header, 4 Spalten:
---   ip_from,ip_to,country_code,country_name   (ip_from/ip_to als Integer)
+-- Geo source: IP2Location LITE DB1 (CSV, "IPv4 to Country").
+-- Download (license CC-BY-SA-4.0, attribution required):
+--   https://lite.ip2location.com/database/ip-country  (free account required)
+-- Expected raw format, no header, 4 columns:
+--   ip_from,ip_to,country_code,country_name   (ip_from/ip_to as integer)
 -- Parameter (SET VARIABLE): geopath
 -- ===========================================================================
 CREATE OR REPLACE TEMP VIEW geo_ranges AS

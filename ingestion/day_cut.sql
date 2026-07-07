@@ -1,21 +1,21 @@
 -- ===========================================================================
--- SightMetrics – Tagesgrenzen-Cut fuer den inkrementellen Log-Import.
+-- SightMetrics – day-boundary cut for the incremental log import.
 --
--- Problem (Runbook §8): der Sink ERSETZT alle Tage des Batches. Enthaelt ein
--- Batch nur einen Teil eines Tages (typisch: nächtlicher Lauf um 02:00 sieht
--- 00:00–02:00 des aktuellen Tages), wuerde der naechste Lauf diesen Tag mit
--- nur den restlichen Zeilen ueberschreiben – die fruehen Stunden gingen verloren.
+-- Problem (runbook §8): the sink REPLACES all days of the batch. If a
+-- batch contains only part of a day (typically: the nightly run at 02:00 sees
+-- 00:00-02:00 of the current day), the next run would overwrite this day with
+-- only the remaining lines – the early hours would be lost.
 --
--- Loesung: Zeilen ab 'cutoff_date' (UTC-Datum, i. d. R. "heute") werden aus
--- parsed_lines entfernt und ihre Bytes NICHT als konsumiert gezaehlt. Der
--- Offset bleibt vor der ersten abgeschnittenen Zeile stehen; der naechste Lauf
--- liest den Tag dann vollstaendig. Voraussetzung: chronologisch geschriebene
--- Logs (Standard bei Access-Logs) und \n-Zeilenenden (Byte-Rechnung).
+-- Solution: lines from 'cutoff_date' (UTC date, usually "today") are removed
+-- from parsed_lines and their bytes are NOT counted as consumed. The
+-- offset stays before the first truncated line; the next run then
+-- reads the day in full. Requirement: chronologically written
+-- logs (standard for access logs) and \n line endings (byte calculation).
 --
--- Erwartet: raw_lines(rid, line, nbytes) + parsed_lines(rid, g) aus
--- log_formats/*.sql. Parameter (SET VARIABLE): cutoff_date ('' = kein Cut),
--- tsformat. Ergebnis-Variable: cut_rid (NULL = nichts abgeschnitten).
--- Der Aufrufer (load_cube.sh) exportiert die konsumierten Bytes per COPY.
+-- Expects: raw_lines(rid, line, nbytes) + parsed_lines(rid, g) from
+-- log_formats/*.sql. Parameters (SET VARIABLE): cutoff_date ('' = no cut),
+-- tsformat. Result variable: cut_rid (NULL = nothing cut).
+-- The caller (load_cube.sh) exports the consumed bytes via COPY.
 -- ===========================================================================
 
 SET VARIABLE cut_rid = (

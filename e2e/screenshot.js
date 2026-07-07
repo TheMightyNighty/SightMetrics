@@ -1,8 +1,8 @@
-/* Screenshot-Werkzeug: loggt sich ins TYPO3-Backend ein, öffnet das
-   SightMetrics-Modul und legt PNG-Screenshots ab (für Documentation/Images/
-   und manuelle Sichtprüfung). Nutzung:
-     node screenshot.js <ausgabe.png> [--full] [--selector '#sightmetrics ...']
-   ENV wie e2e.js (BASE_URL, BE_USER, BE_PASS, CHROME_BIN). */
+/* Screenshot tool: logs into the TYPO3 backend, opens the
+   SightMetrics module and saves PNG screenshots (for Documentation/Images/
+   and manual visual inspection). Usage:
+     node screenshot.js <output.png> [--full] [--selector '#sightmetrics ...']
+   ENV like e2e.js (BASE_URL, BE_USER, BE_PASS, CHROME_BIN). */
 const puppeteer = require('puppeteer-core');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8091';
@@ -50,7 +50,7 @@ const H = parseInt(process.env.SHOT_H || '1080', 10);
     if (!el) { console.error('Selector nicht gefunden: ' + selector); await browser.close(); process.exit(1); }
     await el.screenshot({ path: out });
   } else if (full) {
-    // Gesamtes Modul-Dokument (Iframe-Inhalt) inkl. Scroll-Bereich
+    // Entire module document (iframe content) including the scroll area
     const body = await frame.$('body');
     await body.screenshot({ path: out });
   } else {

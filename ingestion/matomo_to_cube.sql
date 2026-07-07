@@ -1,22 +1,22 @@
 -- ===========================================================================
--- SightMetrics – Matomo-Altdaten-Import: Reporting-API-JSON -> cube_rows/daily_rows.
--- Compute-Teil des Matomo-Pfads (analog zu cube_to_mysql.sql beim Log-Pfad).
--- Erzeugt dieselben TEMP-Tabellen daily_rows / cube_rows; der gemeinsame
--- MariaDB-Sink (sink_mysql.sql) wird von matomo_import.sh angehaengt.
+-- SightMetrics – Matomo historical-data import: Reporting API JSON -> cube_rows/daily_rows.
+-- Compute part of the Matomo path (analogous to cube_to_mysql.sql for the log path).
+-- Creates the same TEMP tables daily_rows / cube_rows; the shared
+-- MariaDB sink (sink_mysql.sql) is appended by matomo_import.sh.
 --
--- Parameter (SET VARIABLE, durch matomo_import.sh gesetzt):
---   jsondir    Verzeichnis mit den heruntergeladenen Report-JSONs (eine Datei
---              je Dimension, plus daily.json). Fehlende Dateien sind erlaubt.
---   site_id, site_name  -> vom Sink benoetigt.
+-- Parameters (SET VARIABLE, set by matomo_import.sh):
+--   jsondir    directory with the downloaded report JSONs (one file
+--              per dimension, plus daily.json). Missing files are allowed.
+--   site_id, site_name  -> needed by the sink.
 --
--- JSON-Form je Datei (period=day + Datums-Range -> nach Datum gekeyt):
+-- JSON shape per file (period=day + date range -> keyed by date):
 --   daily.json:  { "YYYY-MM-DD": { nb_visits, nb_actions, ... }, ... }
 --   <dim>.json:  { "YYYY-MM-DD": [ { label, nb_visits, nb_actions, ... }, ... ] }
--- Mapping: v <- nb_visits, pv <- nb_actions (bzw. nb_hits bei Actions-Reports).
+-- Mapping: v <- nb_visits, pv <- nb_actions (or nb_hits for Actions reports).
 -- ===========================================================================
 
--- ---- daily_rows aus VisitsSummary.get -------------------------------------
--- bytes bleibt 0 (Matomo trackt keine Bandbreite pro Tag wie der Log-Pfad).
+-- ---- daily_rows from VisitsSummary.get -------------------------------------
+-- bytes stays 0 (Matomo doesn't track bandwidth per day like the log path).
 CREATE OR REPLACE TEMP TABLE daily_doc AS
   SELECT json(content) j FROM read_text(getvariable('jsondir') || '/daily.json');
 
@@ -30,13 +30,13 @@ SELECT d::DATE AS datum,
 FROM daily_doc, unnest(json_keys(j)) AS t(d)
 WHERE json_type(j -> d) = 'OBJECT';
 
--- ---- Generischer Dimensions-Reader ----------------------------------------
--- file:    Dateiname relativ zu jsondir (z. B. 'country.json')
--- dimname: Ziel-dim im Cube
--- pv_field/v_field: Matomo-Felder fuer pv (pageviews) und v (visits)
--- matomo_import.sh legt fuer jede Dimension eine Datei an (leere/fehlende
--- Reports als '{}'), daher liefert json_keys() dann 0 Zeilen.
--- Nicht-Array-Tage werden uebersprungen.
+-- ---- Generic dimension reader ----------------------------------------------
+-- file:    filename relative to jsondir (e.g. 'country.json')
+-- dimname: target dim in the cube
+-- pv_field/v_field: Matomo fields for pv (pageviews) and v (visits)
+-- matomo_import.sh creates a file for each dimension (empty/missing
+-- reports as '{}'), so json_keys() then returns 0 rows.
+-- Non-array days are skipped.
 CREATE OR REPLACE TEMP MACRO dim_rows(file, dimname, pv_field, v_field) AS TABLE
   WITH doc AS (
     SELECT json(content) j
@@ -64,20 +64,20 @@ SELECT * FROM (
   UNION ALL SELECT * FROM dim_rows('device.json',   'device',        'nb_actions',      'nb_visits')
   UNION ALL SELECT * FROM dim_rows('reftype.json',  'referrer_type', 'nb_actions',      'nb_visits')
   UNION ALL SELECT * FROM dim_rows('keyword.json',  'keyword',       'nb_actions',      'nb_visits')
-  -- hour: dimkey auf '00'..'23' normalisieren (Matomo-Label z. B. '0h').
+  -- hour: normalize dimkey to '00'..'23' (Matomo label e.g. '0h').
   UNION ALL
   SELECT datum, 'hour' AS dim,
          lpad(regexp_extract(dimkey, '(\d+)', 1), 2, '0') AS dimkey, pv, v
   FROM dim_rows('hour.json', 'hour_raw', 'nb_actions', 'nb_visits')
   WHERE regexp_extract(dimkey, '(\d+)', 1) <> ''
 )
--- Leerzeilen verwerfen (Matomo paddet z. B. alle 24 Stunden, auch ohne Hits);
--- der Log-Pfad speichert ebenfalls nur Dimensionswerte mit Treffern.
+-- Discard empty rows (Matomo pads e.g. all 24 hours, even without hits);
+-- the log path likewise only stores dimension values with hits.
 WHERE pv > 0 OR v > 0;
 
--- Nicht abgedeckt (bewusst, v1):
---   * status, method, bytes  -> von Matomo nicht getrackt.
+-- Not covered (deliberately, v1):
+--   * status, method, bytes  -> not tracked by Matomo.
 --   * browser_version, os_version, device_model, referrer_name, referrer_url
---     -> Cube-dimkey ist 'Eltern\x1fKind'; Matomos flache Reports liefern den
---        Eltern-Prefix nicht zuverlaessig. Dashboard zeigt diese Unteransichten
---        fuer importierte historische Zeitraeume leer. Siehe Doku.
+--     -> cube dimkey is 'parent\x1fchild'; Matomo's flat reports don't reliably
+--        provide the parent prefix. Dashboard shows these sub-views
+--        empty for imported historical periods. See docs.

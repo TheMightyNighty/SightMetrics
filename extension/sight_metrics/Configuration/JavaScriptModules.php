@@ -1,8 +1,8 @@
 <?php
 
-// Natives ES-Modul-Mapping fuers Backend-Modul (PageRenderer::loadJavaScriptModule()).
-// Relative Imports innerhalb von Resources/Public/JavaScript/ (./modules/*.js)
-// loesen sich gegen die Entry-URL auf und brauchen keine eigenen Eintraege.
+// Native ES module mapping for the backend module (PageRenderer::loadJavaScriptModule()).
+// Relative imports within Resources/Public/JavaScript/ (./modules/*.js)
+// resolve against the entry URL and don't need their own entries.
 return [
     'dependencies' => ['backend'],
     'imports' => [

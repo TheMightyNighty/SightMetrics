@@ -1,3 +1,3 @@
--- Dieser Schritt wird durch 01-analytics.sh abgedeckt, das die Passwörter
--- aus den Umgebungsvariablen CUBE_RW_PASSWORD / CUBE_RO_PASSWORD liest.
--- Datei bleibt als Platzhalter erhalten (leere SQL-Datei ist gültig).
+-- This step is covered by 01-analytics.sh, which reads the passwords
+-- from the environment variables CUBE_RW_PASSWORD / CUBE_RO_PASSWORD.
+-- File remains as a placeholder (an empty SQL file is valid).

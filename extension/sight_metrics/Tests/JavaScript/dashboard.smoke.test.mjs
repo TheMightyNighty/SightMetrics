@@ -1,9 +1,9 @@
-// Minimaler DOM-Smoke-Test fuer dashboard.js: laedt das echte Fluid-Template + das echte
-// Skript in jsdom, mit gefaelschten Chart.js-/Leaflet-Stubs statt der echten Bibliotheken
-// (schnell, keine echte Canvas-/WebGL-Implementierung noetig). Deckt genau die Fehlerklasse
-// ab, die beim ECharts->Chart.js/Leaflet-Umbau mehrfach durchgerutscht ist: falscher
-// Element-Typ (canvas vs. div), ungueltiges GeoJSON, Bibliotheks-API falsch benutzt,
-// stillschweigend nichts gerendert. Kein Build-Prozess -- reines Node + jsdom (devDependency).
+// Minimal DOM smoke test for dashboard.js: loads the real Fluid template + the real
+// script in jsdom, with fake Chart.js/Leaflet stubs instead of the real libraries
+// (fast, no real canvas/WebGL implementation needed). Covers exactly the class of bugs
+// that slipped through repeatedly during the ECharts->Chart.js/Leaflet rebuild: wrong
+// element type (canvas vs. div), invalid GeoJSON, library API misuse,
+// silently rendering nothing. No build process -- pure Node + jsdom (devDependency).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -16,23 +16,23 @@ const EXT_ROOT = join(HERE, '..', '..');
 const TEMPLATE_PATH = join(EXT_ROOT, 'Resources/Private/Templates/Dashboard/Index.html');
 const DASHBOARD_JS_PATH = join(EXT_ROOT, 'Resources/Public/JavaScript/dashboard.js');
 
-// dashboard.js ist ein natives ES-Modul (import aus ./modules/*) -- window.eval()
-// kann keine Module ausfuehren. Stattdessen: jsdom-Objekte als Node-Globals
-// exponieren und das Modul per dynamic import laden. Cache-Buster (?t=...) noetig,
-// weil Nodes ESM-Cache dasselbe Modul sonst nur einmal (fuer den ersten Test) laeuft.
+// dashboard.js is a native ES module (import from ./modules/*) -- window.eval()
+// cannot execute modules. Instead: expose jsdom objects as Node globals
+// and load the module via dynamic import. Cache buster (?t=...) needed,
+// because Node's ESM cache would otherwise only run the same module once (for the first test).
 async function loadDashboard(window) {
   for (const key of ['window', 'document', 'location', 'Chart', 'L', 'SM_WORLD']) {
     globalThis[key] = window[key];
   }
-  // fetch: spaet gebunden, damit Tests window.fetch nach buildDom() stubben koennen.
+  // fetch: bound late, so tests can stub window.fetch after buildDom().
   globalThis.fetch = (...args) => window.fetch(...args);
   const { pathToFileURL } = await import('node:url');
   await import(pathToFileURL(DASHBOARD_JS_PATH).href + '?t=' + Date.now() + Math.random());
   await waitForReady(window);
 }
 
-// Kleines, aber realistisches Payload -- deckt Tages-Serie, Cube-Zeilen (inkl. country-Dimension
-// fuer die Karte) und Multi-Site-Auswahl ab.
+// Small but realistic payload -- covers daily series, cube rows (incl. country dimension
+// for the map) and multi-site selection.
 const FAKE_PAYLOAD = {
   meta: { site: 'Testbehörde', von: '2026-06-01', bis: '2026-06-03', erzeugt: '2026-06-03 10:00', uniques_total: 42 },
   daily: [
@@ -51,8 +51,8 @@ const FAKE_PAYLOAD = {
   window: { von: '2026-06-01', bis: '2026-06-03' },
 };
 
-// Kleine synthetische Weltkarte statt der echten (~1,4 MB) Vendor-Datei -- der Test prueft
-// dashboard.js' Umgang mit GeoJSON, nicht den Inhalt der echten Kartendaten.
+// Small synthetic world map instead of the real (~1.4 MB) vendor file -- the test checks
+// dashboard.js's handling of GeoJSON, not the content of the real map data.
 const FAKE_WORLD = {
   type: 'FeatureCollection',
   features: [
@@ -61,9 +61,9 @@ const FAKE_WORLD = {
   ],
 };
 
-// jsdom meldet direkt nach dem Konstruieren readyState 'loading' (realistisches
-// Navigations-Timing) -- dashboard.js haengt sich dann an DOMContentLoaded statt sofort zu
-// laufen, genau wie im echten Browser. Darauf warten statt synchron zu pruefen.
+// jsdom reports readyState 'loading' right after construction (realistic
+// navigation timing) -- dashboard.js then hooks into DOMContentLoaded instead of running
+// immediately, just like in a real browser. Wait for that instead of checking synchronously.
 function waitForReady(window) {
   if (window.document.readyState !== 'loading') return Promise.resolve();
   return new Promise((resolve) => {
@@ -80,16 +80,16 @@ function buildDom(payload) {
     JSON.stringify(payload || FAKE_PAYLOAD).replace(/</g, '\\u003c')
   );
 
-  // runScripts:'dangerously' laesst Event-Handler/Timer im jsdom-Fenster laufen;
-  // das Modul selbst wird via loadDashboard() (Node-ESM + jsdom-Globals) geladen.
+  // runScripts:'dangerously' lets event handlers/timers run in the jsdom window;
+  // the module itself is loaded via loadDashboard() (Node ESM + jsdom globals).
   const dom = new JSDOM(`<!doctype html><html><body>${bodyHtml}</body></html>`, {
     url: 'http://localhost/',
     runScripts: 'dangerously',
   });
   const { window } = dom;
 
-  // Canvas-getContext gibt es in jsdom nicht ohne natives 'canvas'-Paket -- Chart.js braucht
-  // nur irgendein Objekt als Kontext, echtes Zeichnen wird hier nicht geprueft.
+  // jsdom has no canvas getContext without the native 'canvas' package -- Chart.js just
+  // needs some object as context, real drawing is not checked here.
   window.HTMLCanvasElement.prototype.getContext = () => ({});
 
   const chartInstances = [];
@@ -112,8 +112,8 @@ function buildDom(payload) {
     },
     geoJSON(data, opts) {
       geoJsonCalls.push({ data, opts });
-      // Wie echtes Leaflet: style()/onEachFeature() pro Feature ausfuehren, um Exceptions
-      // in diesen Callbacks zu fangen (genau hier lag der "Invalid GeoJSON object"-Fehler).
+      // Like real Leaflet: run style()/onEachFeature() per feature, to catch exceptions
+      // in these callbacks (this is exactly where the "Invalid GeoJSON object" bug was).
       for (const feature of (data && data.features) || []) {
         assert.equal(feature.type, 'Feature', 'jedes Feature braucht type:"Feature" (GeoJSON-Pflichtfeld, siehe Leaflet-Migration)');
         if (opts.style) opts.style(feature);
@@ -142,22 +142,22 @@ function buildDom(payload) {
 test('dashboard.js laedt Payload, rendert KPIs, Linien-/Balkenchart und Karte ohne Fehler', async () => {
   const { window, chartInstances, geoJsonCalls, windowErrors } = buildDom();
 
-  // dashboard.js registriert bei 'loading' seinen eigenen DOMContentLoaded-Listener (init())
-  // und laeuft danach genau wie im echten Browser -- hier mitwarten statt synchron zu pruefen.
+  // dashboard.js registers its own DOMContentLoaded listener (init()) while 'loading'
+  // and then runs just like in a real browser -- wait for it here instead of checking synchronously.
   await loadDashboard(window);
 
   assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
 
-  // KPIs wurden befuellt (Platzhalter "–" ersetzt).
+  // KPIs were populated (placeholder "-" replaced).
   const visits = window.document.getElementById('k-visits').textContent;
   assert.notEqual(visits, '–', 'KPI "Besuche" wurde nicht gerendert');
   assert.equal(visits, (10 + 15 + 12).toLocaleString('de-DE'));
 
-  // Linien- und Balkenchart wurden mit den erwarteten Chart.js-Typen erzeugt.
+  // Line and bar chart were created with the expected Chart.js types.
   const types = chartInstances.map((c) => c.type).sort();
   assert.deepEqual(types, ['bar', 'line'], 'erwartet genau einen Line- und einen Bar-Chart (Verlauf + Stunden)');
 
-  // Karte: L.geoJSON wurde mit einer echten FeatureCollection aufgerufen (nicht leer/undefined).
+  // Map: L.geoJSON was called with a real FeatureCollection (not empty/undefined).
   assert.equal(geoJsonCalls.length, 1, 'L.geoJSON haette genau einmal aufgerufen werden muessen');
   assert.equal(geoJsonCalls[0].data.type, 'FeatureCollection');
   assert.ok(geoJsonCalls[0].data.features.length > 0, 'Karte ohne Laender-Features gerendert');
@@ -201,7 +201,7 @@ test('Top-N-Barliste (z. B. Keyword) rendert Server-Top-N und laedt "+ N weitere
   assert.ok(keywordEl.textContent.includes('rathaus'), 'initiale Top-N-Zeilen aus dem Payload muessen gerendert werden');
   const more = keywordEl.querySelector('.bl-more-click');
   assert.ok(more, '"+ N weitere" muss angezeigt werden, wenn total.count > geladene Zeilen');
-  // Ohne lang-Map im Payload greift der englische Fallback (Default-Sprache der XLF).
+  // Without a lang map in the payload, the English fallback applies (default language of the XLF).
   assert.equal(more.textContent, '+ 3 more');
 
   more.click();
@@ -301,7 +301,7 @@ test('Seitenbaum rendert vorgeladene 2 Ebenen und laedt tiefere Aeste per path-F
   assert.ok(treeEl.textContent.includes('personalausweis'), 'vorgeladene Ebene 2 muss sichtbar sein (aufgeklappt)');
   assert.equal(fetchCalls.length, 0, 'vorgeladene Ebenen duerfen keinen Fetch ausloesen');
 
-  // Ebene-3-Ast aufklappen -> genau ein Fetch mit dem Pfad-Praefix.
+  // Expand level-3 branch -> exactly one fetch with the path prefix.
   const toggles = [...treeEl.querySelectorAll('.tog[role="button"]')];
   const level2Toggle = toggles.find((t) => t.getAttribute('aria-expanded') === 'false');
   assert.ok(level2Toggle, 'Ebene-2-Knoten mit Kindern muss aufklappbar (zu) sein');
