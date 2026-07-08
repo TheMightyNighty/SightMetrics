@@ -423,8 +423,10 @@ Hinweise zur Semantik (Details: Ingestion-Runbook §3/§8):
   erfolgreiche Zugriffe (Status < 400).
 - **Bots/Crawler** sind bereits in der Ingestion per User-Agent-Heuristik
   ausgefiltert (`SM_BOT_FILTER`).
-- **Besuchszeiten** werden in der Ingestion-Zeitzone `SM_TZ` ausgewiesen
-  (Standard UTC; für deutsche Installationen `SM_TZ=Europe/Berlin` setzen).
+- **Tages-Buckets und Besuchszeiten** rechnen seit Schema v2 in der
+  Ingestion-Zeitzone `SM_TZ` (in `meta.tz` hinterlegt, Standard UTC; für
+  deutsche Installationen `SM_TZ=Europe/Berlin` setzen). Relative
+  Zeitraum-Vorgaben („Heute", „Letzte 7 Tage") ankern in dieser Zone.
 - Ein Tag erscheint erst **nach seinem Abschluss** (Tagesgrenzen-Cut des
   inkrementellen Imports) – beim nächtlichen Lauf also jeweils der Vortag.
 
@@ -502,8 +504,9 @@ Gesamtsumme (`dimSummary()`) fuer die Prozentanzeige und "+ N weitere". Nachlade
 Drill-down-Zeile) laeuft ueber die Ajax-Route `ajax_sightmetrics_topn`
 (`TopNAjaxController`, `Configuration/Backend/AjaxRoutes.php`). Drill-down-Kinder (z. B.
 Browser-Versionen zu "Chrome") werden nie vorab geladen, sondern erst beim Aufklappen per
-`parentKey`-Parameter nachgefragt (`CubeRepository::applyParentPrefix()`, Praefix-Filter auf
-den mit `chr(31)` kodierten dimkey). Land bleibt bewusst unbegrenzt (die Choropleth-Karte
+`parentKey`-Parameter nachgefragt (`CubeRepository::applyParentFilter()`, seit Schema v2
+eine Gleichheit auf die eigene `parent`-Spalte statt der frueheren `chr(31)`-Praefix-Logik –
+siehe [`docs/SCHEMA.md`](SCHEMA.md)). Land bleibt bewusst unbegrenzt (die Choropleth-Karte
 braucht alle Laender, ISO-Codes sind ohnehin auf ~250 Werte begrenzt).
 
 Der **Seitenbaum** (`url`-Dimension) wird ebenfalls serverseitig begrenzt, aber ueber ein
