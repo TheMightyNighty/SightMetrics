@@ -122,7 +122,7 @@ echo ">> Verarbeite $((NEW_BYTES / 1024 + 1)) KB neue Daten (~$(wc -l < "$TMPLOG
 #   SM_CUTOFF_DATE       override the cutoff date (default: today, UTC)
 CUTOFF_DATE=""
 if [ "${SM_COMPLETE_DAYS:-1}" != "0" ]; then
-  CUTOFF_DATE="${SM_CUTOFF_DATE:-$(date -u +%Y-%m-%d)}"
+  CUTOFF_DATE="${SM_CUTOFF_DATE:-$(TZ="${SM_TZ:-UTC}" date +%Y-%m-%d)}"
 fi
 
 # Double single quotes for DuckDB string literals -- an apostrophe in the

@@ -40,7 +40,7 @@ SET VARIABLE download_re = COALESCE(NULLIF(getvariable('download_re'), ''),
 -- all remaining analyses). try_strptime/TRY_CAST: an unparseable line (bot junk,
 -- IPv6 for ipint, broken timestamps) only discards that line, not the whole import.
 CREATE OR REPLACE TEMP TABLE hits_all AS
-SELECT *, strftime(ts,'%Y-%m-%d') AS datum,
+SELECT *, strftime(ts_local,'%Y-%m-%d') AS datum,
        extract('hour' FROM ts_local) AS stunde
 FROM (
   SELECT
@@ -139,13 +139,13 @@ CREATE OR REPLACE TEMP TABLE visits AS
 -- Referrer classification: anchored on the host (domain end), so
 -- 'nichtgoogle.example' or similar isn't falsely counted as a search engine.
 SELECT v.*, COALESCE(gc.cc, gc6.cc, '??') AS country,
-  CASE WHEN v.referrer IN ('','-') THEN 'Direkt'
+  CASE WHEN v.referrer IN ('','-') THEN 'direct'
        WHEN regexp_matches(v.ref_host,'(^|\.)(google|bing|duckduckgo|ecosia|startpage|qwant|yandex)\.[a-z.]+$')
-            OR v.ref_host = 'search.brave.com' THEN 'Suchmaschine'
+            OR v.ref_host = 'search.brave.com' THEN 'search'
        WHEN v.ref_host IN ('t.co','x.com')
             OR regexp_matches(v.ref_host,'(^|\.)(twitter|facebook|instagram|linkedin|youtube|tiktok)\.com$')
-            THEN 'Soziale Medien'
-       ELSE 'Website' END AS ref_type,
+            THEN 'social'
+       ELSE 'website' END AS ref_type,
   CASE WHEN v.referrer IN ('','-') THEN NULL
        WHEN regexp_matches(v.ref_host,'(^|\.)google\.[a-z.]+$') THEN 'Google'
        WHEN regexp_matches(v.ref_host,'(^|\.)bing\.com$') THEN 'Bing'
@@ -180,28 +180,30 @@ CREATE OR REPLACE TEMP TABLE daily_rows AS
          COALESCE(bytes,0)::BIGINT AS bytes
   FROM pv FULL JOIN vi USING (datum);
 
+-- Schema v2: drill-down dimensions carry their parent value in a separate
+-- 'parent' column (NULL for root dimensions) instead of CHR(31)-encoded keys.
 CREATE OR REPLACE TEMP TABLE cube_rows AS
-  SELECT datum, dim, dimkey, pv::BIGINT AS pv, v::BIGINT AS v FROM (
-    SELECT datum,'url' dim, url dimkey, count(*) pv, count(DISTINCT (vkey,seq)) v FROM sess GROUP BY datum,url
+  SELECT datum, dim, parent, dimkey, pv::BIGINT AS pv, v::BIGINT AS v FROM (
+    SELECT datum,'url' dim, NULL parent, url dimkey, count(*) pv, count(DISTINCT (vkey,seq)) v FROM sess GROUP BY datum,url
     -- 'status' from hits_all: also includes 4xx/5xx (the panel is meant to show errors);
     -- v here is "affected visitors" (DISTINCT vkey), since error hits have no session.
-    UNION ALL SELECT datum,'status',CAST(status AS VARCHAR),count(*),count(DISTINCT vkey) FROM hits_all GROUP BY datum,status
-    UNION ALL SELECT datum,'method',method,count(*),count(DISTINCT (vkey,seq)) FROM sess GROUP BY datum,method
-    UNION ALL SELECT datum,'hour',lpad(CAST(stunde AS VARCHAR),2,'0'),count(*),count(DISTINCT (vkey,seq)) FROM sess GROUP BY datum,stunde
-    UNION ALL SELECT datum,'download',url,count(*),count(DISTINCT (vkey,seq)) FROM sess WHERE is_download GROUP BY datum,url
-    UNION ALL SELECT datum,'entry',entry_url,sum(pageviews),count(*) FROM visits GROUP BY datum,entry_url
-    UNION ALL SELECT datum,'exit',exit_url,sum(pageviews),count(*) FROM visits GROUP BY datum,exit_url
-    UNION ALL SELECT datum,'referrer_type',ref_type,sum(pageviews),count(*) FROM visits GROUP BY datum,ref_type
-    UNION ALL SELECT datum,'referrer_name',ref_type||chr(31)||ref_name,sum(pageviews),count(*) FROM visits WHERE ref_name IS NOT NULL GROUP BY datum,ref_type,ref_name
-    UNION ALL SELECT datum,'referrer_url',ref_name||chr(31)||referrer,sum(pageviews),count(*) FROM visits WHERE referrer NOT IN ('','-') AND ref_name IS NOT NULL GROUP BY datum,ref_name,referrer
-    UNION ALL SELECT datum,'keyword',keyword,sum(pageviews),count(*) FROM visits WHERE keyword IS NOT NULL AND keyword<>'' GROUP BY datum,keyword
-    UNION ALL SELECT datum,'country',country,sum(pageviews),count(*) FROM visits GROUP BY datum,country
-    UNION ALL SELECT datum,'browser',browser,sum(pageviews),count(*) FROM visits GROUP BY datum,browser
-    UNION ALL SELECT datum,'browser_version',browser||chr(31)||browser_version,sum(pageviews),count(*) FROM visits GROUP BY datum,browser,browser_version
-    UNION ALL SELECT datum,'os',os,sum(pageviews),count(*) FROM visits GROUP BY datum,os
-    UNION ALL SELECT datum,'os_version',os||chr(31)||os_version,sum(pageviews),count(*) FROM visits GROUP BY datum,os,os_version
-    UNION ALL SELECT datum,'device',device,sum(pageviews),count(*) FROM visits GROUP BY datum,device
-    UNION ALL SELECT datum,'device_model',device||chr(31)||device_model,sum(pageviews),count(*) FROM visits GROUP BY datum,device,device_model
+    UNION ALL SELECT datum,'status',NULL,CAST(status AS VARCHAR),count(*),count(DISTINCT vkey) FROM hits_all GROUP BY datum,status
+    UNION ALL SELECT datum,'method',NULL,method,count(*),count(DISTINCT (vkey,seq)) FROM sess GROUP BY datum,method
+    UNION ALL SELECT datum,'hour',NULL,lpad(CAST(stunde AS VARCHAR),2,'0'),count(*),count(DISTINCT (vkey,seq)) FROM sess GROUP BY datum,stunde
+    UNION ALL SELECT datum,'download',NULL,url,count(*),count(DISTINCT (vkey,seq)) FROM sess WHERE is_download GROUP BY datum,url
+    UNION ALL SELECT datum,'entry',NULL,entry_url,sum(pageviews),count(*) FROM visits GROUP BY datum,entry_url
+    UNION ALL SELECT datum,'exit',NULL,exit_url,sum(pageviews),count(*) FROM visits GROUP BY datum,exit_url
+    UNION ALL SELECT datum,'referrer_type',NULL,ref_type,sum(pageviews),count(*) FROM visits GROUP BY datum,ref_type
+    UNION ALL SELECT datum,'referrer_name',ref_type,ref_name,sum(pageviews),count(*) FROM visits WHERE ref_name IS NOT NULL GROUP BY datum,ref_type,ref_name
+    UNION ALL SELECT datum,'referrer_url',ref_name,referrer,sum(pageviews),count(*) FROM visits WHERE referrer NOT IN ('','-') AND ref_name IS NOT NULL GROUP BY datum,ref_name,referrer
+    UNION ALL SELECT datum,'keyword',NULL,keyword,sum(pageviews),count(*) FROM visits WHERE keyword IS NOT NULL AND keyword<>'' GROUP BY datum,keyword
+    UNION ALL SELECT datum,'country',NULL,country,sum(pageviews),count(*) FROM visits GROUP BY datum,country
+    UNION ALL SELECT datum,'browser',NULL,browser,sum(pageviews),count(*) FROM visits GROUP BY datum,browser
+    UNION ALL SELECT datum,'browser_version',browser,browser_version,sum(pageviews),count(*) FROM visits GROUP BY datum,browser,browser_version
+    UNION ALL SELECT datum,'os',NULL,os,sum(pageviews),count(*) FROM visits GROUP BY datum,os
+    UNION ALL SELECT datum,'os_version',os,os_version,sum(pageviews),count(*) FROM visits GROUP BY datum,os,os_version
+    UNION ALL SELECT datum,'device',NULL,device,sum(pageviews),count(*) FROM visits GROUP BY datum,device
+    UNION ALL SELECT datum,'device_model',device,device_model,sum(pageviews),count(*) FROM visits GROUP BY datum,device,device_model
   );
 
 CREATE OR REPLACE TEMP TABLE meta_row AS
@@ -212,4 +214,5 @@ CREATE OR REPLACE TEMP TABLE meta_row AS
          (SELECT count(DISTINCT vkey) FROM visits)::BIGINT AS uniques_total,
          (SELECT count(*) FILTER (WHERE pageviews=1) FROM visits)::BIGINT AS bounces_total,
          (SELECT sum(bytes) FROM sess)::BIGINT AS bytes_total,
-         strftime(now(),'%Y-%m-%d %H:%M') AS erzeugt;
+         strftime(now(),'%Y-%m-%d %H:%M') AS erzeugt,
+         getvariable('tz') AS tz;

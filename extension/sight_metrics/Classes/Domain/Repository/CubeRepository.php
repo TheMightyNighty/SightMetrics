@@ -30,15 +30,9 @@ final class CubeRepository
      * docs/SCHEMA.md). The ingestion writes its version to meta.schema_version;
      * if the version there is NEWER, reader and writer no longer match.
      */
-    public const SCHEMA_VERSION = 1;
+    public const SCHEMA_VERSION = 2;
 
     private const CONNECTION = 'cube';
-
-    /**
-     * Parent|child separator in dimkey values (drill-down dimensions), exactly identical to
-     * chr(31) in ingestion/transform.sql and the SEP constant in dashboard.js.
-     */
-    private const CHILD_SEP = "\x1f";
 
     public function __construct(
         private readonly ConnectionPool $connectionPool,
@@ -205,32 +199,23 @@ final class CubeRepository
     }
 
     /**
-     * Restricts a cube query to rows whose dimkey starts with "$parentKey . CHILD_SEP"
-     * (drill-down: child rows of a parent category). $parentKey is a bound
-     * parameter (no injection risk); only the prefix LENGTH computed in PHP
-     * is embedded as a literal in the query. SUBSTR() counts Unicode codepoints
-     * both in MySQL/MariaDB (non-binary columns) and in SQLite, hence
-     * mb_strlen() instead of strlen() -- otherwise multibyte UTF-8 labels would be truncated incorrectly.
+     * Restricts a cube query to child rows of a parent category (drill-down).
+     * Schema v2: the parent value lives in its own 'parent' column -- a plain,
+     * indexable equality instead of the former CHR(31) prefix matching.
      */
-    private function applyParentPrefix(QueryBuilder $qb, ?string $parentKey): void
+    private function applyParentFilter(QueryBuilder $qb, ?string $parentKey): void
     {
         if ($parentKey === null) {
             return;
         }
-        $prefix = $parentKey . self::CHILD_SEP;
-        // No $qb->expr()->eq() here: it quotes its first argument as an identifier
-        // (Connection::quoteIdentifier()), which breaks the SUBSTR(...) expression.
-        // andWhere() accepts raw SQL fragments directly.
-        $qb->andWhere(
-            'SUBSTR(dimkey, 1, ' . mb_strlen($prefix, 'UTF-8') . ') = ' . $qb->createNamedParameter($prefix)
-        );
+        $qb->andWhere($qb->expr()->eq('parent', $qb->createNamedParameter($parentKey)));
     }
 
     /**
      * Top-N rows of a dimension, sorted descending by $metric ('pv' or 'v').
      * For server-side Top-N + lazy-loading on high-cardinality dimensions (see
      * TopNDims/ROADMAP.md). $parentKey: if set, only child rows of this parent category
-     * (drill-down, dimkey prefix before CHILD_SEP) -- see applyParentPrefix().
+     * (drill-down, 'parent' column) -- see applyParentFilter().
      *
      * @return list<array{dimkey: string, pv: int, v: int}>
      */
@@ -255,7 +240,7 @@ final class CubeRepository
                     // '<>' also excludes NULL dimkeys.
                     $qb->expr()->neq('dimkey', $qb->createNamedParameter('')),
                 );
-            $this->applyParentPrefix($qb, $parentKey);
+            $this->applyParentFilter($qb, $parentKey);
             $rows = $qb->groupBy('dimkey')
                 ->orderBy($metric, 'DESC')
                 ->setMaxResults($limit)
@@ -300,7 +285,7 @@ final class CubeRepository
                     // nor in "+ N more".
                     $qb->expr()->neq('dimkey', $qb->createNamedParameter('')),
                 );
-            $this->applyParentPrefix($qb, $parentKey);
+            $this->applyParentFilter($qb, $parentKey);
             $row = $qb->executeQuery()->fetchAssociative();
             return [
                 'pv' => Params::toInt(\is_array($row) ? ($row['pv'] ?? null) : null),
@@ -323,7 +308,7 @@ final class CubeRepository
      * Portable SQL: SUBSTR/INSTR/CASE exist in MariaDB/MySQL and SQLite; the
      * segment extraction runs completely in SQL, so that not all URL rows have
      * to be transferred at the root of large sites. SUBSTR counts Unicode codepoints
-     * (see applyParentPrefix), hence mb_strlen() for the prefix length.
+     * (portable across MariaDB/SQLite), hence mb_strlen() for the prefix length.
      *
      * @return array{
      *   rows: list<array{seg: string, path: string, pv: int, v: int, hasChildren: bool}>,
@@ -353,7 +338,7 @@ final class CubeRepository
                     $qb->expr()->gte('datum', $qb->createNamedParameter($from)),
                     $qb->expr()->lte('datum', $qb->createNamedParameter($bis)),
                 )
-                // Prefix filter like applyParentPrefix (raw fragment, expr()->eq()
+                // Raw prefix fragment (expr()->eq()
                 // would quote the SUBSTR expression as an identifier).
                 ->andWhere("SUBSTR(dimkey, 1, $plen) = " . $qb->createNamedParameter($prefix))
                 ->groupBy('seg')

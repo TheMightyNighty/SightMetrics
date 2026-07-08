@@ -52,8 +52,20 @@ CREATE OR REPLACE TEMP MACRO dim_rows(file, dimname, pv_field, v_field) AS TABLE
        unnest(CASE WHEN json_type(j -> d) = 'ARRAY' THEN CAST(j -> d AS JSON[]) ELSE CAST([] AS JSON[]) END) AS e(elem)
   WHERE json_extract_string(elem, 'label') IS NOT NULL;
 
+-- Schema v2: cube_rows carries a 'parent' column; the Matomo path only writes
+-- root dimensions -> parent is always NULL. referrer_type labels from Matomo
+-- are mapped to the neutral keys of the contract (direct/search/social/website).
 CREATE OR REPLACE TEMP TABLE cube_rows AS
-SELECT * FROM (
+SELECT datum, dim, NULL AS parent,
+       CASE WHEN dim = 'referrer_type' THEN
+              CASE WHEN dimkey ILIKE 'direct%' THEN 'direct'
+                   WHEN dimkey ILIKE 'search%' THEN 'search'
+                   WHEN dimkey ILIKE 'social%' THEN 'social'
+                   WHEN dimkey ILIKE 'campaign%' THEN 'website'
+                   ELSE 'website' END
+            ELSE dimkey END AS dimkey,
+       pv, v
+FROM (
   SELECT * FROM dim_rows('url.json',      'url',           'nb_hits',         'nb_visits')
   UNION ALL SELECT * FROM dim_rows('download.json', 'download',      'nb_hits',         'nb_visits')
   UNION ALL SELECT * FROM dim_rows('entry.json',    'entry',         'entry_nb_actions','entry_nb_visits')

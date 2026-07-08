@@ -85,7 +85,10 @@ final class DashboardController implements LoggerAwareInterface
             $allowedIds = SiteSelector::allowedSiteIds($this->siteFinder, $this->beUser());
             $noAccess = ($allowedIds === []);
             $sites = $noAccess ? [] : $this->cubeRepository->sites($allowedIds ?? []);
-            $this->assertSchemaCompatible();
+            // Empty cube (onboarding) has no version to check yet.
+            if ($sites !== []) {
+                $this->assertSchemaCompatible();
+            }
             $siteId = SiteSelector::resolve($sites, Params::toInt($params['site'] ?? null));
             // Empty site list (no access or cube empty): don't query meta(0),
             // so a cube with an actual site_id of 0 doesn't leak through anyway.
@@ -131,6 +134,9 @@ final class DashboardController implements LoggerAwareInterface
                 'sites' => $sites,
                 'siteId' => $siteId,
                 'window' => ['von' => $from, 'bis' => $bis],
+                // Bucketing timezone of the ingestion (meta.tz, SCHEMA v2):
+                // the frontend anchors "today" for relative presets in this zone.
+                'tz' => Params::toString($meta['tz'] ?? null, 'UTC'),
                 // UI language of the backend user: label map + locale (number format,
                 // Intl.DisplayNames country names) for dashboard.js.
                 'lang' => $this->jsLabels(),
@@ -225,13 +231,21 @@ final class DashboardController implements LoggerAwareInterface
     private function assertSchemaCompatible(): void
     {
         $found = $this->cubeRepository->schemaVersion();
-        if ($found !== null && $found > CubeRepository::SCHEMA_VERSION) {
+        if ($found === CubeRepository::SCHEMA_VERSION) {
+            return;
+        }
+        if ($found === null || $found < CubeRepository::SCHEMA_VERSION) {
             throw new \RuntimeException(sprintf(
-                'Incompatible cube schema: ingestion writes schema version %d, this extension supports up to %d. Update the sight_metrics extension (see docs/SCHEMA.md).',
-                $found,
+                'Cube schema version %s found, this extension requires version %d. Run the migration (ingestion/migrations/v1_to_v2.sql) or re-import the logs (see docs/SCHEMA.md).',
+                $found === null ? 'none/legacy' : (string)$found,
                 CubeRepository::SCHEMA_VERSION
             ));
         }
+        throw new \RuntimeException(sprintf(
+            'Incompatible cube schema: ingestion writes schema version %d, this extension supports %d. Update the sight_metrics extension (see docs/SCHEMA.md).',
+            $found,
+            CubeRepository::SCHEMA_VERSION
+        ));
     }
 
     /**

@@ -166,6 +166,10 @@ jobs:
       - name: Smoke (TYPO3 CLI, read-only Cube)
         run: docker exec sightmetrics-web php vendor/bin/typo3 sightmetrics:smoke
 
+      # Contract-Test (docs/SCHEMA.md): Ingestion schreibt -> CubeRepository liest.
+      - name: Contract (Ingestion <-> Extension)
+        run: bash tests/contract/run.sh
+
       - name: E2E (Puppeteer)
         env:
           CHROME_BIN: /usr/bin/google-chrome   # auf ubuntu-latest vorinstalliert

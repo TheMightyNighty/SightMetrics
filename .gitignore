@@ -39,3 +39,4 @@ state/
 /tmp/phpunit-*.phar
 ingestion/bots/
 ingestion/ua/
+/.claude/

@@ -136,6 +136,11 @@ SQL
 Die Tabellen (`cube`, `daily`, `meta`) werden beim **ersten Import** automatisch
 angelegt — kein separates `CREATE TABLE` nötig.
 
+**Upgrade von Schema v1** (Importe vor Extension 2.0): einmalig
+`mysql -u cube_rw -p analytics < ingestion/migrations/v1_to_v2.sql` ausführen
+(idempotent) oder alle Logs neu importieren — die Extension 2.x verweigert
+v1-Daten mit klarer Meldung. Details: [`docs/SCHEMA.md`](SCHEMA.md).
+
 ### Demo-Stack
 
 Im Demo übernimmt `demo/initdb/01-analytics.sh` die Anlage automatisch beim
@@ -211,7 +216,7 @@ einem kompatiblen JSON-Format. Pflichtfelder:
 | Variable | Standard | Wirkung |
 |---|---|---|
 | `SM_BOT_FILTER` | `1` | `0` = Bot-/Crawler-Zeilen mitzählen |
-| `SM_TZ` | `UTC` | Zeitzone der `hour`-Dimension (Besuchszeiten-Panel), z. B. `Europe/Berlin`. Tages-Buckets bleiben UTC. |
+| `SM_TZ` | `UTC` | **Site-Zeitzone (Schema v2):** Tages-Buckets (`datum`), Besuchszeiten (`hour`) und der Tagesgrenzen-Cut rechnen in dieser Zone (z. B. `Europe/Berlin`); wird nach `meta.tz` geschrieben. |
 | `SM_DOWNLOAD_RE` | pdf/zip/Office/… | Regex (auf lowercase-URL) für die Download-Erkennung |
 | `SM_UA_BROWSERS_PATH` / `SM_UA_OSS_PATH` | `ua/browsers.tsv` / `ua/oss.tsv` | device-detector-Listen für Browser/OS (tools/fetch_ua_lists.sh); ohne Dateien greift die Heuristik |
 | `SM_GEO6_PATH` | – | IPv6-Geo-Ranges (`start_ip,end_ip,cc`, z. B. DB-IP-CSV); ohne Datei bleibt IPv6 bei Land `??` |

@@ -87,8 +87,14 @@ final class HealthCommand extends Command
                 $details[] = ['site_id' => $siteId, 'site' => $name, 'status' => 'CRIT', 'last_data' => null, 'age_hours' => null];
                 continue;
             }
-            // Age from the end of the last data day (up to 23:59:59).
-            $end = strtotime($bis . ' 23:59:59');
+            // Age from the end of the last data day (23:59:59) in the site's
+            // bucketing timezone (meta.tz, SCHEMA v2).
+            $tz = Params::toString($meta['tz'] ?? null, 'UTC');
+            try {
+                $end = (new \DateTimeImmutable($bis . ' 23:59:59', new \DateTimeZone($tz)))->getTimestamp();
+            } catch (\Throwable) {
+                $end = false;
+            }
             $ageH = $end !== false ? (int)floor(($now - $end) / 3600) : null;
             $status = 'OK';
             if ($ageH === null) {

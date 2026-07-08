@@ -14,17 +14,21 @@
 -- Versioned DB contract between package A (writer) and package B (reader).
 -- Bump this on INCOMPATIBLE changes to cube/daily/meta and update docs/SCHEMA.md
 -- accordingly; the extension checks the version when building the module.
-SET VARIABLE sm_schema_version = 1;
+SET VARIABLE sm_schema_version = 2;
 
 -- Schema (idempotent, multi-site)
-CREATE TABLE IF NOT EXISTS m.${SM_TABLE_CUBE}  (site_id INTEGER, datum DATE, dim VARCHAR, dimkey VARCHAR, pv BIGINT, v BIGINT);
+CREATE TABLE IF NOT EXISTS m.${SM_TABLE_CUBE}  (site_id INTEGER, datum DATE, dim VARCHAR, parent VARCHAR, dimkey VARCHAR, pv BIGINT, v BIGINT);
 CREATE TABLE IF NOT EXISTS m.${SM_TABLE_DAILY} (site_id INTEGER, datum DATE, visits BIGINT, pageviews BIGINT, uniques BIGINT, bounces BIGINT, bytes BIGINT);
 CREATE TABLE IF NOT EXISTS m.${SM_TABLE_META}  (site_id INTEGER, site VARCHAR, von VARCHAR, bis VARCHAR,
                                     visits_total BIGINT, pageviews_total BIGINT, uniques_total BIGINT,
                                     bounces_total BIGINT, bytes_total BIGINT, erzeugt VARCHAR,
-                                    schema_version INTEGER);
+                                    schema_version INTEGER, tz VARCHAR);
 -- Backfill existing DBs (pre schema version); MariaDB understands IF NOT EXISTS.
 CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_META} ADD COLUMN IF NOT EXISTS schema_version INTEGER');
+CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_META} ADD COLUMN IF NOT EXISTS tz VARCHAR(64)');
+-- v1 databases: the DDL is self-migrating (column add), the DATA is not --
+-- existing CHR(31) rows must be converted via migrations/v1_to_v2.sql.
+CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_CUBE} ADD COLUMN IF NOT EXISTS parent VARCHAR(1024) AFTER dim');
 
 -- Date range of the batch to be replaced (VARCHAR 'YYYY-MM-DD').
 -- Priority is given to an explicitly set range_from/range_to (the Matomo path
@@ -50,7 +54,7 @@ CALL mysql_execute('m',
 );
 
 INSERT INTO m.${SM_TABLE_DAILY} SELECT getvariable('site_id')::INTEGER, datum, visits, pageviews, uniques, bounces, bytes FROM daily_rows;
-INSERT INTO m.${SM_TABLE_CUBE}  SELECT getvariable('site_id')::INTEGER, CAST(datum AS DATE), dim, dimkey, pv, v FROM cube_rows;
+INSERT INTO m.${SM_TABLE_CUBE}  SELECT getvariable('site_id')::INTEGER, CAST(datum AS DATE), dim, parent, dimkey, pv, v FROM cube_rows;
 
 -- Meta: recomputed from the full daily table.
 -- Uniques total is an additive approximation (daily values summed).
@@ -62,7 +66,8 @@ INSERT INTO m.${SM_TABLE_META}
          SUM(visits)::BIGINT, SUM(pageviews)::BIGINT, SUM(uniques)::BIGINT,
          SUM(bounces)::BIGINT, SUM(bytes)::BIGINT,
          strftime(now(), '%Y-%m-%d %H:%M'),
-         getvariable('sm_schema_version')::INTEGER
+         getvariable('sm_schema_version')::INTEGER,
+         COALESCE(NULLIF(getvariable('tz'), ''), 'UTC')
   FROM m.${SM_TABLE_DAILY} WHERE site_id = getvariable('site_id')::INTEGER;
 
 SELECT 'cube_rows_this_site' k, (SELECT count(*) FROM m.${SM_TABLE_CUBE} WHERE site_id = getvariable('site_id')::INTEGER) n

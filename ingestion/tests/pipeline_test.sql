@@ -17,8 +17,11 @@ WITH checks(c, exp, act) AS (
     ('entry_/a_visits',        4, (SELECT v  FROM cube_rows WHERE dim='entry' AND dimkey='/a')),
     ('exit_/c.pdf_visits',     1, (SELECT v  FROM cube_rows WHERE dim='exit'  AND dimkey='/c.pdf')),
     -- Referrer & keyword (heuristic anchored: www.google.com counts, nichtgoogle.example doesn't)
-    ('ref_suchmaschine_v',     1, (SELECT v  FROM cube_rows WHERE dim='referrer_type' AND dimkey='Suchmaschine')),
-    ('ref_direkt_v',           3, (SELECT v  FROM cube_rows WHERE dim='referrer_type' AND dimkey='Direkt')),
+    ('ref_search_v',           1, (SELECT v  FROM cube_rows WHERE dim='referrer_type' AND dimkey='search')),
+    ('ref_direct_v',           3, (SELECT v  FROM cube_rows WHERE dim='referrer_type' AND dimkey='direct')),
+    -- Schema v2: drill-down rows carry parent separately (no CHR(31) keys)
+    ('parent_split_v2',        1, (SELECT v  FROM cube_rows WHERE dim='browser_version' AND parent='Edge' AND dimkey NOT LIKE '%'||chr(31)||'%')),
+    ('no_chr31_keys_v2',       0, (SELECT count(*)::INT FROM cube_rows WHERE dimkey LIKE '%'||chr(31)||'%')),
     ('keyword_extrahiert',     1, (SELECT v  FROM cube_rows WHERE dim='keyword' AND dimkey='test begriff')),
     -- Browser / OS / device (Edge UA contains 'Chrome', but must count as Edge)
     ('browser_Chrome_visits',  3, (SELECT v  FROM cube_rows WHERE dim='browser' AND dimkey='Chrome')),
