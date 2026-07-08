@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.1 (2026-07-08)
+
+### Behoben
+- **Besucherkarte: horizontale Streifen bei Russland/Fiji.** world.js
+  (world-atlas/Natural-Earth-TopoJSON) enthielt Polygon-Ringe, die den
+  180-Grad-Meridian ueberqueren, ohne dort gesplittet zu sein
+  (`topojson-client` cuttet das nicht automatisch); Leaflet zeichnete das als
+  durchgehende Linie quer ueber die gesamte Kartenbreite. Betroffene Ringe
+  am Antimeridian gesplittet (reproduzierbar via neuem
+  `scripts/fix-world-antimeridian.mjs`); Antarktis entfernt (komplexere
+  Pol-Loch-Topologie, fuer Besucherdaten irrelevant).
+- Leaflet-Karte auf `preferCanvas: true` umgestellt (robuster gegen
+  SVG-Renderer-Seams bei reinen Vektor-Choroplethen ohne Basiskarte).
+
 ## 2.0.0 (2026-07-08) - Schema v2
 
 **Breaking:** Die Extension verlangt Cube-Schema-Version 2. Bestands-DBs mit
