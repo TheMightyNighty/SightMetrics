@@ -33,14 +33,14 @@ export function createI18n(data) {
     return c;
   }
 
-  // referrer_type VALUES are German data values from the cube (transform.sql,
-  // part of the DB contract) -> map to localized labels for display.
+  // referrer_type values are neutral keys since SCHEMA v2
+  // (direct/search/social/website) -> map them to localized display labels.
   /** @type {Record<string,string>} */
   const refTypeLabels = {
-    'Direkt': t('ref.direct', 'Direct'),
-    'Suchmaschine': t('ref.search', 'Search engines'),
-    'Soziale Medien': t('ref.social', 'Social media'),
-    'Website': t('ref.website', 'Websites'),
+    'direct': t('ref.direct', 'Direct'),
+    'search': t('ref.search', 'Search engines'),
+    'social': t('ref.social', 'Social media'),
+    'website': t('ref.website', 'Websites'),
   };
   /** @param {string} v raw dimkey value */
   function refTypeLabel(v) { return refTypeLabels[v] || v; }

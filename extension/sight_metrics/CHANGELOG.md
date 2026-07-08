@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.0.0 (2026-07-08) - Schema v2
+
+**Breaking:** Die Extension verlangt Cube-Schema-Version 2. Bestands-DBs mit
+`ingestion/migrations/v1_to_v2.sql` migrieren (idempotent) oder neu importieren;
+Modul und `sightmetrics:health` brechen sonst mit klarer Meldung ab.
+
+### Geaendert (DB-Vertrag, docs/SCHEMA.md v2)
+- **Lokale Tages-Buckets:** `datum`/`hour` und der Tagesgrenzen-Cut folgen der
+  Site-Zeitzone `SM_TZ` (in `meta.tz` hinterlegt, Default UTC); das Frontend
+  ankert relative Zeitraeume ("Heute", "Letzte 7 Tage") in dieser Zone,
+  `sightmetrics:health` rechnet das Datenalter darin.
+- **`cube.parent`-Spalte** ersetzt die CHR(31)-kodierten Drill-down-Keys:
+  Kind-Abfragen sind jetzt einfache (indexierbare) Gleichheit, Anzeige-Labels
+  sind reine Werte.
+- **Neutrale `referrer_type`-Keys** (`direct`/`search`/`social`/`website`)
+  statt deutscher Anzeigewerte im Datenbestand; Labels kommen aus der XLF.
+- **Mehrtages-Uniques bleiben bewusst genaehert:** exakte Werte sind mit dem
+  Tages-Salt-Privacy-Design (keine Besucher-Verkettung ueber Tage) prinzipiell
+  unvereinbar -- als permanente Design-Entscheidung in SCHEMA.md dokumentiert.
+
+### Neu
+- **Contract-Test** (`tests/contract/run.sh` + `CubeContractTest`): echter
+  Ingestion-Import -> echte MariaDB -> echtes CubeRepository, in CI (e2e-Job).
+
 ## 1.3.0 (2026-07-07)
 
 ### Qualitaets-Offensive (Notenschnitt-Massnahmen 1-5)

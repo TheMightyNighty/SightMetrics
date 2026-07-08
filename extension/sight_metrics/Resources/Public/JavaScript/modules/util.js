@@ -1,10 +1,6 @@
 /* SightMetrics - pure helper functions (no DOM access, no state).
    Imported by dashboard.js and modules/export.js; individually testable. */
 
-/** Parent|child separator in dimkey values -- exactly chr(31) like in
-    ingestion/transform.sql and CubeRepository::CHILD_SEP. */
-export const SEP = '\x1f';
-
 /** One day in milliseconds (UTC date arithmetic). */
 export const DAY = 86400000;
 
@@ -30,10 +26,6 @@ export function toDate(s) { const p = s.split('-'); return Date.UTC(+p[0], +p[1]
 
 /** @param {number} ms UTC milliseconds -> ISO date */
 export function toStr(ms) { return new Date(ms).toISOString().slice(0, 10); }
-
-/** Last segment of a chr(31)-encoded dimkey (display without the parent prefix).
-    @param {string} k */
-export function lastSeg(k) { const i = k.lastIndexOf(SEP); return i < 0 ? k : k.slice(i + 1); }
 
 /** @param {string} h '#rrggbb' -> [r,g,b] */
 export function hex2rgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }

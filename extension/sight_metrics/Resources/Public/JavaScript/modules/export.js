@@ -2,7 +2,7 @@
    Deliberately mirrors the currently LOADED state (Top-N + lazy-loaded, page tree
    subset), no completeness request on export. */
 
-import { csvRow, inR, lastSeg, slug, SEP } from './util.js';
+import { csvRow, inR, slug } from './util.js';
 
 /**
  * @param {{
@@ -63,7 +63,7 @@ export function createCsvExport(ctx) {
       if (governed) title += ' ' + t('csv.partial', '– loaded subset only, see "+ N more" in the dashboard');
       L.push(csvRow([title]));
       L.push(csvRow([t('csv.value', 'Value'), dd[2] === 'v' ? mVisits : mPv, mPv, mVisits]));
-      rows.forEach(function (r) { L.push(csvRow([label(r.key.split(SEP).join(' › ')), r[dd[2]], r.pv, r.v])); });
+      rows.forEach(function (r) { L.push(csvRow([label(r.key), r[dd[2]], r.pv, r.v])); });
     });
 
     // Page tree: recursive dump of the currently loaded state (full paths with

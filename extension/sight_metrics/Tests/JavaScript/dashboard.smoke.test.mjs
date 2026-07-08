@@ -235,7 +235,7 @@ test('Drill-down (Browser -> Version) laedt Kinder per parentKey nach, wenn eine
     return Promise.resolve({
       ok: true,
       json: () => Promise.resolve({
-        rows: [{ dimkey: 'Firefox\x1f120', pv: 8, v: 5 }, { dimkey: 'Firefox\x1f119', pv: 4, v: 2 }],
+        rows: [{ dimkey: '120', pv: 8, v: 5 }, { dimkey: '119', pv: 4, v: 2 }],
         total: { pv: 12, v: 7, count: 2 },
       }),
     });
@@ -258,7 +258,7 @@ test('Drill-down (Browser -> Version) laedt Kinder per parentKey nach, wenn eine
   const sub = browserEl.querySelector('.bl-sub');
   assert.ok(sub, 'Sub-Container fuer die Kind-Liste muss erzeugt werden');
   assert.ok(sub.textContent.includes('120'), 'nachgeladene Kind-Zeilen muessen gerendert werden (Eltern-Praefix abgetrennt)');
-  assert.ok(!sub.textContent.includes('Firefox\x1f120'), 'Anzeige-Label muss lastSeg-bereinigt sein, nicht der rohe dimkey');
+  assert.ok(!sub.textContent.includes('\x1f'), 'SCHEMA v2: keine CHR(31)-Keys mehr in der Anzeige');
 });
 
 test('Seitenbaum rendert vorgeladene 2 Ebenen und laedt tiefere Aeste per path-Fetch nach', async () => {

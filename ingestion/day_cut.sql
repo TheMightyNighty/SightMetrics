@@ -22,8 +22,9 @@ SET VARIABLE cut_rid = (
   SELECT MIN(rid) FROM parsed_lines
   WHERE COALESCE(getvariable('cutoff_date'), '') <> ''
     AND strftime(
-          timezone('UTC', try_strptime(g.tsraw,
-            COALESCE(getvariable('tsformat'), '%d/%b/%Y:%H:%M:%S %z'))),
+          timezone(COALESCE(NULLIF(getvariable('tz'), ''), 'UTC'),
+            try_strptime(g.tsraw,
+              COALESCE(getvariable('tsformat'), '%d/%b/%Y:%H:%M:%S %z'))),
           '%Y-%m-%d') >= getvariable('cutoff_date')
 );
 

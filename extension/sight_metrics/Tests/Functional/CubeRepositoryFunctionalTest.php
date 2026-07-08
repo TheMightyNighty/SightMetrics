@@ -32,9 +32,9 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
         ];
 
         $c = $this->cubeConn();
-        $c->executeStatement('CREATE TABLE IF NOT EXISTS meta  (site_id INTEGER, site TEXT, von TEXT, bis TEXT, visits_total INTEGER, pageviews_total INTEGER, uniques_total INTEGER, bounces_total INTEGER, bytes_total INTEGER, erzeugt TEXT)');
+        $c->executeStatement('CREATE TABLE IF NOT EXISTS meta  (site_id INTEGER, site TEXT, von TEXT, bis TEXT, visits_total INTEGER, pageviews_total INTEGER, uniques_total INTEGER, bounces_total INTEGER, bytes_total INTEGER, erzeugt TEXT, tz TEXT)');
         $c->executeStatement('CREATE TABLE IF NOT EXISTS daily (site_id INTEGER, datum TEXT, visits INTEGER, pageviews INTEGER, uniques INTEGER, bounces INTEGER, bytes INTEGER)');
-        $c->executeStatement('CREATE TABLE IF NOT EXISTS cube  (site_id INTEGER, datum TEXT, dim TEXT, dimkey TEXT, pv INTEGER, v INTEGER)');
+        $c->executeStatement('CREATE TABLE IF NOT EXISTS cube  (site_id INTEGER, datum TEXT, dim TEXT, parent TEXT, dimkey TEXT, pv INTEGER, v INTEGER)');
         // ConnectionPool caches the SQLite connection as a singleton -> delete data from previous tests
         $c->executeStatement('DELETE FROM meta');
         $c->executeStatement('DELETE FROM daily');
@@ -66,7 +66,7 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
             'site_id' => $siteId, 'site' => $siteName,
             'von' => '2026-01-01', 'bis' => '2026-01-31',
             'visits_total' => 3, 'pageviews_total' => 5, 'uniques_total' => 2,
-            'bounces_total' => 2, 'bytes_total' => 6700, 'erzeugt' => '2026-02-01 00:00',
+            'bounces_total' => 2, 'bytes_total' => 6700, 'erzeugt' => '2026-02-01 00:00', 'tz' => 'UTC',
         ]);
         $c->insert('daily', [
             'site_id' => $siteId, 'datum' => '2026-01-01',
@@ -300,45 +300,41 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
 
     public function testTopNWithParentKeyReturnsOnlyMatchingChildren(): void
     {
-        $sep = "\x1f";
         $this->insertSite(1, 'Site-1', [
-            ['dim' => 'browser_version', 'dimkey' => 'Chrome' . $sep . '120', 'pv' => 1, 'v' => 5],
-            ['dim' => 'browser_version', 'dimkey' => 'Chrome' . $sep . '119', 'pv' => 1, 'v' => 2],
-            ['dim' => 'browser_version', 'dimkey' => 'Firefox' . $sep . '115', 'pv' => 1, 'v' => 9],
+            ['dim' => 'browser_version', 'parent' => 'Chrome', 'dimkey' => '120', 'pv' => 1, 'v' => 5],
+            ['dim' => 'browser_version', 'parent' => 'Chrome', 'dimkey' => '119', 'pv' => 1, 'v' => 2],
+            ['dim' => 'browser_version', 'parent' => 'Firefox', 'dimkey' => '115', 'pv' => 1, 'v' => 9],
         ]);
 
         $children = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'browser_version', 'v', 8, 0, 'Chrome');
 
-        self::assertSame(['Chrome' . $sep . '120', 'Chrome' . $sep . '119'], array_column($children, 'dimkey'));
+        self::assertSame(['120', '119'], array_column($children, 'dimkey'));
     }
 
     public function testTopNParentKeyDoesNotMatchUnrelatedPrefix(): void
     {
-        $sep = "\x1f";
-        // "Chromium" starts with "Chrom", but must not match parentKey "Chrom" --
-        // the separator must follow exactly after the full parent label.
+        // Schema v2: 'parent' is an exact equality -- "Chromium" must not match
+        // parentKey "Chrom" (this used to require careful CHR(31) prefix logic).
         $this->insertSite(1, 'Site-1', [
-            ['dim' => 'browser_version', 'dimkey' => 'Chromium' . $sep . '1', 'pv' => 1, 'v' => 1],
-            ['dim' => 'browser_version', 'dimkey' => 'Chrom' . $sep . '1', 'pv' => 1, 'v' => 1],
+            ['dim' => 'browser_version', 'parent' => 'Chromium', 'dimkey' => '1', 'pv' => 1, 'v' => 1],
+            ['dim' => 'browser_version', 'parent' => 'Chrom', 'dimkey' => '1', 'pv' => 1, 'v' => 2],
         ]);
 
         $children = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'browser_version', 'v', 8, 0, 'Chrom');
 
-        self::assertSame(['Chrom' . $sep . '1'], array_column($children, 'dimkey'));
+        self::assertSame([['dimkey' => '1', 'pv' => 1, 'v' => 2]], $children);
     }
 
     public function testTopNParentKeyHandlesMultibyteLabelsCorrectly(): void
     {
-        $sep = "\x1f";
-        // Multibyte UTF-8 prefix (umlaut): SUBSTR() must count codepoints, not bytes,
-        // otherwise the dimkey is truncated at the wrong position (see applyParentPrefix()).
+        // Multibyte UTF-8 parent (umlaut) must match exactly.
         $this->insertSite(1, 'Site-1', [
-            ['dim' => 'referrer_name', 'dimkey' => 'Bürgeramt' . $sep . 'seite-a', 'pv' => 1, 'v' => 3],
+            ['dim' => 'referrer_name', 'parent' => 'Bürgeramt', 'dimkey' => 'seite-a', 'pv' => 1, 'v' => 3],
         ]);
 
         $children = $this->repo()->topN(1, '2026-01-01', '2026-01-31', 'referrer_name', 'v', 8, 0, 'Bürgeramt');
 
-        self::assertSame(['Bürgeramt' . $sep . 'seite-a'], array_column($children, 'dimkey'));
+        self::assertSame(['seite-a'], array_column($children, 'dimkey'));
     }
 
     public function testTopNExcludesEmptyDimkeysAndReturnsIntTypes(): void
@@ -449,11 +445,10 @@ final class CubeRepositoryFunctionalTest extends FunctionalTestCase
 
     public function testDimSummaryWithParentKeyOnlyCountsMatchingChildren(): void
     {
-        $sep = "\x1f";
         $this->insertSite(1, 'Site-1', [
-            ['dim' => 'os_version', 'dimkey' => 'Windows' . $sep . '11', 'pv' => 1, 'v' => 4],
-            ['dim' => 'os_version', 'dimkey' => 'Windows' . $sep . '10', 'pv' => 1, 'v' => 2],
-            ['dim' => 'os_version', 'dimkey' => 'macOS' . $sep . '14', 'pv' => 1, 'v' => 7],
+            ['dim' => 'os_version', 'parent' => 'Windows', 'dimkey' => '11', 'pv' => 1, 'v' => 4],
+            ['dim' => 'os_version', 'parent' => 'Windows', 'dimkey' => '10', 'pv' => 1, 'v' => 2],
+            ['dim' => 'os_version', 'parent' => 'macOS', 'dimkey' => '14', 'pv' => 1, 'v' => 7],
         ]);
 
         $summary = $this->repo()->dimSummary(1, '2026-01-01', '2026-01-31', 'os_version', 'Windows');

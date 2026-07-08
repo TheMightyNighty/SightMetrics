@@ -3,7 +3,7 @@
    (read-only DBAL from the cube DB) and renders it client-side. Matomo-like:
    bar lists with drill-down (click -> subtable) + choropleth world map.
    Chart.js/Leaflet/world.js remain classic (global) vendor scripts. */
-import { DAY, SEP, esc, fmtBytes, hex2rgb, inR, lastSeg, lerpColor, toDate, toStr } from './modules/util.js';
+import { DAY, esc, fmtBytes, hex2rgb, inR, lerpColor, toDate, toStr } from './modules/util.js';
 import { createI18n } from './modules/i18n.js';
 import { createCsvExport } from './modules/export.js';
 
@@ -116,7 +116,7 @@ import { createCsvExport } from './modules/export.js';
   // (meta.child), attaches an expand handler that lazy-loads via Ajax on first click.
   function topNRowFactory(dim, meta) {
     return function (cont, r, total, max) {
-      var label = lastSeg(r.dimkey); // strip the parent prefix (chr(31)-encoded) for display
+      var label = r.dimkey; // SCHEMA v2: dimkey is the plain value, parents live in their own column
       // referrer_type values are German data values from the cube -> localize.
       if (dim === 'referrer_type') label = i18n.refTypeLabel(label);
       var row = rowEl(label, r[meta.metric], total, max, esc, !!meta.child);
@@ -283,7 +283,7 @@ import { createCsvExport } from './modules/export.js';
     var total = rows.reduce(function (s, r) { return s + r[metric]; }, 0) || 1;
     var top = rows.slice(0, limit), max = top.length ? top[0][metric] : 1;
     top.forEach(function (r) {
-      container.appendChild(rowEl(lastSeg(r.key), r[metric], total, max, fmt, false));
+      container.appendChild(rowEl(r.key, r[metric], total, max, fmt, false));
     });
     if (rows.length > limit) { var m = document.createElement('div'); m.className = 'bl-more'; m.textContent = tf('more', '+ %s more', nf(rows.length - limit)); container.appendChild(m); }
     if (!top.length) container.innerHTML = '<div class="bl-more">' + esc(t('noData', 'no data')) + '</div>';
@@ -601,7 +601,11 @@ import { createCsvExport } from './modules/export.js';
     // UTC instead of local browser time, consistent with 'datum' in the backend
     // (transform.sql: timezone('UTC', ...)).
     function anchor() {
-      var t = new Date(), today = ymd(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+      // "Today" in the site's bucketing timezone (DATA.tz = meta.tz, SCHEMA v2);
+      // en-CA formats as YYYY-MM-DD. Fallback: UTC.
+      var today;
+      try { today = new Intl.DateTimeFormat('en-CA', {timeZone: DATA.tz || 'UTC'}).format(new Date()); }
+      catch (e) { var t = new Date(); today = ymd(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()); }
       return today < META.bis ? today : META.bis;
     }
     function applyPreset(v) {
