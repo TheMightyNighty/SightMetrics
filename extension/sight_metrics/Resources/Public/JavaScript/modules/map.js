@@ -49,7 +49,10 @@ export function createMap(ctx) {
       return byName[name] || 0;
     }
     if (!leafletMap) {
-      leafletMap = L.map('w-map', { zoomControl: true, attributionControl: false, minZoom: 1, maxZoom: 6, worldCopyJump: true })
+      // preferCanvas: avoids faint horizontal seam lines that Leaflet's SVG
+      // renderer produces at internal tile-grid boundaries when there is no
+      // base tile layer underneath (pure vector choropleth, no basemap).
+      leafletMap = L.map('w-map', { zoomControl: true, attributionControl: false, minZoom: 1, maxZoom: 6, worldCopyJump: true, preferCanvas: true })
         .setView([20, 12], 1.4);
     }
     if (mapLayer) { leafletMap.removeLayer(mapLayer); }

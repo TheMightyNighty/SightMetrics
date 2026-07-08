@@ -49,6 +49,15 @@ siehe `REUSE.toml` (Extension-Root).
   reduziert die Dateigroesse von ~3,9 MB auf ~1,4 MB). 241 Laender/Territorien, inkl. kleiner
   Staaten wie Singapur und Hongkong (in der 110m-Aufloesung von world-atlas nicht enthalten,
   daher bewusst 50m statt 110m gewaehlt).
+- **Antimeridian-Nachbearbeitung** (`scripts/fix-world-antimeridian.mjs`, nach der
+  topojson-client-Konvertierung ausgefuehrt): `topojson-client` cuttet Polygone nicht am
+  180-Grad-Meridian. Russland und Fiji enthielten dadurch Ringe, die von +179.9 direkt auf
+  -180 sprangen; Leaflet zeichnete das als durchgehende Linie quer ueber die gesamte
+  Kartenbreite (sichtbare horizontale Streifen im Choropleth). Die betroffenen Ringe wurden
+  am Antimeridian in je zwei geschlossene Ringe gesplittet (Standard-Cut mit linearer
+  Interpolation des Kreuzungspunkts). Die Antarktis (komplexere Pol-Wickel-Geometrie mit
+  Loch-Ring, fuer Web-Analytics-Besucherdaten ohnehin irrelevant) wurde entfernt statt
+  gesplittet. Ergebnis: 240 statt 241 Features, ~1,33 MB statt ~1,4 MB.
 - Ersetzt die urspruengliche `world.js` (ECharts-Weltkarten-Datensatz seit dem allerersten
   Commit im Repo, Herkunft nicht mehr rekonstruierbar, Lizenzangabe war eine unverifizierte
   Annahme statt einer belegten Quelle — siehe ROADMAP.md Finding 5).
@@ -62,4 +71,5 @@ manuell nachziehen.
 
 Die Weltkarten-Geodaten (`world.js`) sind davon ausgenommen — kein 1:1-Dateikopie, sondern
 ein einmalig lokal durchgefuehrter TopoJSON-zu-GeoJSON-Konvertierungsschritt (siehe oben),
-nicht Teil von `npm run vendor:update`.
+nicht Teil von `npm run vendor:update`. Bei einer Neu-Erzeugung aus world-atlas anschliessend
+`node scripts/fix-world-antimeridian.mjs` ausfuehren (Antimeridian-Nachbearbeitung, siehe oben).

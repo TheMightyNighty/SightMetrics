@@ -61,8 +61,24 @@ function check(name, cond) {
     treeNodes: document.querySelectorAll('#w-tree .tnode').length,
     siteOptions: document.querySelectorAll('#w-siteselect option').length,
     // Chart.js renders directly into <canvas id="w-time"> (no child canvas like
-    // previously with ECharts); the Leaflet map draws countries as SVG paths.
+    // previously with ECharts). The Leaflet map (preferCanvas: true, see map.js)
+    // draws countries onto a <canvas> in the overlay pane rather than SVG paths.
     mapSvgPaths: document.querySelectorAll('#w-map svg path').length,
+    mapCanvasNonEmpty: (() => {
+      const c = document.querySelector('#w-map canvas');
+      if (!c || !c.width || !c.height) return false;
+      // Sample a coarse grid of pixels; a real choropleth has many distinct,
+      // non-transparent colors (an empty/unrendered canvas is uniformly blank).
+      const ctx = c.getContext('2d');
+      const colors = new Set();
+      for (let x = 0; x < c.width; x += Math.max(1, Math.floor(c.width / 20))) {
+        for (let y = 0; y < c.height; y += Math.max(1, Math.floor(c.height / 20))) {
+          const [r, g, b, a] = ctx.getImageData(x, y, 1, 1).data;
+          if (a > 0) colors.add(r + ',' + g + ',' + b);
+        }
+      }
+      return colors.size > 3;
+    })(),
     timeCanvas: (document.getElementById('w-time') || {}).tagName === 'CANVAS'
       && (document.getElementById('w-time') || {}).height > 0,
   }));
@@ -71,7 +87,8 @@ function check(name, cond) {
   check('KPI Absprungrate gefüllt (%)', /%/.test(data.bounce));
   check('KPI Bandbreite gefüllt', /(B|KB|MB|GB)/.test(data.band));
   check('Verlaufs-Diagramm gerendert (Chart.js-Canvas)', data.timeCanvas);
-  check('Weltkarte gerendert (Leaflet-SVG, ' + data.mapSvgPaths + ' Pfade)', data.mapSvgPaths > 100);
+  check('Weltkarte gerendert (' + data.mapSvgPaths + ' SVG-Pfade oder gefuelltes Canvas)',
+    data.mapSvgPaths > 100 || data.mapCanvasNonEmpty);
   check('Browser-Barliste hat Zeilen', data.browserRows > 0);
   check('Seitenbaum hat Knoten', data.treeNodes > 0);
   check('Site-Auswahl befüllt (Multi-Site)', data.siteOptions >= 1);
