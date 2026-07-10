@@ -19,8 +19,10 @@ use TYPO3\CMS\Backend\Template\ModuleTemplateFactory;
 use TYPO3\CMS\Core\Authentication\BackendUserAuthentication;
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
 use TYPO3\CMS\Core\Localization\LanguageServiceFactory;
+use TYPO3\CMS\Core\Package\PackageManager;
 use TYPO3\CMS\Core\Page\PageRenderer;
 use TYPO3\CMS\Core\Site\SiteFinder;
+use TYPO3\CMS\Core\Utility\ExtensionManagementUtility;
 
 /**
  * Backend module "SightMetrics".
@@ -63,6 +65,7 @@ final class DashboardController implements LoggerAwareInterface
         private readonly SiteFinder $siteFinder,
         private readonly UriBuilder $uriBuilder,
         private readonly LanguageServiceFactory $languageServiceFactory,
+        private readonly PackageManager $packageManager,
     ) {}
 
     public function handleRequest(ServerRequestInterface $request): ResponseInterface
@@ -141,6 +144,9 @@ final class DashboardController implements LoggerAwareInterface
                 // Intl.DisplayNames country names) for dashboard.js.
                 'lang' => $this->jsLabels(),
                 'locale' => $this->beUserLocale(),
+                // Extension version, shown in the module footer -- support/bug
+                // reports need this without a shell to `composer show`.
+                'extVersion' => $this->extensionVersion(),
             ];
         } catch (\Throwable $e) {
             $technical = $e->getMessage();
@@ -283,6 +289,58 @@ final class DashboardController implements LoggerAwareInterface
             $lang = '';
         }
         return $lang !== '' && $lang !== 'default' ? $lang : 'en';
+    }
+
+    /**
+     * Extension version, shown in the module footer. Prefers the Composer
+     * package metadata (correct for a tagged release, e.g. `composer require
+     * sightmetrics/sight-metrics:^2.0`); falls back to ext_emconf.php's
+     * 'version' when Composer only knows a branch alias like "dev-main"
+     * (local path-repository installs, e.g. the demo stack) rather than a
+     * real SemVer tag.
+     */
+    private function extensionVersion(): string
+    {
+        try {
+            $version = $this->packageManager->getPackage('sight_metrics')->getPackageMetaData()->getVersion();
+        } catch (\Throwable) {
+            $version = '';
+        }
+        if ($version !== '' && preg_match('/^\d+\.\d+\.\d+/', $version) === 1) {
+            return $version;
+        }
+        try {
+            return Params::toString($this->emConf()['version'] ?? null, $version);
+        } catch (\Throwable) {
+            return $version;
+        }
+    }
+
+    /**
+     * @return array<string,mixed> EM_CONF['sight_metrics'] from ext_emconf.php.
+     */
+    private function emConf(): array
+    {
+        // ext_emconf.php sets $EM_CONF[$_EXTKEY] as a side effect of being
+        // include()'d -- isolated in a closure so it cannot leak/collide with
+        // this method's own locals, and PHPStan sees a plain mixed return
+        // instead of trying (and failing) to track the include's effect on a
+        // pre-declared variable.
+        $load = static function () {
+            $emConfFile = ExtensionManagementUtility::extPath('sight_metrics') . 'ext_emconf.php';
+            $EM_CONF = [];
+            $_EXTKEY = 'sight_metrics';
+            include $emConfFile;
+            // PHPStan statically sees $EM_CONF as array{} (it cannot know that
+            // include() repopulates it) and therefore flags this as an
+            // impossible offset -- but at runtime it is exactly how
+            // ext_emconf.php's classic TYPO3 side-effect API works.
+            // @phpstan-ignore nullCoalesce.offset
+            return $EM_CONF[$_EXTKEY] ?? null;
+        };
+        $conf = $load();
+        // @phpstan-ignore function.impossibleType
+        return \is_array($conf) ? $conf : [];
     }
 
     /**

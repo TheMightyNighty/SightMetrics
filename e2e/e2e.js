@@ -81,6 +81,7 @@ function check(name, cond) {
     })(),
     timeCanvas: (document.getElementById('w-time') || {}).tagName === 'CANVAS'
       && (document.getElementById('w-time') || {}).height > 0,
+    version: (document.getElementById('w-version') || {}).textContent || '',
   }));
   check('KPI Besuche gefüllt', /[1-9]/.test(data.visits));
   check('KPI Seitenaufrufe gefüllt', /[1-9]/.test(data.pv));
@@ -148,6 +149,7 @@ function check(name, cond) {
   }));
   check('CSV-Export-Button vorhanden', exp.csvBtn);
   check('PDF-Export-Button vorhanden', exp.pdfBtn);
+  check('Extension-Version in der GUI angezeigt (' + data.version + ')', /^v\d+\.\d+\.\d+/.test(data.version));
 
   await browser.close();
   console.log(failed === 0 ? '\n>> E2E-TEST: OK' : `\n>> E2E-TEST: ${failed} FEHLGESCHLAGEN`);

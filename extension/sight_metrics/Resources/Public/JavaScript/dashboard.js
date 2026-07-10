@@ -72,6 +72,7 @@ import { initPresets } from './modules/presets.js';
     if (isDark()) { const rootEl = document.getElementById('sightmetrics'); if (rootEl) rootEl.classList.add('sm-dark'); }
     $('w-site').textContent = META.site || 'SightMetrics';
     $('w-gen').textContent = META.erzeugt ? tf('asOf', 'As of: %s', META.erzeugt) : '';
+    $('w-version').textContent = DATA.extVersion ? 'v' + DATA.extVersion : '';
 
     // Multi-site: fill the selector; switching reloads the module with ?site=<id>.
     const sel = $('w-siteselect'), sites = DATA.sites || [];
