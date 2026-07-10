@@ -54,7 +54,10 @@ final class CubeRepository
             }
         } catch (\Throwable) {
         }
-        return 60;
+        // High default is safe: cache keys include the from/bis window, and
+        // meta.bis moves forward with every nightly import -- the default view
+        // therefore gets fresh keys automatically, no manual flush needed.
+        return 21600;
     }
 
     /**

@@ -10,5 +10,5 @@ showTechnical = 0
 # cat=performance//10; type=int+; label=Time window in days: only this window is loaded from the cube DB (limits transfer volume independent of retention). 0 = unlimited.
 windowDays = 92
 
-# cat=performance//20; type=int+; label=Cache TTL in seconds for daily()/cube() reads from the cube DB (TYPO3 caching framework, cache "sight_metrics"). 0 = no caching, every call reads fresh.
-cacheLifetime = 60
+# cat=performance//20; type=int+; label=Cache TTL in seconds for cube DB reads (TYPO3 caching framework, cache "sight_metrics"). Safe to set high: cache keys include the date window, and the window shifts with each nightly import, so fresh data gets fresh keys automatically. 0 = no caching.
+cacheLifetime = 21600

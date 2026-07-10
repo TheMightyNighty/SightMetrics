@@ -53,6 +53,19 @@ default `cube`/`daily`/`meta`).
 | `tz` | VARCHAR | Site timezone used for `datum`/`hour` bucketing (`SM_TZ`, e.g. `Europe/Berlin`; since v2) |
 | `schema_version` | INTEGER | Contract version written by the ingestion (since v1; NULL = legacy) |
 
+## Indexes (additive, no version bump)
+
+The writer creates query indexes for the reader (idempotent,
+`CREATE INDEX IF NOT EXISTS` on every import; for large existing cubes
+`ingestion/migrations/v2_add_indexes.sql` allows building them at a controlled
+time instead):
+
+| Index | Columns | Serves |
+|---|---|---|
+| `sm_dim_datum` | `cube (site_id, dim(32), datum)` | all per-panel Top-N/summary queries |
+| `sm_drilldown` | `cube (site_id, dim(32), parent(191), datum)` | drill-down child queries (only possible since the v2 `parent` column) |
+| `sm_daily` | `daily (site_id, datum)` | daily series / KPI window |
+
 ## Semantics guaranteed by the writer
 
 - A day is only written once it is **complete** (day-boundary cut, runbook §8);

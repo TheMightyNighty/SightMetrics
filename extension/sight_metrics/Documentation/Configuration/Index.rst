@@ -33,9 +33,14 @@ Configured in the TYPO3 backend under **Admin Tools → Extensions → sight_met
        cube database, limiting the transfer volume independently of the
        retention period configured on the ingestion side. `0` = unlimited.
    * - `cacheLifetime`
-     - `60`
+     - `21600`
      - Cache TTL in seconds for cube database reads (TYPO3 caching framework,
-       cache `sight_metrics`). `0` = no caching, every request reads live data.
+       cache `sight_metrics`). Safe to keep high: cache keys include the date
+       window, and the window shifts forward with every nightly import, so the
+       default view gets fresh keys automatically. Only re-imports that
+       *rewrite historical days* (e.g. a backfill) can serve stale data for a
+       previously viewed custom range until the TTL expires — flush the
+       `sight_metrics` cache after such imports. `0` = no caching.
        See :ref:`known-problems` regarding cache cleanup responsibilities.
 
 The cube connection is fully independent from the main TYPO3 connection, so a

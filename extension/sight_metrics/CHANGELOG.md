@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+- **Query-Indizes auf den Cube-Tabellen** (`sm_dim_datum`, `sm_drilldown`,
+  `sm_daily`): der Sink legt sie idempotent bei jedem Import an; fuer grosse
+  Bestands-Cubes alternativ `ingestion/migrations/v2_add_indexes.sql` zu einem
+  Wartungszeitpunkt. Gemessen an einem ~870k-Zeilen-Cube: Panel-Queries von
+  Full-Table-Scan (~1,2 s je Query, ~13 Queries pro Dashboard-Load) auf
+  Index-Range (~0,3 s); Drill-down-Klicks werden Millisekunden-Lookups (der
+  `parent`-Filter ist erst seit Schema v2 indexierbar).
+- **Cache-TTL-Default 60 s -> 21600 s** (`cacheLifetime`): unbedenklich, weil
+  die Cache-Keys das Datumsfenster enthalten und das Fenster mit jedem
+  naechtlichen Import weiterwandert -- die Standard-Ansicht bekommt automatisch
+  frische Keys. Folge-Loads (alle Benutzer) laufen damit aus dem Cache.
+- **Extension-Version** wird im Modul-Footer angezeigt (2.0.1-Nachtrag).
+
 ## 2.0.1 (2026-07-08)
 
 ### Behoben

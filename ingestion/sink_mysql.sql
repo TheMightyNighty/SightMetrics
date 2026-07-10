@@ -30,6 +30,18 @@ CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_META} ADD COLUMN IF NOT EXISTS t
 -- existing CHR(31) rows must be converted via migrations/v1_to_v2.sql.
 CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_CUBE} ADD COLUMN IF NOT EXISTS parent VARCHAR(1024) AFTER dim');
 
+-- Query indexes for the reader (extension). Without them every dashboard panel
+-- is a full-table scan over the site's entire cube (measured ~4x slower on an
+-- ~870k-row cube; the drill-down filter cannot use an index at all otherwise).
+-- Prefix lengths: dim values are short identifiers (32 chars is plenty);
+-- parent(191) keeps the key under InnoDB's 3072-byte limit with utf8mb4.
+-- IF NOT EXISTS makes the nightly re-run a no-op. On very large existing cubes
+-- the first import after this change builds the indexes once (online DDL) --
+-- alternatively run migrations/v2_add_indexes.sql at a time of your choosing.
+CALL mysql_execute('m', 'CREATE INDEX IF NOT EXISTS sm_dim_datum ON ${SM_TABLE_CUBE} (site_id, dim(32), datum)');
+CALL mysql_execute('m', 'CREATE INDEX IF NOT EXISTS sm_drilldown ON ${SM_TABLE_CUBE} (site_id, dim(32), parent(191), datum)');
+CALL mysql_execute('m', 'CREATE INDEX IF NOT EXISTS sm_daily ON ${SM_TABLE_DAILY} (site_id, datum)');
+
 -- Date range of the batch to be replaced (VARCHAR 'YYYY-MM-DD').
 -- Priority is given to an explicitly set range_from/range_to (the Matomo path
 -- sets the full --from/--to chunk here, so that days WITHOUT new data are
