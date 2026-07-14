@@ -84,5 +84,37 @@ services:
       # Offset-State persistent über Container-Neustarts
       - ../state:/state
 
+  # Alternative Log-Quelle: Loki. fetch_loki_logs.sh im ingestion-Container
+  # erreicht es unter http://loki:3100 (gleiches Compose-Netz).
+  loki:
+    image: grafana/loki:3
+    container_name: sightmetrics-loki
+    # Loki läuft im Image als uid 10001; das frische Named-Volume gehört root.
+    # Für die Wegwerf-Demo einfach als root laufen lassen (schreibt nach /data).
+    user: root
+    command: -config.file=/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki:/data
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+
+  # Grafana zum Erkunden/Befüllen von Loki (anonymer Admin, kein Login nötig).
+  # UI: http://localhost:3000  – Loki ist als Default-Datenquelle vorprovisioniert.
+  grafana:
+    image: grafana/grafana
+    container_name: sightmetrics-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_DEFAULT_THEME: "system"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+
 volumes:
   dbdata:
+  loki:

@@ -23,7 +23,14 @@ FROM debian:bookworm-slim
 
 # default-mysql-client provides mysql + mysqldump (for backup_cube.sh / rotate_cube_secret.sh).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      bash python3 ca-certificates time gettext-base default-mysql-client \
+      bash \
+      python3 \
+      ca-certificates \
+      time \
+      gettext-base \
+      default-mysql-client \
+      curl \
+      jq \
  && rm -rf /var/lib/apt/lists/*
 
 # Data/engine

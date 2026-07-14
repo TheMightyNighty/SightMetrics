@@ -1,0 +1,35 @@
+# Minimale Single-Binary-Loki-Konfig für die Demo (grafana/loki:3).
+# Ablage im gemounteten Volume /data, damit Chunks/Index Neustarts überleben.
+
+auth_enabled: false
+
+ui:
+  enabled: true
+
+common:
+  ring:
+    kvstore:
+      store: inmemory
+  replication_factor: 1
+  path_prefix: /data
+
+schema_config:
+  configs:
+    - from: 2020-05-15
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  filesystem:
+    directory: /data/chunks
+
+limits_config:
+  discover_service_name: []  # disable service_name label
+  discover_log_levels: false  # disable detected_level label
+
+analytics:
+  reporting_enabled: false  # disable sending analytics to Grafana Labs
