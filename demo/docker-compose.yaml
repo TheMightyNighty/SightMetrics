@@ -83,6 +83,9 @@ services:
       - ../ingestion:/app
       # Offset-State persistent über Container-Neustarts
       - ../state:/state
+    # Allow host.docker.internal to be resolved inside the container (for Docker on Linux)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # Alternative Log-Quelle: Loki. fetch_loki_logs.sh im ingestion-Container
   # erreicht es unter http://loki:3100 (gleiches Compose-Netz).
