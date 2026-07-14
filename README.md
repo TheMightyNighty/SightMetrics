@@ -70,30 +70,21 @@ für echte GeoIP-Quellen im Produktivbetrieb) sowie die TYPO3-Installation selbs
 ```bash
 # 1) Einmaliges Setup (dauert beim ersten Mal ein paar Minuten: composer install,
 #    TYPO3-Setup, Extension-Deploy). Danach läuft der komplette Stack bereits.
-cd demo && ./setup.sh && cd ..
+docker compose -f demo/docker-compose.yaml up -d
 
 # 2) Beispiel-Log importieren: Log -> DuckDB-Cube -> MariaDB
-cd ingestion && ./load_cube.sh ../logs/example_1k.log "Bürgeramt Mitte" 1 && cd ..
-#                ./load_cube.sh <Logdatei> "<Site-Name>" <site_id>
-#                (multi-site-fähig, idempotent pro Site)
+docker exec -it sightmetrics-ingestion bash
+# im Container:
+./generate_logs.py
+python3 generate_demo_geo.py -o geo/country-ipv4-num.csv
+
+./load_cube.sh logs/example_1k.log "Bürgeramt Mitte" 1
+# ./load_cube.sh <Logdatei> "<Site-Name>" <site_id>
+# (multi-site-fähig, idempotent pro Site)
 
 # 3) Im Backend ansehen:
 #    http://localhost:8091/typo3/   (admin / SightMetrics-Admin-2026!)
 #    -> Modul  Web > "Logauswertung"
-
-# Weitere Terminal-Sessions (Stack schon eingerichtet): nur noch
-cd demo && docker compose up -d && cd ..
-```
-
-Import als **Container** (Paket A als nächtlicher One-Shot). Standardlauf = alle Sites
-aus `sites.conf`:
-
-```bash
-# alle Sites importieren
-cd demo && docker compose --profile import run --rm ingestion
-# einzelne Site
-cd demo && docker compose --profile import run --rm ingestion load_cube.sh /logs/<datei> "Site-Name" <id>
-```
 
 Für den **produktiven Betrieb** siehe
 [`ingestion/scheduling/README_scheduling.md`](ingestion/scheduling/README_scheduling.md)

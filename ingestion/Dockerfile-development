@@ -1,0 +1,38 @@
+# --- Build-Stage: passendes DuckDB-CLI-Binary von GitHub Releases laden --------
+# dpkg --print-architecture liefert amd64/arm64 == DuckDB-Asset-Namen und folgt
+# beim Multi-Plattform-Build automatisch der Ziel-Architektur.
+FROM debian:bookworm-slim AS duckdb
+ARG DUCKDB_VERSION=1.5.4
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl unzip ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    curl -fsSL -o /tmp/duckdb.zip \
+      "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-linux-${arch}.zip"; \
+    mkdir -p /out; \
+    unzip -o -q /tmp/duckdb.zip -d /out; \
+    chmod +x /out/duckdb; \
+    rm /tmp/duckdb.zip
+
+# --- Runtime-Stage ------------------------------------------------------------
+# Package A – ingestion container: DuckDB analysis as a nightly one-shot/CronJob.
+# Reads the webserver logs, writes the cube to the (external) MariaDB cube DB and
+# then exits. Default run = run_all.sh (all sites from sites.conf).
+FROM debian:bookworm-slim
+
+# default-mysql-client provides mysql + mysqldump (for backup_cube.sh / rotate_cube_secret.sh).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      bash python3 ca-certificates time gettext-base default-mysql-client \
+ && rm -rf /var/lib/apt/lists/*
+
+# Data/engine
+COPY --from=duckdb /out/duckdb /usr/local/bin/duckdb
+# Bake the DuckDB MySQL extension into the image: at runtime 'INSTALL mysql' is
+# then a no-op (no network download, no write access -> readOnlyRootFilesystem ok).
+RUN duckdb -c "INSTALL mysql; INSTALL inet;"
+
+VOLUME ["/state"]
+
+WORKDIR /app
+CMD ["bash"]

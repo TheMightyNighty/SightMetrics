@@ -40,3 +40,4 @@ state/
 ingestion/bots/
 ingestion/ua/
 /.claude/
+__pycache__

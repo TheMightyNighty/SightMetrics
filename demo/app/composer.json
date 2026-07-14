@@ -44,7 +44,7 @@
 	"repositories": [
 		{
 			"type": "path",
-			"url": "./packages/*"
+			"url": "/packages/*"
 		}
 	],
 	"require-dev": {
