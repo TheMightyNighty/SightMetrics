@@ -17,7 +17,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."   # -> ingestion/
 OUT="${1:-bots/bot_regex.list}"
 URL="${BOTS_YML_URL:-https://raw.githubusercontent.com/matomo-org/device-detector/master/regexes/bots.yml}"
-DUCKDB="$(pwd)/bin/duckdb"
+# DuckDB-Binary: $DUCKDB-Override, sonst lokal gepinnt (Host/Tests: ./bin/duckdb),
+# sonst aus PATH (Container: /usr/local/bin/duckdb).
+if [ -z "${DUCKDB:-}" ]; then
+  if [ -x bin/duckdb ]; then DUCKDB="$(pwd)/bin/duckdb"; else DUCKDB=duckdb; fi
+fi
 
 TMP_YML=$(mktemp); TMP_RAW=$(mktemp)
 trap 'rm -f "$TMP_YML" "$TMP_RAW"' EXIT

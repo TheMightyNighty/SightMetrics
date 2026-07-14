@@ -1,3 +1,21 @@
+# --- Build-Stage: passendes DuckDB-CLI-Binary von GitHub Releases laden --------
+# dpkg --print-architecture liefert amd64/arm64 == DuckDB-Asset-Namen und folgt
+# beim Multi-Plattform-Build automatisch der Ziel-Architektur.
+FROM debian:bookworm-slim AS duckdb
+ARG DUCKDB_VERSION=1.5.4
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl unzip ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    curl -fsSL -o /tmp/duckdb.zip \
+      "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-linux-${arch}.zip"; \
+    mkdir -p /out; \
+    unzip -o -q /tmp/duckdb.zip -d /out; \
+    chmod +x /out/duckdb; \
+    rm /tmp/duckdb.zip
+
+# --- Runtime-Stage ------------------------------------------------------------
 # Package A – ingestion container: DuckDB analysis as a nightly one-shot/CronJob.
 # Reads the webserver logs, writes the cube to the (external) MariaDB cube DB and
 # then exits. Default run = run_all.sh (all sites from sites.conf).
@@ -11,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Data/engine
-COPY bin/ ./bin/
+COPY --from=duckdb /out/duckdb /usr/local/bin/duckdb
 COPY geo/ ./geo/
 
 # SQL logic
@@ -30,7 +48,7 @@ COPY tools/ ./tools/
 # Template (the actual sites.conf is mounted/provided at runtime)
 COPY sites.conf.example ./
 
-RUN chmod +x bin/duckdb *.sh
+RUN chmod +x *.sh
 
 # ---- Non-root + readOnlyRootFilesystem compatibility (Pod Security "restricted") ----
 # Fixed UID/GID 10001 (no host user mapping); writable paths at runtime:
@@ -51,7 +69,7 @@ VOLUME ["/state"]
 # then a no-op (no network download, no write access -> readOnlyRootFilesystem ok).
 # a+rX: also readable for differing runtime UIDs (demo bind mounts, OpenShift).
 USER 10001:10001
-RUN /app/bin/duckdb -c "INSTALL mysql; INSTALL inet;" \
+RUN duckdb -c "INSTALL mysql; INSTALL inet;" \
  && chmod -R a+rX /home/sightmetrics/.duckdb
 
 # No secret in the image: CUBE_DSN/CUBE_DSN_FILE is injected at runtime.

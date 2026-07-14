@@ -21,7 +21,11 @@ set -euo pipefail
 export LC_ALL=C
 cd "$(dirname "$0")"
 REPO="$(cd .. && pwd)"
-DUCKDB="$(pwd)/bin/duckdb"
+# DuckDB-Binary: $DUCKDB-Override, sonst lokal gepinnt (Host/Tests: ./bin/duckdb),
+# sonst aus PATH (Container: /usr/local/bin/duckdb).
+if [ -z "${DUCKDB:-}" ]; then
+  if [ -x bin/duckdb ]; then DUCKDB="$(pwd)/bin/duckdb"; else DUCKDB=duckdb; fi
+fi
 
 # ---- Configuration ---------------------------------------------------------
 RETENTION_MONTHS="${RETENTION_MONTHS:-12}"

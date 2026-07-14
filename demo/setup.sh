@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 REPO="$(cd .. && pwd)"
 
-echo "== 1/5: demo/.env =="
+echo "== 1/4: demo/.env =="
 if [ ! -f .env ]; then
   cp .env.example .env
   echo ">> demo/.env aus .env.example erstellt (Standard-Passwörter, nur für die Demo)."
@@ -26,25 +26,7 @@ source .env
 set +a
 
 echo
-echo "== 2/5: DuckDB-CLI-Binary (ingestion/bin/duckdb) =="
-DUCKDB_BIN="${REPO}/ingestion/bin/duckdb"
-if [ ! -f "$DUCKDB_BIN" ]; then
-  echo ">> Lade DuckDB CLI v1.5.4 (linux-amd64) von GitHub Releases..."
-  TMP=$(mktemp -d)
-  trap 'rm -rf "$TMP"' RETURN
-  curl -fsSL -o "${TMP}/duckdb.zip" \
-    "https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip"
-  mkdir -p "${REPO}/ingestion/bin"
-  unzip -o -q "${TMP}/duckdb.zip" -d "${REPO}/ingestion/bin"
-  chmod +x "$DUCKDB_BIN"
-  rm -rf "$TMP"
-  trap - RETURN
-else
-  echo ">> vorhanden: ${DUCKDB_BIN}"
-fi
-
-echo
-echo "== 3/5: Beispiel-Log (logs/example_1k.log) =="
+echo "== 2/4: Beispiel-Log (logs/example_1k.log) =="
 if [ ! -f "${REPO}/logs/example_1k.log" ]; then
   echo ">> Erzeuge Beispiel-Log über generate_logs.py..."
   mkdir -p "${REPO}/logs"
@@ -55,7 +37,7 @@ else
 fi
 
 echo
-echo "== 4/5: Geo-IP-Datensatz (ingestion/geo/country-ipv4-num.csv) =="
+echo "== 3/4: Geo-IP-Datensatz (ingestion/geo/country-ipv4-num.csv) =="
 GEO="${REPO}/ingestion/geo/country-ipv4-num.csv"
 if [ ! -f "$GEO" ]; then
   echo ">> Erzeuge SYNTHETISCHE Demo-Geo-CSV (keine echten GeoIP-Daten – nur damit"
@@ -68,7 +50,7 @@ else
 fi
 
 echo
-echo "== 5/5: TYPO3 installieren + Extension deployen =="
+echo "== 4/4: TYPO3 installieren + Extension deployen =="
 echo ">> Starte MariaDB..."
 docker compose up -d db
 echo -n ">> Warte auf MariaDB"

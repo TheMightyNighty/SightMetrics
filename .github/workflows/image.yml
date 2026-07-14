@@ -21,18 +21,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Bewusst nicht im Repo (Groesse/Lizenz) -> fuer den Build bereitstellen:
-      # DuckDB-Binary herunterladen (Version identisch zu ci.yml/setup.sh);
-      # geo/ bleibt leer – der GeoIP-Datensatz ist lizenzpflichtig und wird
-      # zur Laufzeit gemountet (SM_GEO_PATH, Runbook §3a).
-      - name: DuckDB v1.5.4 herunterladen
-        run: |
-          mkdir -p ingestion/bin ingestion/geo
-          curl -fsSL -o /tmp/duckdb.zip \
-            https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip
-          unzip -o /tmp/duckdb.zip duckdb -d ingestion/bin/
-          chmod +x ingestion/bin/duckdb
-
       - name: GHCR-Login
         uses: docker/login-action@v3
         with:
