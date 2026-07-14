@@ -30,6 +30,15 @@ storage_config:
 limits_config:
   discover_service_name: []  # disable service_name label
   discover_log_levels: false  # disable detected_level label
+  # Demo: auch aeltere/rueckdatierte Zeilen annehmen (generate_loki_logs.py
+  # pusht ein Zeitfenster der letzten Stunden -> Loki wuerde sie sonst als
+  # "entry too far behind" ablehnen).
+  reject_old_samples: false
+  reject_old_samples_max_age: 8760h
+
+ingester:
+  # Standard 2h wuerde rueckdatierte Demo-Zeilen ablehnen; grosszuegig fuer die Demo.
+  max_chunk_age: 8760h
 
 analytics:
   reporting_enabled: false  # disable sending analytics to Grafana Labs

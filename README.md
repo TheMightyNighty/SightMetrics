@@ -75,12 +75,17 @@ docker compose -f demo/docker-compose.yaml up -d
 # 2) Beispiel-Log importieren: Log -> DuckDB-Cube -> MariaDB
 docker exec -it sightmetrics-ingestion bash
 # im Container:
-./generate_logs.py
 python3 generate_demo_geo.py -o geo/country-ipv4-num.csv
 
+# 2a) File-based Logs
+./generate_logs.py
 ./load_cube.sh logs/example_1k.log "Bürgeramt Mitte" 1
 # ./load_cube.sh <Logdatei> "<Site-Name>" <site_id>
 # (multi-site-fähig, idempotent pro Site)
+
+# 2b) Loki Logs
+python3 generate_loki_logs.py --loki-url http://loki:3100 --label "namespace=foo" --hours $(( 24 * 14 )) --num 10000
+SM_LOG_FORMAT=json_ecs ./fetch_loki_logs.sh --url http://loki:3100 --query '{job="nginx"}' --site-id 1 --site-name "Behörde A" --lookback-hours $(( 24 * 14 ))
 
 # 3) Im Backend ansehen:
 #    http://localhost:8091/typo3/   (admin / SightMetrics-Admin-2026!)
