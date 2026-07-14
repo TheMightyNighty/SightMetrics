@@ -35,6 +35,12 @@ limits_config:
   # "entry too far behind" ablehnen).
   reject_old_samples: false
   reject_old_samples_max_age: 8760h
+  # Demo: grosszuegige Ingest-Rate, damit ein schneller Bulk-Push nicht am
+  # Standard-Limit (4 MB/s pro Tenant) scheitert (HTTP 429).
+  ingestion_rate_mb: 128
+  ingestion_burst_size_mb: 256
+  per_stream_rate_limit: 256MB
+  per_stream_rate_limit_burst: 512MB
 
 ingester:
   # Standard 2h wuerde rueckdatierte Demo-Zeilen ablehnen; grosszuegig fuer die Demo.

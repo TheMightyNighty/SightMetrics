@@ -36,6 +36,7 @@ import json
 import os
 import random
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -174,7 +175,9 @@ def build_session_records(rng, visitor, t0, clean, host, server_ip):
 
 # --- Loki-Push ---------------------------------------------------------------
 def push_to_loki(loki_url, labels, entries, batch=1000):
-    """entries: aufsteigend sortierte Liste (ns_str, line). Pusht in Batches."""
+    """entries: aufsteigend sortierte Liste (ns_str, line). Pusht in Batches.
+    Bei HTTP 429 (Loki-Ingest-Ratelimit) wird mit Backoff wiederholt, damit der
+    Push auch gegen eine Loki-Instanz mit Standard-Limit (4 MB/s) durchlaeuft."""
     url = loki_url.rstrip("/") + "/loki/api/v1/push"
     sent = 0
     for i in range(0, len(entries), batch):
@@ -182,21 +185,30 @@ def push_to_loki(loki_url, labels, entries, batch=1000):
         payload = json.dumps({"streams": [{"stream": labels,
                                            "values": [[ns, line] for ns, line in chunk]}]}
                              ).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, method="POST",
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req) as resp:
-                if resp.status not in (200, 204):
-                    print(f"Loki-Push HTTP {resp.status}: {resp.read().decode()}",
+        for attempt in range(8):
+            req = urllib.request.Request(url, data=payload, method="POST",
+                                         headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req) as resp:
+                    if resp.status not in (200, 204):
+                        print(f"Loki-Push HTTP {resp.status}: {resp.read().decode()}",
+                              file=sys.stderr)
+                        sys.exit(1)
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 429 and attempt < 7:
+                    # Retry-After respektieren, sonst exponentieller Backoff (max 10 s).
+                    wait = float(e.headers.get("Retry-After") or 0) or min(0.5 * 2 ** attempt, 10)
+                    print(f"   Loki-Ratelimit (429), warte {wait:.1f}s und wiederhole ...",
                           file=sys.stderr)
-                    sys.exit(1)
-        except urllib.error.HTTPError as e:
-            print(f"Loki-Push fehlgeschlagen (HTTP {e.code}): {e.read().decode()}",
-                  file=sys.stderr)
-            sys.exit(1)
-        except urllib.error.URLError as e:
-            print(f"Loki nicht erreichbar ({url}): {e.reason}", file=sys.stderr)
-            sys.exit(1)
+                    time.sleep(wait)
+                    continue
+                print(f"Loki-Push fehlgeschlagen (HTTP {e.code}): {e.read().decode()}",
+                      file=sys.stderr)
+                sys.exit(1)
+            except urllib.error.URLError as e:
+                print(f"Loki nicht erreichbar ({url}): {e.reason}", file=sys.stderr)
+                sys.exit(1)
         sent += len(chunk)
     return sent
 
