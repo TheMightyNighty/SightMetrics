@@ -85,7 +85,7 @@ python3 generate_demo_geo.py -o geo/country-ipv4-num.csv
 
 # 2b) Loki Logs
 python3 generate_loki_logs.py --loki-url http://loki:3100 --label "namespace=foo" --hours $(( 24 * 14 )) --num 10000
-SM_LOG_FORMAT=json_ecs ./fetch_loki_logs.sh --url http://loki:3100 --query '{job="nginx"}' --site-id 1 --site-name "Behörde A" --lookback-hours $(( 24 * 14 ))
+SM_LOG_FORMAT=json_ecs ./fetch_loki_logs.sh --url http://loki:3100 --query '{job="nginx", namespace="foo"}' --site-id 1 --site-name "Behörde A" --lookback-hours $(( 24 * 14 ))
 
 # 3) Im Backend ansehen:
 #    http://localhost:8091/typo3/   (admin / SightMetrics-Admin-2026!)
