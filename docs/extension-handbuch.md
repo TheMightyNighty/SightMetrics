@@ -1,142 +1,142 @@
-# SightMetrics – Extension-Handbuch (Paket B)
+# SightMetrics – Extension Handbook (Package B)
 
-> **Hinweis / Note:** Die maßgebliche, gepflegte Extension-Dokumentation ist die
-> englische ReST-Doku in
+> **Note:** The authoritative, maintained extension documentation is the
+> ReST documentation in
 > [`extension/sight_metrics/Documentation/`](../extension/sight_metrics/Documentation/)
-> (für docs.typo3.org). Dieses deutsche Handbuch bleibt als Betreiber-Leitfaden
-> erhalten; bei Widersprüchen gilt die ReST-Doku bzw. [`docs/SCHEMA.md`](SCHEMA.md)
-> für den DB-Vertrag.
+> (for docs.typo3.org). This handbook remains as an additional
+> operator-focused guide; in case of conflict, the ReST documentation and
+> [`docs/SCHEMA.md`](SCHEMA.md) (for the DB contract) take precedence.
 
-TYPO3-Backend-Modul für Webzugriffsauswertung. Liest **ausschließlich read-only** die
-Cube-DB (MariaDB, User `report_ro`); kein DuckDB, kein Schreiben.
+TYPO3 backend module for web access analytics. **Read-only** access to the
+cube DB (MariaDB, user `report_ro`); no DuckDB, no writing.
 
 ---
 
-## Inhaltsverzeichnis
+## Table of contents
 
-1. [Dateistruktur](#1-dateistruktur)
-2. [Voraussetzungen](#2-voraussetzungen)
+1. [File structure](#1-file-structure)
+2. [Requirements](#2-requirements)
 3. [Installation](#3-installation)
-4. [Cube-Connection konfigurieren](#4-cube-connection-konfigurieren)
-5. [TYPO3-Site ↔ Cube-Site zuordnen](#5-typo3-site--cube-site-zuordnen)
-6. [Fehlerseite konfigurieren](#6-fehlerseite-konfigurieren)
-7. [Mehrere Sites (eine Instanz)](#7-mehrere-sites-eine-instanz)
-8. [TYPO3-Versionsmatrix](#8-typo3-versionsmatrix)
-9. [Backend-Modul nutzen](#9-backend-modul-nutzen)
-10. [Architektur & Erweiterung](#10-architektur--erweiterung)
+4. [Configuring the cube connection](#4-configuring-the-cube-connection)
+5. [Mapping a TYPO3 site to a cube site](#5-mapping-a-typo3-site-to-a-cube-site)
+6. [Configuring the error page](#6-configuring-the-error-page)
+7. [Multiple sites (one instance)](#7-multiple-sites-one-instance)
+8. [TYPO3 version matrix](#8-typo3-version-matrix)
+9. [Using the backend module](#9-using-the-backend-module)
+10. [Architecture & extension](#10-architecture--extension)
 11. [Tests & CI](#11-tests--ci)
 12. [Troubleshooting](#12-troubleshooting)
 
 ---
 
-## 1. Dateistruktur
+## 1. File structure
 
 ```
 extension/
-├── lint.sh                         Linting-Runner: PHPStan + TYPO3 Coding Standards
-├── run-tests.sh                    Lokaler Test-Runner (2a Unit, 2b Functional, 2c Smoke, 2d JS)
+├── lint.sh                         Lint runner: PHPStan + TYPO3 coding standards
+├── run-tests.sh                    Local test runner (2a unit, 2b functional, 2c smoke, 2d JS)
 │
-└── sight_metrics/                  Composer-Paket sightmetrics/sight-metrics
-    ├── composer.json               Paket-Metadaten + require-dev (phpstan, testing-framework …)
-    ├── ext_emconf.php              TYPO3 Extension-Metadaten (Versions-Constraints offen für v14)
-    ├── ext_localconf.php           Registriert den Cache "sight_metrics" (Cache-Framework)
-    ├── ext_conf_template.txt       Extension-Konfiguration (Fehlerseite, windowDays, cacheLifetime)
-    ├── package.json                Dev-Tooling: JS-Test + versionsgepinnter Vendor-Bezug (npm)
-    ├── package-lock.json           Versions-Pinning für Chart.js/Leaflet/jsdom
-    ├── CHANGELOG.md                Änderungshistorie der Extension
-    ├── ROADMAP.md                  Offene Punkte / Prüfungs-Findings
-    ├── REUSE.toml · LICENSES/      REUSE-konforme Lizenzstruktur
-    ├── phpstan.neon                PHPStan-Konfiguration (lokal, Level 6)
-    ├── phpstan.ci.neon             PHPStan-Konfiguration (CI, kein baselineExtensions-Noise)
-    ├── phpunit.xml.dist            PHPUnit-Konfiguration für Unit-Tests
-    ├── phpunit.functional.xml.dist PHPUnit-Konfiguration für Functional-Tests (SQLite)
-    ├── .php-cs-fixer.dist.php      TYPO3 Coding Standards (php-cs-fixer)
+└── sight_metrics/                  Composer package sightmetrics/sight-metrics
+    ├── composer.json               Package metadata + require-dev (phpstan, testing-framework, …)
+    ├── ext_emconf.php              TYPO3 extension metadata (version constraints open for v14)
+    ├── ext_localconf.php           Registers the "sight_metrics" cache (cache framework)
+    ├── ext_conf_template.txt       Extension configuration (error page, windowDays, cacheLifetime)
+    ├── package.json                Dev tooling: JS tests + version-pinned vendor assets (npm)
+    ├── package-lock.json           Version pinning for Chart.js/Leaflet/jsdom
+    ├── CHANGELOG.md                Extension change history
+    ├── ROADMAP.md                  Open items / review findings
+    ├── REUSE.toml · LICENSES/      REUSE-compliant license structure
+    ├── phpstan.neon                PHPStan configuration (local, level 6)
+    ├── phpstan.ci.neon             PHPStan configuration (CI, no baselineExtensions noise)
+    ├── phpunit.xml.dist            PHPUnit configuration for unit tests
+    ├── phpunit.functional.xml.dist PHPUnit configuration for functional tests (SQLite)
+    ├── .php-cs-fixer.dist.php      TYPO3 coding standards (php-cs-fixer)
     ├── .gitignore
     │
     ├── Classes/
     │   ├── Command/
-    │   │   ├── SmokeCommand.php    TYPO3-CLI: sightmetrics:smoke — prüft cube-Connection + Tabellen
-    │   │   └── HealthCommand.php   TYPO3-CLI: sightmetrics:health — Datenaktualität, Nagios-Codes
+    │   │   ├── SmokeCommand.php    TYPO3 CLI: sightmetrics:smoke — checks the cube connection + tables
+    │   │   └── HealthCommand.php   TYPO3 CLI: sightmetrics:health — data freshness, Nagios exit codes
     │   ├── Controller/
-    │   │   ├── DashboardController.php  Backend-Controller: lädt Daten, rendert Fluid-Template
-    │   │   └── TopNAjaxController.php   Ajax: Top-N-Nachladen ("+ N weitere", Drill-down)
+    │   │   ├── DashboardController.php  Backend controller: loads data, renders the Fluid template
+    │   │   └── TopNAjaxController.php   Ajax: Top-N lazy loading ("+ N more", drill-down)
     │   ├── Domain/
     │   │   └── Repository/
-    │   │       └── CubeRepository.php   Alle Queries gegen die Cube-DB (inkl. topN/dimSummary, Caching)
+    │   │       └── CubeRepository.php   All queries against the cube DB (incl. topN/dimSummary, caching)
     │   └── Support/
-    │       ├── ErrorPage.php       Rendert konfigurierbare Fehlerseite (DB weg)
-    │       ├── SiteSelector.php    Site-Auswahl + Webmount-basierte Mandantentrennung
-    │       ├── TopNDims.php        Whitelists: welche Dimensionen serverseitig Top-N-begrenzt sind
-    │       └── WindowResolver.php  Serverseitiges Zeitfenster (windowDays, from/to-Klemmung)
+    │       ├── ErrorPage.php       Renders a configurable error page (DB unreachable)
+    │       ├── SiteSelector.php    Site selection + webmount-based tenant separation
+    │       ├── TopNDims.php        Whitelists: which dimensions are server-side Top-N-limited
+    │       └── WindowResolver.php  Server-side time window (windowDays, from/to clamping)
     │
     ├── Configuration/
     │   ├── Backend/
-    │   │   ├── Modules.php         Backend-Modul-Registrierung (web_sightmetrics)
-    │   │   └── AjaxRoutes.php      Ajax-Route sightmetrics_topn (erbt Modul-Berechtigung)
-    │   ├── Commands.php            CLI-Kommando-Registrierung (sightmetrics:smoke, :health)
-    │   ├── Icons.php               Icon-Registrierung (EXT:sight_metrics/module.svg)
-    │   └── Services.yaml           Symfony-DI-Konfiguration (Controller public, Rest privat)
+    │   │   ├── Modules.php         Backend module registration (web_sightmetrics)
+    │   │   └── AjaxRoutes.php      Ajax route sightmetrics_topn (inherits module permission)
+    │   ├── Commands.php            CLI command registration (sightmetrics:smoke, :health)
+    │   ├── Icons.php               Icon registration (EXT:sight_metrics/module.svg)
+    │   └── Services.yaml           Symfony DI configuration (controller public, rest private)
     │
     ├── Resources/
     │   ├── Private/
     │   │   ├── Language/
-    │   │   │   └── locallang_mod.xlf   Modul-Überschrift (DE)
+    │   │   │   └── locallang_mod.xlf   Module title (default: English)
     │   │   └── Templates/
     │   │       └── Dashboard/
-    │   │           └── Index.html  Fluid-Template: JSON-Datenblock + Panel-Gerüst
+    │   │           └── Index.html  Fluid template: JSON data block + panel scaffold
     │   └── Public/
     │       ├── Css/
-    │       │   └── dashboard.css   Modul-Styles (Barlisten, Karten-Panel, Drill-down, A11y)
+    │       │   └── dashboard.css   Module styles (bar lists, map panel, drill-down, a11y)
     │       ├── Icons/
-    │       │   └── module.svg      Backend-Modul-Icon
+    │       │   └── module.svg      Backend module icon
     │       ├── JavaScript/
-    │       │   └── dashboard.js    Rendering: Chart.js-Charts, Leaflet-Karte, Top-N/Drill-down
-    │       └── Vendor/             (Herkunft/Prüfsummen: NOTICE.md; Bezug: npm run vendor:update)
-    │           ├── chart.umd.min.js  Chart.js (MIT, selbst-gehostet, kein CDN)
+    │       │   └── dashboard.js    Rendering: Chart.js charts, Leaflet map, Top-N/drill-down
+    │       └── Vendor/             (provenance/checksums: NOTICE.md; sourced via npm run vendor:update)
+    │           ├── chart.umd.min.js  Chart.js (MIT, self-hosted, no CDN)
     │           ├── leaflet.js · leaflet.css · images/  Leaflet (BSD-2-Clause)
-    │           ├── world.js        Weltkarten-GeoJSON (Natural Earth via world-atlas)
-    │           └── NOTICE.md       Versionen, Lizenzen, SHA-256-Prüfsummen
+    │           ├── world.js        World map GeoJSON (Natural Earth via world-atlas)
+    │           └── NOTICE.md       Versions, licenses, SHA-256 checksums
     │
     ├── scripts/
-    │   └── update-vendor.mjs       Kopiert Chart.js/Leaflet aus node_modules nach Vendor/
+    │   └── update-vendor.mjs       Copies Chart.js/Leaflet from node_modules into Vendor/
     │
     └── Tests/
-        ├── bootstrap.php           PHPUnit-Bootstrap für Unit-Tests (ohne TYPO3-Core)
+        ├── bootstrap.php           PHPUnit bootstrap for unit tests (without TYPO3 core)
         ├── Functional/
-        │   └── CubeRepositoryFunctionalTest.php  Functional-Tests (TYPO3+SQLite)
+        │   └── CubeRepositoryFunctionalTest.php  Functional tests (TYPO3+SQLite)
         ├── JavaScript/
-        │   └── dashboard.smoke.test.mjs  DOM-Smoke-Test (jsdom, Chart.js/Leaflet-Fakes)
+        │   └── dashboard.smoke.test.mjs  DOM smoke test (jsdom, Chart.js/Leaflet fakes)
         └── Unit/
-            ├── ErrorPageTest.php   Unit-Tests für ErrorPage (konfigurierbare Meldungen)
-            ├── SiteSelectorTest.php  Unit-Tests für SiteSelector (inkl. Mandantentrennung)
-            └── WindowResolverTest.php  Unit-Tests für das Zeitfenster (inkl. iso()-Validierung)
+            ├── ErrorPageTest.php   Unit tests for ErrorPage (configurable messages)
+            ├── SiteSelectorTest.php  Unit tests for SiteSelector (incl. tenant separation)
+            └── WindowResolverTest.php  Unit tests for the time window (incl. iso() validation)
 ```
 
 ---
 
-## 2. Voraussetzungen
+## 2. Requirements
 
-| Komponente | Version |
+| Component | Version |
 |---|---|
 | PHP | ^8.2 |
-| TYPO3 CMS | ^13.4 oder ^14.0 |
-| MariaDB | ≥ 10.5 (Cube-DB, write: `cube_rw`, read: `report_ro`) |
+| TYPO3 CMS | ^13.4 or ^14.0 |
+| MariaDB | ≥ 10.5 (cube DB, write: `cube_rw`, read: `report_ro`) |
 | Composer | v2 |
 
-Die Extension enthält **kein** DuckDB und schreibt **nichts** in die Cube-DB.
-Schreiben übernimmt ausschließlich Paket A (`ingestion/`).
+The extension contains **no** DuckDB and writes **nothing** to the cube DB.
+Writing is done exclusively by package A (`ingestion/`).
 
 ---
 
 ## 3. Installation
 
-### 3a. Composer (Produktionsbetrieb)
+### 3a. Composer (production)
 
-Die Extension kann als Composer-Paket aus dem lokalen Pfad eingebunden werden (bis zur
-Veröffentlichung auf Packagist):
+The extension can be included as a composer package from a local path
+(until it's published on Packagist):
 
 ```json
-// In der composer.json der TYPO3-Instanz:
+// in the TYPO3 instance's composer.json:
 {
     "repositories": [
         {
@@ -156,493 +156,525 @@ composer require sightmetrics/sight-metrics
 vendor/bin/typo3 extension:activate sight_metrics
 ```
 
-### 3b. Lokale Entwicklung (Demo-Stack)
+### 3b. Local development (demo stack)
 
 ```bash
 cd demo && docker compose up -d
 ```
 
-Der `web`-Service bindet `extension/sight_metrics/` per Bind-Mount direkt als
-`packages/sight_metrics` ein (siehe `demo/docker-compose.yml`). Zusammen mit dem
-`path`-Repository-Eintrag in `demo/app/composer.json` sind Änderungen am
-Extension-Code sofort im Container sichtbar – kein Sync-/Kopierschritt und kein
-`composer update` für Klassen-Änderungen nötig.
+The `web` service bind-mounts `extension/sight_metrics/` directly as
+`packages/sight_metrics` (see `demo/docker-compose.yaml`). Together with the
+`path` repository entry in `demo/app/composer.json`, changes to the
+extension code are immediately visible in the container — no sync/copy step
+and no `composer update` needed for class changes.
 
 ---
 
-## 4. Cube-Connection konfigurieren
+## 4. Configuring the cube connection
 
-Die Extension erwartet eine TYPO3-DB-Connection mit dem Namen **`cube`** in
+The extension expects a TYPO3 DB connection named **`cube`** in
 `$GLOBALS['TYPO3_CONF_VARS']['DB']['Connections']['cube']`.
 
-### additional.php (Produktionsbetrieb)
+### additional.php (production)
 
 ```php
-// config/system/additional.php der TYPO3-Instanz
+// config/system/additional.php of the TYPO3 instance
 $GLOBALS['TYPO3_CONF_VARS']['DB']['Connections']['cube'] = [
     'driver'   => 'mysqli',
     'host'     => getenv('CUBE_RO_HOST') ?: 'db-host',
     'port'     => (int)(getenv('CUBE_RO_PORT') ?: 3306),
     'dbname'   => getenv('CUBE_RO_DB')   ?: 'analytics',
     'user'     => getenv('CUBE_RO_USER') ?: 'report_ro',
-    'password' => getenv('CUBE_RO_PASSWORD'),   // nie im Klartext
+    'password' => getenv('CUBE_RO_PASSWORD'),   // never in plain text
     'charset'  => 'utf8mb4',
 ];
 ```
 
-**Sicherheitshinweis:** Passwort immer aus Umgebungsvariable oder Secret-Datei lesen –
-niemals im Klartext in `additional.php` hinterlegen. Für Container: Env-Var via
-`docker-compose.yml` / Kubernetes Secret.
+**Security note:** always read the password from an environment variable or
+a secret file — never store it as plain text in `additional.php`. For
+containers: inject via `docker-compose.yaml` / a Kubernetes secret.
 
-### Verbindung testen
+### Testing the connection
 
 ```bash
 vendor/bin/typo3 sightmetrics:smoke
 ```
 
-Prüft: Connection `cube` existiert, Tabellen `cube`, `daily`, `meta` erreichbar.
+Checks: the `cube` connection exists, tables `cube`, `daily`, `meta` are
+reachable.
 
-### Produktions-Härtung: von den Demo-Defaults abweichen
+### Production hardening: diverging from the demo defaults
 
-Die Demo-Umgebung (`demo/`) ist bewusst permissiv konfiguriert, damit der lokale
-Docker-Compose-Stack ohne feste IPs/Hostnamen funktioniert. **Diese beiden Defaults dürfen
-nicht unverändert in Produktion landen:**
+The demo environment (`demo/`) is deliberately configured permissively so
+the local Docker Compose stack works without fixed IPs/hostnames. **These
+two defaults must not be carried over unchanged into production:**
 
-- **`trustedHostsPattern`**: `demo/app/config/system/additional.php` setzt
-  `$GLOBALS['TYPO3_CONF_VARS']['SYS']['trustedHostsPattern'] = '.*'` (jeder Host-Header wird
-  akzeptiert → Host-Header-Injection-Risiko). Produktiv immer auf den tatsächlichen
-  Domain-Namen einschränken, z. B. `'^(www\.)?meine-behoerde\.de$'` (siehe
-  [TYPO3-Doku zu `trustedHostsPattern`](https://docs.typo3.org/permalink/t3coreapi:trustedhostspattern)).
-- **DB-Grant-Host für `report_ro`**: `demo/initdb/01-analytics.sh` legt den Cube-DB-User mit
-  `'report_ro'@'%'` an (jeder Host darf sich mit diesem Benutzer verbinden). Produktiv den
-  Grant auf das tatsächliche Web-Subnetz/den Web-Host einschränken, z. B.
-  `CREATE USER 'report_ro'@'10.0.1.0/255.255.255.0' ...` bzw. bei fester IP
-  `'report_ro'@'10.0.1.42'`. Zusätzlich per Netzwerksegmentierung/Firewall absichern, MySQL-
-  Host-Grants allein sind kein vollwertiger Netzwerkschutz.
-- **Cache-Garbage-Collection einrichten**: die Tabelle `cache_sight_metrics` (TYPO3-DB)
-  wächst ohne Aufräumen unbegrenzt — Scheduler-Task „Caching framework garbage collection"
-  oder täglicher Cron mit `DELETE FROM cache_sight_metrics WHERE expires < UNIX_TIMESTAMP();`
-  einrichten. Details in §10 „Bekannte Grenzen: Skalierung & Caching".
+- **`trustedHostsPattern`**: `demo/app/config/system/additional.php` sets
+  `$GLOBALS['TYPO3_CONF_VARS']['SYS']['trustedHostsPattern'] = '.*'`
+  (accepts any `Host` header → host-header-injection risk). In production,
+  always restrict this to the actual domain name, e.g.
+  `'^(www\.)?my-domain\.example$'` (see the
+  [TYPO3 documentation on `trustedHostsPattern`](https://docs.typo3.org/permalink/t3coreapi:trustedhostspattern)).
+- **DB grant host for `report_ro`**: `demo/initdb/01-analytics.sh` creates
+  the cube DB user with `'report_ro'@'%'` (any host may connect as this
+  user). In production, restrict the grant to the actual web
+  subnet/host, e.g. `CREATE USER 'report_ro'@'10.0.1.0/255.255.255.0' ...`
+  or, for a fixed IP, `'report_ro'@'10.0.1.42'`. Additionally secure the
+  connection via network segmentation/firewalling — MySQL host grants alone
+  are not a complete network safeguard.
+- **Set up cache garbage collection**: the `cache_sight_metrics` table
+  (TYPO3 DB) grows unbounded without cleanup — set up the core task
+  "Caching framework garbage collection" (e.g. daily) with the
+  `sight_metrics` cache selected. Details in §10 "Known limitations:
+  scaling & caching".
 
 ---
 
-## 5. TYPO3-Site ↔ Cube-Site zuordnen
+## 5. Mapping a TYPO3 site to a cube site
 
-In einer TYPO3-Instanz mit mehreren Sites (z. B. mehrere Behörden-Domains) kann
-jede TYPO3-Site ihrer eigenen `site_id` im Cube zugeordnet werden.
+In a TYPO3 instance with multiple sites (e.g. multiple department domains),
+each TYPO3 site can be mapped to its own `site_id` in the cube.
 
-### Konfiguration in `config/sites/<identifier>/config.yaml`
+### Configuration in `config/sites/<identifier>/config.yaml`
 
 ```yaml
-# Beispiel: config/sites/behoerde_a/config.yaml
+# Example: config/sites/authority_a/config.yaml
 rootPageId: 1
-base: 'https://behoerde-a.de/'
+base: 'https://authority-a.example/'
 languages: ...
 
-# SightMetrics: zugehörige site_id im Cube
+# SightMetrics: associated site_id in the cube
 sightmetrics_site_id: 1
 ```
 
 ```yaml
-# Beispiel: config/sites/behoerde_b/config.yaml
+# Example: config/sites/authority_b/config.yaml
 rootPageId: 2
-base: 'https://behoerde-b.de/'
+base: 'https://authority-b.example/'
 
 sightmetrics_site_id: 2
 ```
 
-### Verhalten
+### Behavior
 
-| Zustand | Modul-Verhalten |
+| State | Module behavior |
 |---|---|
-| **Kein** `sightmetrics_site_id` in keiner TYPO3-Site | Alle Cube-Sites im Dropdown (Rückwärtskompatibilität) |
-| **Eine** TYPO3-Site mit Mapping | Nur diese site_id sichtbar, automatisch ausgewählt (sofern Webmount-Zugriff) |
-| **Mehrere** TYPO3-Sites mit Mapping | Dropdown zeigt nur die Sites, auf deren Seitenbaum (rootPageId) der Benutzer Webmount-Zugriff hat; Admins sehen alle gemappten |
-| Mapping vorhanden, Benutzer hat auf **keine** gemappte Site Webmount-Zugriff | **Leeres Dashboard** — bewusst kein Rückfall auf "alle Sites" (Mandantentrennung) |
+| **No** `sightmetrics_site_id` on any TYPO3 site | All cube sites appear in the dropdown (backward compatibility) |
+| **One** TYPO3 site with a mapping | Only that site_id is visible, auto-selected (given webmount access) |
+| **Multiple** TYPO3 sites with mappings | The dropdown only shows sites the user has webmount access to (based on rootPageId); admins see all mapped sites |
+| A mapping exists, but the user has webmount access to **none** of the mapped sites | **Empty dashboard** — deliberately no fallback to "all sites" (tenant separation) |
 
-> **Wichtig für Multi-Mandanten-Betrieb:** Die Mandantentrennung greift nur, wenn die
-> Sites gemappt sind. Ohne jedes Mapping (erste Zeile) sieht **jeder** Benutzer mit
-> Modulzugriff **alle** Cube-Sites — in einer Multi-Mandanten-Installation daher immer
-> alle Sites mit `sightmetrics_site_id` versehen.
+> **Important for multi-tenant operation:** tenant separation only applies
+> when sites are mapped. Without any mapping at all (first row), **every**
+> user with module access sees **all** cube sites — in a multi-tenant
+> installation, always assign `sightmetrics_site_id` to every site.
 
-### Importer-Zuordnung (Kubernetes/Namespace)
+### Importer assignment (Kubernetes/namespace)
 
-Ein Importer pro Namespace schreibt mit einer festen `site_id`:
+One importer per namespace writes with a fixed `site_id`:
 
 ```bash
-# Namespace A (Behörde A): site_id=1
-CUBE_DSN="..." ./load_cube.sh /logs/access.log "Behörde A" 1
+# Namespace A (Authority A): site_id=1
+CUBE_DSN="..." ./load_cube.sh /logs/access.log "Authority A" 1
 
-# Namespace B (Behörde B): site_id=2
-CUBE_DSN="..." ./load_cube.sh /logs/access.log "Behörde B" 2
+# Namespace B (Authority B): site_id=2
+CUBE_DSN="..." ./load_cube.sh /logs/access.log "Authority B" 2
 ```
 
-Beide schreiben in dieselbe `analytics`-Datenbank. TYPO3 zeigt im Modul
-nur die Sites, die über `sightmetrics_site_id` zugeordnet sind – bei
-Einzelzuordnung ohne Dropdown, bei mehreren mit Auswahl.
+Both write into the same `analytics` database. TYPO3 only shows the sites
+mapped via `sightmetrics_site_id` in the module — without a dropdown for a
+single mapping, with a selector for multiple.
 
 ---
 
-## 6. Fehlerseite konfigurieren
+## 6. Configuring the error page
 
-Wenn die Cube-DB nicht erreichbar ist, zeigt das Modul eine konfigurierbare Fehlerseite
-statt einer PHP-Exception. Konfiguration im TYPO3-Backend unter
-**Admin-Tools → Erweiterungen → sight_metrics**:
+If the cube DB is unreachable, the module shows a configurable error page
+instead of a PHP exception. Configuration in the TYPO3 backend under
+**Admin Tools → Extensions → sight_metrics**:
 
-| Einstellung | Standard | Beschreibung |
+| Setting | Default | Description |
 |---|---|---|
-| `errorTitle` | „Auswertung derzeit nicht verfügbar" | Überschrift der Fehlerseite |
-| `errorMessage` | „Die Verbindung …" | Erläuterungstext |
-| `showTechnical` | `0` | Technische Fehlermeldung anzeigen (nur für Admins/Debug) |
-| `windowDays` | `92` | Serverseitiges Zeitfenster in Tagen: nur dieses Fenster wird aus der Cube-DB geladen (begrenzt das Transfervolumen unabhängig von der Retention). `0` = unbegrenzt. |
-| `cacheLifetime` | `60` | Cache-TTL in Sekunden für die Cube-DB-Reads (TYPO3-Cache-Framework, Cache `sight_metrics`). `0` = kein Caching, jeder Aufruf liest live. Betrieb: siehe „Cache-Aufräumen ist Betreiber-Pflicht" (§10). |
+| `errorTitle` | "Analytics currently unavailable" | Error page heading |
+| `errorMessage` | "The connection …" | Explanatory text |
+| `showTechnical` | `0` | Show the technical error message (admins/debug only) |
+| `windowDays` | `92` | Server-side time window in days: only this window is loaded from the cube DB (limits transfer volume independently of retention). `0` = unlimited. |
+| `cacheLifetime` | `60` | Cache TTL in seconds for cube DB reads (TYPO3 cache framework, `sight_metrics` cache). `0` = no caching, every call reads live. Operations: see "Cache cleanup is an operator responsibility" (§10). |
 
-Die Cube-Connection ist von der TYPO3-Hauptverbindung vollständig getrennt – ein
-Cube-DB-Ausfall nimmt das TYPO3-Backend nicht mit.
-
----
-
-## 7. Mehrere Sites (eine Instanz)
-
-Betriebsfall: **eine** TYPO3-Instanz mit mehreren Sites in **einem** Namespace, Cube in
-**eurer** MariaDB. Alle Sites liegen in `analytics`, unterschieden durch `site_id`. Die
-Zuordnung TYPO3-Site → Cube-`site_id` erfolgt über `sightmetrics_site_id` in der Site-
-Config (§5); die GUI bietet die Site-Auswahl entsprechend an.
-
-> Eine Mandanten-/DB-Isolation über getrennte Datenbanken pro Mandant ist für diesen
-> Single-Instance-Betrieb **nicht nötig** und wurde bewusst nicht eingebaut. Sollte
-> später echte Mehrmandantentrennung gefordert sein, wäre „eigene DB + eigene
-> `cube`-Connection je Instanz" der Weg – die Extension bliebe unverändert.
+The cube connection is completely separate from the main TYPO3 connection —
+a cube DB outage does not take down the TYPO3 backend.
 
 ---
 
-## 8. TYPO3-Versionsmatrix
+## 7. Multiple sites (one instance)
+
+Use case: **one** TYPO3 instance with multiple sites in **one** namespace,
+cube in **your** MariaDB. All sites live in `analytics`, distinguished by
+`site_id`. The mapping from a TYPO3 site to a cube `site_id` is done via
+`sightmetrics_site_id` in the site config (§5); the GUI offers the site
+selector accordingly.
+
+> Tenant/DB isolation via separate databases per tenant is **not needed**
+> for this single-instance setup and was deliberately not built in. Should
+> real multi-tenant separation be required later, "its own DB + its own
+> `cube` connection per instance" would be the way to go — the extension
+> itself would remain unchanged.
+
+---
+
+## 8. TYPO3 version matrix
 
 | sight_metrics | TYPO3 | PHP | Status |
 |---|---|---|---|
-| aktuell | ^13.4 | ^8.2 | aktiv getestet (Functional + Unit, CI) |
-| aktuell | ^14.0 | ^8.2 | **verifiziert** gegen TYPO3 v14.3.4 + testing-framework 9.5 (Functional 13/13 + Unit 20/20); CI-Lane vorhanden |
+| current | ^13.4 | ^8.2 | actively tested (functional + unit, CI) |
+| current | ^14.0 | ^8.2 | **verified** against TYPO3 v14.3.4 + testing-framework 9.5 (functional 13/13 + unit 20/20); CI lane in place |
 
-emconf-Constraint: `13.4.0-14.99.99`. Die CI (`functional`-Job) testet beide
-Hauptversionen in einer Matrix (TYPO3 `^13.4`/`^14.0` × PHP 8.2/8.3), mit der
-jeweils passenden `typo3/testing-framework`-Version (8.x für v13, 9.x für v14).
+emconf constraint: `13.4.0-14.99.99`. CI (the `functional` job) tests both
+major versions in a matrix (TYPO3 `^13.4`/`^14.0` × PHP 8.2/8.3), with the
+matching `typo3/testing-framework` version (8.x for v13, 9.x for v14).
 
-Die Extension ist absichtlich schlank gehalten (kein TypoScript, kein Frontend,
-kein TCA, keine Datenbank-Migrations-Skripte) um v14-Breaking-Changes minimal zu halten.
-Modul-Labels kommen aus `Resources/Private/Language/locallang_mod.xlf` (kein
-hartcodierter Text in `Modules.php`).
+The extension is deliberately kept lean (no TypoScript, no frontend, no
+TCA, no database migration scripts) to minimize exposure to v14 breaking
+changes. Module labels come from
+`Resources/Private/Language/locallang_mod.xlf` (no hardcoded text in
+`Modules.php`).
 
 ---
 
-## 9. Backend-Modul nutzen
+## 9. Using the backend module
 
-Modul: **Web → Logauswertung** (`web_sightmetrics`)
+Module: **Web → Web Analytics** (`web_sightmetrics`)
 
-### Site-Auswahl
+### Site selection
 
-Bei mehreren Sites erscheint ein Dropdown. Die Auswahl wird per URL-Parameter `site`
-übergeben und in der Nutzersitzung gespeichert.
+A dropdown appears when there are multiple sites. The selection is passed
+via the URL parameter `site` and stored in the user session.
 
-### Zeitraum-Auswahl
+### Time range selection
 
-Ein einziges Dropdown **„Zeitraum"** (Matomo-artig), nicht mehrere Felder nebeneinander:
-- **Relativ:** Heute, Gestern, Letzte 7 / 30 / 90 Tage (Anker = neuester Datenstand, nie in die Zukunft).
-- **Kalender:** Dieser/Letzter Monat, Dieses/Letztes Jahr.
-- **Konkrete Jahre:** je ein Eintrag pro Jahr im Datenbestand (z. B. „Jahr 2025").
-- **Gesamter Zeitraum** und **Benutzerdefiniert …**.
+A single **"time range"** dropdown (Matomo-style), not several fields side
+by side:
+- **Relative:** Today, Yesterday, Last 7 / 30 / 90 days (anchored to the
+  newest data available, never in the future).
+- **Calendar:** This/Last month, This/Last year.
+- **Specific years:** one entry per year present in the data (e.g. "Year
+  2025").
+- **Entire period** and **Custom …**.
 
-Erst bei **„Benutzerdefiniert …"** klappen die Felder `von`/`bis` (ISO-Datum) und ein
-**Monats-Picker** auf; sonst bleiben sie eingeklappt. Der Default-Eintrag spiegelt den
-initial geladenen Stand wider (siehe Zeitfenster unten) und löst kein Nachladen aus.
+Only **"Custom …"** expands the `from`/`to` fields (ISO date) and a
+**month picker**; otherwise they stay collapsed. The default entry reflects
+the initially loaded state (see the time window below) and doesn't trigger
+a reload.
 
-**Serverseitiges Zeitfenster (Skalierung):** Es wird nicht der gesamte Cube ins Frontend
-geladen, sondern nur ein Fenster (Default 92 Tage, konfigurierbar via `windowDays`, 0 =
-unbegrenzt). Auswahl **innerhalb** des Fensters filtert sofort clientseitig (inkl. Vergleich);
-Auswahl **außerhalb** lädt das passende Fenster vom Server nach (Reload mit `?from=&to=`).
-So bleibt das Transfervolumen unabhängig von der Retention der Cube-DB begrenzt.
+**Server-side time window (scaling):** the entire cube is not loaded into
+the frontend — only a window (default 92 days, configurable via
+`windowDays`, 0 = unlimited). A selection **within** the window filters
+instantly client-side (including comparison); a selection **outside** the
+window reloads the matching window from the server (reload with
+`?from=&to=`). This keeps the transfer volume bounded independently of the
+cube DB's retention.
 
-### Dark Mode
+### Dark mode
 
-Das Modul folgt dem TYPO3-Backend-Farbschema (Attribut `data-color-scheme`, sonst
-`prefers-color-scheme`): Karten, Texte, Barlisten und die Chart.js-Achsen/-Beschriftungen
-werden im dunklen Schema lesbar umgefärbt. Die Umschaltung erfolgt clientseitig über die
-Klasse `sm-dark` am Wurzel-Container.
+The module follows the TYPO3 backend color scheme (`data-color-scheme`
+attribute, falling back to `prefers-color-scheme`): maps, text, bar lists,
+and the Chart.js axes/labels are recolored for legibility in the dark
+scheme. The switch happens client-side via the `sm-dark` class on the root
+container.
 
-### KPI-Leiste
+### KPI bar
 
-Visits, Pageviews, Unique Visitors, Absprungrate, Gesamtbandbreite – immer für den
-gewählten Zeitraum und die gewählte Site.
+Visits, pageviews, unique visitors, bounce rate, total bandwidth — always
+for the selected time range and site.
 
-### Perioden-Vergleich
+### Period comparison
 
-Checkbox **„Vorperiode vergleichen"** in der Leiste. Aktiviert, wird der gewählte
-Zeitraum gegen die **unmittelbar vorausgehende Periode gleicher Länge** verglichen
-(z. B. die 30 Tage davor). Jede KPI erhält ein Delta-Badge (▲/▼ ± %), richtungsgefärbt
-(grün = besser, rot = schlechter; bei der Absprungrate ist „runter" gut). Im Verlauf
-erscheint die Vorperiode als gestrichelte Referenzlinie (positionsweise Tag-zu-Tag).
-Hinweis: Liegt die Vorperiode ganz oder teilweise vor dem ersten Datenstand
-(`meta.von`), bleibt das Delta leer – verglichen wird nur über vollständig
-vorhandene Zeiträume (keine verzerrten Teilvergleiche). Bei voll gewähltem
-Gesamtzeitraum gibt es daher naturgemäß keine Vorperiode.
+A **"Compare to previous period"** checkbox in the bar. When enabled, the
+selected time range is compared against the **immediately preceding period
+of the same length** (e.g. the 30 days before). Each KPI gets a delta badge
+(▲/▼ ± %), color-coded by direction (green = better, red = worse; for
+bounce rate, "down" is good). In the trend chart, the previous period
+appears as a dashed reference line (position-wise, day to day). Note: if
+the previous period lies wholly or partially before the first available
+data (`meta.von`), the delta stays empty — comparisons only run over
+fully-present time ranges (no skewed partial comparisons). With the entire
+period selected, there is therefore naturally no previous period.
 
 ### Export
 
-Zwei Buttons in der Leiste, rein clientseitig (kein Server-Roundtrip, CSP-konform):
-- **CSV** – lädt den aktuellen Zeitraum als CSV herunter (UTF-8 mit BOM, `;`-getrennt,
-  Excel-kompatibel): Kopf (Site/Zeitraum/Stand), Verlauf je Tag und alle Dimensions-
-  Auswertungen (Land, Browser, OS, Gerät, Referrer, Suchbegriffe, Seiten, Ein-/Ausstieg,
-  Downloads, Status, Methode, Stunde). Dateiname `sightmetrics_<site>_<von>_<bis>.csv`.
-- **PDF** – öffnet den Browser-Druckdialog (》Als PDF speichern《). Ein Druck-Stylesheet
-  blendet die Bedienleiste aus und legt die Panels für den Ausdruck um.
+Two buttons in the bar, purely client-side (no server round trip, CSP
+compliant):
+- **CSV** – downloads the current time range as CSV (UTF-8 with BOM,
+  `;`-separated, Excel-compatible): a header (site/period/as-of), the daily
+  trend, and all dimension breakdowns (country, browser, OS, device,
+  referrer, search terms, pages, entry/exit, downloads, status, method,
+  hour). Filename `sightmetrics_<site>_<from>_<to>.csv`.
+- **PDF** – opens the browser print dialog ("Save as PDF"). A print
+  stylesheet hides the control bar and reflows the panels for printing.
 
-### Auswertungs-Panels
+### Analytics panels
 
 | Panel | Dimension (`dim`) |
 |---|---|
-| Verlaufsgrafik | Tages-Aggregat (`daily`-Tabelle) |
-| Weltkarte (Choropleth) | `country` |
-| Länder-Barliste | `country` |
-| Browser | `browser` |
-| Betriebssysteme | `os` |
-| Gerätetypen | `device` |
-| Referrer-Typen | `referrer_type` |
-| Referrer-URLs | `referrer` |
-| Suchbegriffe | `keyword` |
-| Einstiegsseiten | `entry` |
-| Ausstiegsseiten | `exit` |
+| Trend chart | daily aggregate (`daily` table) |
+| World map (choropleth) | `country` |
+| Country bar list | `country` |
+| Browsers | `browser` |
+| Operating systems | `os` |
+| Device types | `device` |
+| Referrer types | `referrer_type` |
+| Referrer URLs | `referrer` |
+| Search terms | `keyword` |
+| Entry pages | `entry` |
+| Exit pages | `exit` |
 | Downloads | `download` |
-| Statuscodes | `status` |
-| HTTP-Methoden | `method` |
-| Seitenbaum | `url` (mit Drill-down) |
-| Besuchszeiten (Stunde) | `hour` |
+| Status codes | `status` |
+| HTTP methods | `method` |
+| Page tree | `url` (with drill-down) |
+| Visit times (hour) | `hour` |
 
-Hinweise zur Semantik (Details: Ingestion-Runbook §3/§8):
+Notes on semantics (details: ingestion runbook §3/§8):
 
-- **Statuscodes** enthalten auch 4xx/5xx (Fehlerdiagnose); `v` ist dort die Zahl
-  *betroffener Besucher*, nicht Visits. Alle übrigen Panels zählen nur
-  erfolgreiche Zugriffe (Status < 400).
-- **Bots/Crawler** sind bereits in der Ingestion per User-Agent-Heuristik
-  ausgefiltert (`SM_BOT_FILTER`).
-- **Tages-Buckets und Besuchszeiten** rechnen seit Schema v2 in der
-  Ingestion-Zeitzone `SM_TZ` (in `meta.tz` hinterlegt, Standard UTC; für
-  deutsche Installationen `SM_TZ=Europe/Berlin` setzen). Relative
-  Zeitraum-Vorgaben („Heute", „Letzte 7 Tage") ankern in dieser Zone.
-- Ein Tag erscheint erst **nach seinem Abschluss** (Tagesgrenzen-Cut des
-  inkrementellen Imports) – beim nächtlichen Lauf also jeweils der Vortag.
+- **Status codes** also include 4xx/5xx (error diagnosis); `v` there is the
+  number of *affected visitors*, not visits. All other panels only count
+  successful requests (status < 400).
+- **Bots/crawlers** are already filtered out during ingestion via a
+  user-agent heuristic (`SM_BOT_FILTER`).
+- **Day buckets and visit times** are computed, since schema v2, in the
+  ingestion timezone `SM_TZ` (stored in `meta.tz`, default UTC; set
+  `SM_TZ=Europe/Berlin` for German installations, for example). Relative
+  time-range presets ("Today", "Last 7 days") anchor in this zone.
+- A day only appears **once complete** (day-boundary cut of the incremental
+  import) — a nightly run therefore always shows the previous day.
 
 ### Drill-down
 
-Klick auf eine Barlisten-Zeile öffnet eine Unterebene (z. B. Browser → Versionen,
-OS → Versionen, Seitenbaum → Unterseiten). Tastatursteuerung über Enter/Space,
-ARIA-konform (BITV 2.0 / WCAG 2.1 AA).
+Clicking a bar-list row opens a sub-level (e.g. browser → versions, OS →
+versions, page tree → subpages). Keyboard-operable via Enter/Space,
+ARIA-compliant (WCAG 2.1 AA).
 
 ---
 
-## 10. Architektur & Erweiterung
+## 10. Architecture & extension
 
 ```
-HTTP-Request (Admin-Browser)
+HTTP request (admin browser)
         │
         ▼
-DashboardController          ← lädt SiteSelector, ruft CubeRepository auf
-        │                       fängt alle \Throwable → ErrorPage
+DashboardController          ← loads SiteSelector, calls CubeRepository
+        │                       catches all \Throwable → ErrorPage
         ▼
-CubeRepository               ← TYPO3-ConnectionPool, Connection 'cube' (read-only)
-        │                       Queries: sites() / meta() / daily() / cube()
+CubeRepository               ← TYPO3 ConnectionPool, connection 'cube' (read-only)
+        │                       queries: sites() / meta() / daily() / cube()
         ▼
-MariaDB analytics            ← Tabellen: cube, daily, meta
+MariaDB analytics            ← tables: cube, daily, meta
 (report_ro, SELECT only)
 
-Fluid-Template Index.html    ← rendert alle Panels; Daten als JSON-Block im HTML
+Fluid template Index.html    ← renders all panels; data as a JSON block in the HTML
         │
         ▼
-dashboard.js                 ← Chart.js (Verlauf/Stunden), Leaflet (Choropleth-Karte), Drill-down
+dashboard.js                 ← Chart.js (trend/hourly), Leaflet (choropleth map), drill-down
 ```
 
-### Bekannte Grenzen: Skalierung & Caching
+### Known limitations: scaling & caching
 
-**Serverseitiges Caching.** `daily()`/`cube()`/`topN()`/`dimSummary()` (die Reads, deren
-Volumen bzw. Aufrufhaeufigkeit mit Zeitfenster/Kardinalitaet waechst) laufen ueber den
-TYPO3-Cache-Framework-Cache `sight_metrics` (`VariableFrontend` + `Typo3DatabaseBackend`,
-registriert in `ext_localconf.php`, Tabelle `cache_sight_metrics` wird von TYPO3 selbst per
-`extension:setup`/DB-Compare angelegt). TTL ueber die Extension-Konfiguration
-`cacheLifetime` (Default 60s, 0 = deaktiviert — jeder Aufruf liest dann wieder live).
-`sites()`/`meta()` bleiben bewusst ungecacht (kleine Einzelzeilen/Listen; eine neue Site
-oder ein frischer Ingestion-Lauf soll ohne Wartezeit sichtbar sein). Fehlt die
-Cache-Konfiguration (z. B. Unit-/Functional-Tests ohne geladenes `ext_localconf.php`),
-faellt `CubeRepository::cached()` fehlertolerant auf die Live-Query zurueck.
+**Server-side caching.** `daily()`/`cube()`/`topN()`/`dimSummary()` (the
+reads whose volume/call frequency grows with the time window/cardinality)
+go through the TYPO3 cache framework's `sight_metrics` cache
+(`VariableFrontend` + `Typo3DatabaseBackend`, registered in
+`ext_localconf.php`; the `cache_sight_metrics` table is created by TYPO3
+itself via `extension:setup`/DB compare). TTL is set via the extension
+configuration `cacheLifetime` (default 60s, 0 = disabled — every call then
+reads live again). `sites()`/`meta()` are deliberately left uncached (small
+individual rows/lists; a new site or a fresh ingestion run should be
+visible without delay). If the cache configuration is missing (e.g. unit/
+functional tests without a loaded `ext_localconf.php`),
+`CubeRepository::cached()` falls back to the live query without erroring.
 
-**Cache-Aufraeumen ist Betreiber-Pflicht.** Das `Typo3DatabaseBackend` loescht abgelaufene
-Eintraege **nicht** von selbst — sie bleiben als tote Zeilen in `cache_sight_metrics`
-liegen, bis eine Garbage Collection laeuft. Die Cache-Keys sind hochkardinal (jede
-Kombination aus Zeitraum, Dimension, Offset und Drill-down-Elternkategorie erzeugt einen
-eigenen Eintrag mit nur 60 s TTL), die Tabelle waechst daher im Betrieb stetig. Zwei Wege:
+**Cache cleanup is an operator responsibility.** The `Typo3DatabaseBackend`
+does **not** delete expired entries on its own — they remain as dead rows
+in `cache_sight_metrics` until a garbage collection run happens. The cache
+keys are high-cardinality (every combination of time range, dimension,
+offset, and drill-down parent category creates its own entry with only a
+60s TTL), so the table grows continuously in operation. Two options:
 
-- **Mit EXT:scheduler:** den Core-Task „Caching framework garbage collection" einrichten
-  (z. B. taeglich) und dabei den Cache `sight_metrics` mit anhaken.
-- **Ohne Scheduler (Cron/SQL):** abgelaufene Zeilen direkt auf der TYPO3-DB loeschen, z. B.
-  taeglich per Cron:
+- **With EXT:scheduler:** set up the core task "Caching framework garbage
+  collection" (e.g. daily) and select the `sight_metrics` cache.
+- **Without a scheduler (cron/SQL):** delete expired rows directly on the
+  TYPO3 DB, e.g. daily via cron:
 
   ```sql
   DELETE FROM cache_sight_metrics WHERE expires < UNIX_TIMESTAMP();
   ```
 
-  (Die zugehoerige `cache_sight_metrics_tags`-Tabelle bleibt leer — die Extension setzt
-  keine Cache-Tags — und braucht kein eigenes Aufraeumen.)
+  (The associated `cache_sight_metrics_tags` table stays empty — the
+  extension sets no cache tags — and needs no cleanup of its own.)
 
-Ein `vendor/bin/typo3 cache:flush` leert die Tabelle ebenfalls (holzschnittartig, aber
-unschaedlich — der Cache fuellt sich beim naechsten Modulaufruf neu).
+Running `vendor/bin/typo3 cache:flush` also clears the table (blunt, but
+harmless — the cache refills on the next module load).
 
-**Serverseitige Kardinalitaets-Begrenzung.** `windowDays` begrenzt nur die Zeitachse (wie
-viele Tage geladen werden). Fuer alle Dimensionen mit potenziell unbegrenzt vielen
-unterschiedlichen Werten — Suchbegriffe, Einstiegs-/Ausstiegsseiten, Downloads, Statuscodes,
-HTTP-Methoden, Browser, Betriebssystem, Geraetetyp, Referrer-Typ/-Name/-URL sowie deren
-Versions-/Modell-Unterkategorien — liefert `CubeRepository::topN()` serverseitig nur die
-Top-N-Zeilen (Default 8, `TopNDims::DEFAULT_LIMIT`; Referrer-URLs 10), zusammen mit einer
-Gesamtsumme (`dimSummary()`) fuer die Prozentanzeige und "+ N weitere". Nachladen
-(Datumsbereich-Aenderung im Picker, Klick auf "+ N weitere", Aufklappen einer
-Drill-down-Zeile) laeuft ueber die Ajax-Route `ajax_sightmetrics_topn`
-(`TopNAjaxController`, `Configuration/Backend/AjaxRoutes.php`). Drill-down-Kinder (z. B.
-Browser-Versionen zu "Chrome") werden nie vorab geladen, sondern erst beim Aufklappen per
-`parentKey`-Parameter nachgefragt (`CubeRepository::applyParentFilter()`, seit Schema v2
-eine Gleichheit auf die eigene `parent`-Spalte statt der frueheren `chr(31)`-Praefix-Logik –
-siehe [`docs/SCHEMA.md`](SCHEMA.md)). Land bleibt bewusst unbegrenzt (die Choropleth-Karte
-braucht alle Laender, ISO-Codes sind ohnehin auf ~250 Werte begrenzt).
+**Server-side cardinality limiting.** `windowDays` only limits the time
+axis (how many days are loaded). For every dimension with potentially
+unlimited distinct values — search terms, entry/exit pages, downloads,
+status codes, HTTP methods, browser, OS, device type, and referrer
+type/name/URL along with their version/model sub-categories —
+`CubeRepository::topN()` only returns the top-N rows server-side (default
+8, `TopNDims::DEFAULT_LIMIT`; referrer URLs 10), together with a total
+(`dimSummary()`) for the percentage display and "+ N more". Lazy loading
+(a date-range change in the picker, clicking "+ N more", expanding a
+drill-down row) goes through the Ajax route `ajax_sightmetrics_topn`
+(`TopNAjaxController`, `Configuration/Backend/AjaxRoutes.php`). Drill-down
+children (e.g. browser versions under "Chrome") are never preloaded — they
+are only requested on expansion via the `parentKey` parameter
+(`CubeRepository::applyParentFilter()`, an equality check on the `parent`
+column since schema v2, replacing the earlier `chr(31)`-prefix logic — see
+[`docs/SCHEMA.md`](SCHEMA.md)). Country is deliberately left unlimited (the
+choropleth map needs all countries, and ISO codes are bounded to ~250
+values anyway).
 
-Der **Seitenbaum** (`url`-Dimension) wird ebenfalls serverseitig begrenzt, aber ueber ein
-eigenes Schema: `CubeRepository::urlTree()` segmentiert die URL-Pfade in SQL (portable
-`SUBSTR`/`INSTR`-Ausdruecke, laufen auf MariaDB und SQLite) und liefert pro Ebene nur die
-Top-8-Segmente mit Unterbaum-Summen. Der Initial-Payload enthaelt die ersten zwei Ebenen
-(erste Ebene aufgeklappt, wie zuvor); tiefere Aeste und "+ N weitere" laedt `dashboard.js`
-ueber die Ajax-Route `ajax_sightmetrics_tree` (`TreeAjaxController`, Pfad-Praefix als
-`path`-Parameter) nach. Damit haengt kein Panel mehr an der vollstaendigen Zeilenmenge
-einer hochkardinalen Dimension — der `cube`-Initial-Payload enthaelt nur noch die kleinen
-Dims (Land, Stunde).
+The **page tree** (`url` dimension) is also limited server-side, but via
+its own scheme: `CubeRepository::urlTree()` segments the URL paths in SQL
+(portable `SUBSTR`/`INSTR` expressions, running on both MariaDB and SQLite)
+and returns only the top-8 segments per level with subtree sums. The
+initial payload contains the first two levels (first level expanded, as
+before); deeper branches and "+ N more" are lazy-loaded by `dashboard.js`
+via the Ajax route `ajax_sightmetrics_tree` (`TreeAjaxController`, path
+prefix as a `path` parameter). This means no panel depends on the full row
+set of a high-cardinality dimension anymore — the `cube` initial payload
+now only contains the small dims (country, hour).
 
-### Neue Dimension hinzufügen
+### Adding a new dimension
 
-1. **Ingestion-Seite:** `transform.sql` — neuen `UNION ALL SELECT ...`-Zweig im
-   Cube-Aufbau mit neuem `dim`-Schlüssel ergänzen (für Drill-down-Dimensionen den
-   Eltern-Kind-Trenner `chr(31)` im `dimkey` verwenden, siehe bestehende Zweige wie
-   `browser_version`).
-2. **Extension-Seite, Template:** `Index.html` — neuen Panel-Block mit einem leeren
-   Container ergänzen (z. B. `<div id="bl-neuer-key" class="barlist"></div>`); das
-   Template enthält nur das Gerüst, die Daten kommen als JSON-Block und werden
-   client-seitig gerendert.
-3. **Extension-Seite, JavaScript:** `dashboard.js` — die Dimension registrieren:
-   - **Unbegrenzte Kardinalität** (URLs, Suchbegriffe u. ä.): Eintrag in `TOPN_ROOT`
-     (Container-ID + Metrik `pv`/`v`; bei Drill-down-Kind zusätzlich `child` und den
-     Kind-Eintrag in `TOPN_CHILD`).
-   - **Kleine, feste Wertemenge** (wie Land): klassischer `barlist()`-Aufruf in
-     `render()` — die Zeilen kommen dann vollständig im Initial-Payload.
-4. **Extension-Seite, PHP (nur bei Top-N-Dimensionen):** `Classes/Support/TopNDims.php` —
-   die Dimension in `ROOT_METRIC_BY_DIM` (bzw. `CHILD_METRIC_BY_DIM`/`CHILD_OF_ROOT`)
-   eintragen. **Ohne diesen Eintrag** liefert der Ajax-Endpunkt für die Dimension 400
-   (Whitelist) und `DashboardController` lädt kein Top-N vor; ohne den Eintrag landet
-   die Dimension stattdessen ungebremst im Initial-Payload (`cube()` liefert alle
-   nicht in `TopNDims::excludedFromFullPayload()` gelisteten `dim`-Schlüssel).
-5. Optional: `EXPORT_DIMS` in `dashboard.js` für den CSV-Export ergänzen und der
-   JS-Smoke-Test (`Tests/JavaScript/`) um die neue Dimension erweitern.
+1. **Ingestion side:** `transform.sql` — add a new `UNION ALL SELECT ...`
+   branch in the cube build with a new `dim` key (for drill-down
+   dimensions, use the parent/child separator `chr(31)` in `dimkey`, see
+   existing branches like `browser_version`).
+2. **Extension side, template:** `Index.html` — add a new panel block with
+   an empty container (e.g. `<div id="bl-new-key" class="barlist"></div>`);
+   the template only contains the scaffold, the data arrives as a JSON
+   block and is rendered client-side.
+3. **Extension side, JavaScript:** `dashboard.js` — register the
+   dimension:
+   - **Unbounded cardinality** (URLs, search terms, etc.): add an entry to
+     `TOPN_ROOT` (container ID + metric `pv`/`v`; for a drill-down child,
+     also add `child` and the child entry to `TOPN_CHILD`).
+   - **Small, fixed value set** (like country): a classic `barlist()` call
+     in `render()` — the rows then arrive fully in the initial payload.
+4. **Extension side, PHP (Top-N dimensions only):**
+   `Classes/Support/TopNDims.php` — add the dimension to
+   `ROOT_METRIC_BY_DIM` (or `CHILD_METRIC_BY_DIM`/`CHILD_OF_ROOT`).
+   **Without this entry**, the Ajax endpoint returns 400 for the dimension
+   (whitelist) and `DashboardController` doesn't preload any Top-N; without
+   the entry, the dimension instead lands unbounded in the initial payload
+   (`cube()` returns every `dim` key not listed in
+   `TopNDims::excludedFromFullPayload()`).
+5. Optional: add the dimension to `EXPORT_DIMS` in `dashboard.js` for the
+   CSV export, and extend the JS smoke test (`Tests/JavaScript/`) to cover
+   it.
 
 ---
 
 ## 11. Tests & CI
 
-### Lokal (Demo-Stack nötig für 2b + 2c)
+### Locally (demo stack needed for 2b + 2c)
 
 ```bash
-./run-tests.sh          # alle Suiten: Lint + Unit + Functional + Smoke + E2E
-extension/lint.sh       # nur Lint: PHPStan Level 6 + TYPO3 Coding Standards
+./run-tests.sh          # all suites: lint + unit + functional + smoke + e2e
+extension/lint.sh       # lint only: PHPStan level 6 + TYPO3 coding standards
 ```
 
-### Suiten
+### Suites
 
-| Suite | Befehl | Voraussetzung |
+| Suite | Command | Requirement |
 |---|---|---|
-| **0 Lint** | `extension/lint.sh` | keiner |
-| **2a Unit** | `phpunit -c phpunit.xml.dist` | keiner |
-| **2b Functional** | `phpunit -c phpunit.functional.xml.dist` | kein Docker (SQLite) |
-| **2c Smoke** | `typo3 sightmetrics:smoke` | Demo-Stack läuft |
-| **2d JS Smoke** | `npm test` (in `sight_metrics/`) | Node.js, kein Docker |
-| **3 E2E** | `e2e/run.sh` | Demo-Stack läuft, Puppeteer |
+| **0 Lint** | `extension/lint.sh` | none |
+| **2a Unit** | `phpunit -c phpunit.xml.dist` | none |
+| **2b Functional** | `phpunit -c phpunit.functional.xml.dist` | no Docker (SQLite) |
+| **2c Smoke** | `typo3 sightmetrics:smoke` | demo stack running |
+| **2d JS Smoke** | `npm test` (in `sight_metrics/`) | Node.js, no Docker |
+| **3 E2E** | `e2e/run.sh` | demo stack running, Puppeteer |
 
 ### CI (GitHub Actions)
 
-Drei parallele Jobs (`.github/workflows/ci.yml`):
+Three parallel jobs (`.github/workflows/ci.yml`):
 
-| Job | Was | Matrix |
+| Job | What | Matrix |
 |---|---|---|
-| `lint-and-unit` | PHPStan + TYPO3 CS + PHPUnit Unit | PHP 8.2, 8.3 |
-| `pipeline` | DuckDB transform.sql + Backup/Notify/Rotation/Lock | – |
-| `functional` | PHPUnit Functional Tests (SQLite, kein Docker) | PHP 8.2, 8.3 |
+| `lint-and-unit` | PHPStan + TYPO3 CS + PHPUnit unit | PHP 8.2, 8.3 |
+| `pipeline` | DuckDB transform.sql + backup/notify/rotation/lock | – |
+| `functional` | PHPUnit functional tests (SQLite, no Docker) | PHP 8.2, 8.3 |
 
-Smoke- und E2E-Tests laufen nur lokal (brauchen Docker-Stack).
+Smoke and e2e tests only run locally (need the Docker stack).
 
-### Functional-Tests im Detail
+### Functional tests in detail
 
-`Tests/Functional/CubeRepositoryFunctionalTest.php` — 10 Tests:
+`Tests/Functional/CubeRepositoryFunctionalTest.php` — 10 tests:
 
-| Test | Prüft |
+| Test | Checks |
 |---|---|
-| `testSitesReturnsEmptyWhenNoData` | Leere DB → leeres Array |
-| `testSitesReturnsAllSitesOrdered` | Alphabetische Site-Sortierung |
-| `testMetaReturnsCorrectAggregatesForSite` | KPI-Werte stimmen |
-| `testMetaReturnsEmptyArrayForUnknownSite` | Unbekannte site_id → leer |
-| `testDailyReturnsRowsForCorrectSite` | daily() filtert nach site_id |
-| `testCubeReturnsRowsFilteredBySite` | cube() liefert nur eigene Dims |
-| `testSiteIsolation` | Zwei Sites gegenseitig isoliert |
-| `testDailyReturnsEmptyForSiteWithoutData` | Keine Daily-Daten → leer |
-| `testCubeReturnsEmptyWhenNoDimensionRows` | Site ohne Cube-Zeilen → leer |
-| `testCubeReturnsEmptyForUnknownSite` | Unbekannte site_id in cube() → leer |
+| `testSitesReturnsEmptyWhenNoData` | empty DB → empty array |
+| `testSitesReturnsAllSitesOrdered` | alphabetical site sort order |
+| `testMetaReturnsCorrectAggregatesForSite` | KPI values are correct |
+| `testMetaReturnsEmptyArrayForUnknownSite` | unknown site_id → empty |
+| `testDailyReturnsRowsForCorrectSite` | daily() filters by site_id |
+| `testCubeReturnsRowsFilteredBySite` | cube() only returns its own dims |
+| `testSiteIsolation` | two sites are mutually isolated |
+| `testDailyReturnsEmptyForSiteWithoutData` | no daily data → empty |
+| `testCubeReturnsEmptyWhenNoDimensionRows` | site without cube rows → empty |
+| `testCubeReturnsEmptyForUnknownSite` | unknown site_id in cube() → empty |
 
 ---
 
 ## 12. Troubleshooting
 
-### „Auswertung derzeit nicht verfügbar"
+### "Analytics currently unavailable"
 
-Die Cube-DB ist nicht erreichbar. Prüfschritte:
+The cube DB is unreachable. Diagnostic steps:
 
 ```bash
-# 1. Connection-Parameter prüfen
+# 1. Check the connection parameters
 vendor/bin/typo3 sightmetrics:smoke
 
-# 2. MariaDB direkt testen
+# 2. Test MariaDB directly
 mysql -h <host> -P <port> -u report_ro -p analytics -e "SELECT 1 FROM meta LIMIT 1;"
 
-# 3. TYPO3 Log prüfen
+# 3. Check the TYPO3 log
 tail -f var/log/typo3_*.log
 ```
 
-### CSP-Fehler (Content Security Policy)
+### CSP errors (Content Security Policy)
 
-Das Backend-Modul bettet JSON-Daten inline ein (CSP-sicherer `<script type="application/json">`-
-Block) und nutzt selbst-gehostetes Chart.js/Leaflet, eingebunden über den TYPO3-`PageRenderer`
-(`addJsFooterFile`/`addCssFile`). Wenn die TYPO3-Instanz eine strenge CSP setzt, kann es
-dennoch zu Konsolen-Fehlern kommen (z. B. durch `style`-Attribute der Barlisten-Balken).
+The backend module embeds JSON data inline (a CSP-safe
+`<script type="application/json">` block) and uses self-hosted
+Chart.js/Leaflet, loaded via the TYPO3 `PageRenderer`
+(`addJsFooterFile`/`addCssFile`). If the TYPO3 instance sets a strict CSP,
+console errors can still occur (e.g. from the bar lists' `style`
+attributes).
 
-Lösung: In `additional.php` bzw. `Configuration/ContentSecurityPolicies.php` die CSP für
-das Backend gezielt erweitern statt sie global aufzuweichen.
+Solution: extend the backend CSP specifically in `additional.php` or
+`Configuration/ContentSecurityPolicies.php` instead of loosening it
+globally.
 
-### `trustedHostsPattern`-Fehler
+### `trustedHostsPattern` errors
 
-Im Demo ist `trustedHostsPattern = '.*'` gesetzt (alle Hosts erlaubt).
-Für Produktion: konkreten Hostnamen eintragen:
+The demo sets `trustedHostsPattern = '.*'` (all hosts allowed). For
+production: set the actual hostname:
 
 ```php
-$GLOBALS['TYPO3_CONF_VARS']['SYS']['trustedHostsPattern'] = 'auswertung\.behoerde\.de';
+$GLOBALS['TYPO3_CONF_VARS']['SYS']['trustedHostsPattern'] = 'analytics\.authority\.example';
 ```
 
-### Kein Zugriff auf das Modul
+### No access to the module
 
-Das Backend-Modul `web_sightmetrics` benötigt Benutzergruppen-Rechte.
-Im TYPO3-Backend unter **Admin-Tools → Benutzer → Benutzergruppen**: Modul
-„Logauswertung" in die entsprechende Gruppe aufnehmen.
+The backend module `web_sightmetrics` requires user-group permissions. In
+the TYPO3 backend under **Admin Tools → Users → User groups**: add the
+"Web Analytics" module to the relevant group.
 
-### Leere Auswertung obwohl Daten importiert
+### Empty analytics despite imported data
 
-- `site_id` in `sites.conf` muss mit der im Dropdown gewählten Site übereinstimmen.
-- Datums-Picker: Standard ist das initial geladene Zeitfenster (`windowDays`, Default die
-  letzten 92 Tage des Datenbestands) – prüfen, ob Daten in diesem Zeitraum liegen; ggf.
-  Zeitraum-Vorgabe „Gesamter Zeitraum" wählen.
-- `SELECT COUNT(*) FROM meta;` auf der Cube-DB prüfen.
+- The `site_id` in `sites.conf` must match the site selected in the
+  dropdown.
+- Date picker: the default is the initially loaded time window
+  (`windowDays`, default the last 92 days of available data) — check
+  whether data falls within this range; select "Entire period" if needed.
+- Check `SELECT COUNT(*) FROM meta;` on the cube DB.

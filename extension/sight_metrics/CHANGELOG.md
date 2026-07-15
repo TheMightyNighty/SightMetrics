@@ -3,149 +3,175 @@
 ## Unreleased
 
 ### Performance
-- **Query-Indizes auf den Cube-Tabellen** (`sm_dim_datum`, `sm_drilldown`,
-  `sm_daily`): der Sink legt sie idempotent bei jedem Import an; fuer grosse
-  Bestands-Cubes alternativ `ingestion/migrations/v2_add_indexes.sql` zu einem
-  Wartungszeitpunkt. Gemessen an einem ~870k-Zeilen-Cube: Panel-Queries von
-  Full-Table-Scan (~1,2 s je Query, ~13 Queries pro Dashboard-Load) auf
-  Index-Range (~0,3 s); Drill-down-Klicks werden Millisekunden-Lookups (der
-  `parent`-Filter ist erst seit Schema v2 indexierbar).
-- **Cache-TTL-Default 60 s -> 21600 s** (`cacheLifetime`): unbedenklich, weil
-  die Cache-Keys das Datumsfenster enthalten und das Fenster mit jedem
-  naechtlichen Import weiterwandert -- die Standard-Ansicht bekommt automatisch
-  frische Keys. Folge-Loads (alle Benutzer) laufen damit aus dem Cache.
-- **Extension-Version** wird im Modul-Footer angezeigt (2.0.1-Nachtrag).
+- **Query indexes on the cube tables** (`sm_dim_datum`, `sm_drilldown`,
+  `sm_daily`): the sink creates them idempotently on every import; for large
+  existing cubes, `ingestion/migrations/v2_add_indexes.sql` can be run at a
+  maintenance window instead. Measured on a ~870k-row cube: panel queries
+  went from a full-table scan (~1.2s per query, ~13 queries per dashboard
+  load) to an indexed range scan (~0.3s); drill-down clicks become
+  millisecond lookups (the `parent` filter is only indexable since schema
+  v2).
+- **Cache TTL default 60s -> 21600s** (`cacheLifetime`): safe, because the
+  cache keys include the date window and the window shifts forward with
+  every nightly import — the default view automatically gets fresh keys.
+  Subsequent loads (all users) then come from cache.
+- **Top-N precompute** (new additive `topn` table, see
+  `docs/topn-precompute-spec.md`): for the standard time windows (`last30`,
+  `last90`, `last365`, `thisyear`, `lastyear`, `all`), the sink additionally
+  precomputes the top-100 rows per dimension (including drill-down children)
+  on every import. `CubeRepository::topN()` only uses it when the frontend
+  sends the matching preset label AND it matches the requested time range
+  exactly server-side — otherwise the live query runs unchanged; no
+  correctness risk, just a potentially faster path for high-cardinality
+  dimensions (`referrer_url`, `keyword`, `url`) over long windows. Perf
+  effect on a large cube not yet measured (see the spec, "To check after
+  implementation").
+- **Extension version** is shown in the module footer (2.0.1 follow-up).
 
 ## 2.0.1 (2026-07-08)
 
-### Behoben
-- **Besucherkarte: horizontale Streifen bei Russland/Fiji.** world.js
-  (world-atlas/Natural-Earth-TopoJSON) enthielt Polygon-Ringe, die den
-  180-Grad-Meridian ueberqueren, ohne dort gesplittet zu sein
-  (`topojson-client` cuttet das nicht automatisch); Leaflet zeichnete das als
-  durchgehende Linie quer ueber die gesamte Kartenbreite. Betroffene Ringe
-  am Antimeridian gesplittet (reproduzierbar via neuem
-  `scripts/fix-world-antimeridian.mjs`); Antarktis entfernt (komplexere
-  Pol-Loch-Topologie, fuer Besucherdaten irrelevant).
-- Leaflet-Karte auf `preferCanvas: true` umgestellt (robuster gegen
-  SVG-Renderer-Seams bei reinen Vektor-Choroplethen ohne Basiskarte).
+### Fixed
+- **Visitor map: horizontal stripes at Russia/Fiji.** world.js
+  (world-atlas/Natural-Earth TopoJSON) contained polygon rings that cross
+  the 180-degree meridian without being split there (`topojson-client`
+  doesn't cut that automatically); Leaflet drew this as a continuous line
+  across the full map width. Affected rings split at the antimeridian
+  (reproducible via the new `scripts/fix-world-antimeridian.mjs`); Antarctica
+  removed (more complex pole-hole topology, irrelevant for visitor data).
+- Leaflet map switched to `preferCanvas: true` (more robust against SVG
+  renderer seams for pure vector choropleths without a base map).
 
 ## 2.0.0 (2026-07-08) - Schema v2
 
-**Breaking:** Die Extension verlangt Cube-Schema-Version 2. Bestands-DBs mit
-`ingestion/migrations/v1_to_v2.sql` migrieren (idempotent) oder neu importieren;
-Modul und `sightmetrics:health` brechen sonst mit klarer Meldung ab.
+**Breaking:** the extension now requires cube schema version 2. Migrate
+existing DBs with `ingestion/migrations/v1_to_v2.sql` (idempotent) or
+re-import; otherwise the module and `sightmetrics:health` abort with a clear
+message.
 
-### Geaendert (DB-Vertrag, docs/SCHEMA.md v2)
-- **Lokale Tages-Buckets:** `datum`/`hour` und der Tagesgrenzen-Cut folgen der
-  Site-Zeitzone `SM_TZ` (in `meta.tz` hinterlegt, Default UTC); das Frontend
-  ankert relative Zeitraeume ("Heute", "Letzte 7 Tage") in dieser Zone,
-  `sightmetrics:health` rechnet das Datenalter darin.
-- **`cube.parent`-Spalte** ersetzt die CHR(31)-kodierten Drill-down-Keys:
-  Kind-Abfragen sind jetzt einfache (indexierbare) Gleichheit, Anzeige-Labels
-  sind reine Werte.
-- **Neutrale `referrer_type`-Keys** (`direct`/`search`/`social`/`website`)
-  statt deutscher Anzeigewerte im Datenbestand; Labels kommen aus der XLF.
-- **Mehrtages-Uniques bleiben bewusst genaehert:** exakte Werte sind mit dem
-  Tages-Salt-Privacy-Design (keine Besucher-Verkettung ueber Tage) prinzipiell
-  unvereinbar -- als permanente Design-Entscheidung in SCHEMA.md dokumentiert.
+### Changed (DB contract, docs/SCHEMA.md v2)
+- **Local-time day buckets:** `datum`/`hour` and the day-boundary cut follow
+  the site timezone `SM_TZ` (stored in `meta.tz`, default UTC); the frontend
+  anchors relative time ranges ("Today", "Last 7 days") in this zone,
+  `sightmetrics:health` computes data age in it too.
+- **`cube.parent` column** replaces the CHR(31)-encoded drill-down keys:
+  child queries are now simple (indexable) equality, display labels are
+  plain values.
+- **Neutral `referrer_type` keys** (`direct`/`search`/`social`/`website`)
+  instead of German display values in the stored data; labels come from the
+  XLF.
+- **Multi-day uniques remain deliberately approximated:** exact values are
+  fundamentally incompatible with the daily-salt privacy design (no linking
+  visitors across days) — documented as a permanent design decision in
+  SCHEMA.md.
 
-### Neu
-- **Contract-Test** (`tests/contract/run.sh` + `CubeContractTest`): echter
-  Ingestion-Import -> echte MariaDB -> echtes CubeRepository, in CI (e2e-Job).
+### New
+- **Contract test** (`tests/contract/run.sh` + `CubeContractTest`): a real
+  ingestion import -> a real MariaDB -> a real CubeRepository, in CI (e2e
+  job).
 
 ## 1.3.0 (2026-07-07)
 
-### Qualitaets-Offensive (Notenschnitt-Massnahmen 1-5)
-- **Versionierter DB-Vertrag** (`docs/SCHEMA.md`): Ingestion stempelt
-  `meta.schema_version`; `CubeRepository::SCHEMA_VERSION` prueft beim Modulaufbau
-  und im `sightmetrics:health`-Command -- eine NEUERE Schreiber-Version bricht mit
-  klarer Meldung ab, Legacy-DBs (ohne Spalte) bleiben kompatibel.
-- **Onboarding-Seite**: leeres Cube -> gefuehrte 3-Schritte-Seite statt leerem
-  Dashboard; eigener "Kein Zugriff"-Hinweis bei Webmount-Sperre (beides lokalisiert).
-- **Bot-Erkennung auf Datenbasis**: `ingestion/tools/fetch_bot_list.sh` baut aus
-  matomo/device-detector (`bots.yml`) eine validierte RE2-Liste (~800 Muster,
-  `SM_BOT_RE_PATH`); ohne Liste greift weiter die eingebaute Heuristik.
-- **Screenshots** in der ReST-Doku (`Documentation/Images/`), deutsches Handbuch
-  verweist auf die ReST-Doku als massgebliche Quelle.
-- **Frontend als native ES-Module** (`Configuration/JavaScriptModules.php`,
+### Quality push (grading-scale measures 1-5)
+- **Versioned DB contract** (`docs/SCHEMA.md`): the ingestion stamps
+  `meta.schema_version`; `CubeRepository::SCHEMA_VERSION` checks it when the
+  module builds and in the `sightmetrics:health` command — a NEWER writer
+  version aborts with a clear message, legacy DBs (without the column)
+  remain compatible.
+- **Onboarding page**: an empty cube shows a guided 3-step page instead of an
+  empty dashboard; a dedicated "no access" notice for webmount restrictions
+  (both localized).
+- **Data-driven bot detection**: `ingestion/tools/fetch_bot_list.sh` builds a
+  validated RE2 list (~800 patterns, `SM_BOT_RE_PATH`) from
+  matomo/device-detector (`bots.yml`); without the list, the built-in
+  heuristic is still used as a fallback.
+- **Screenshots** in the ReST docs (`Documentation/Images/`), the German
+  handbook points to the ReST docs as the authoritative source.
+- **Frontend as native ES modules** (`Configuration/JavaScriptModules.php`,
   `loadJavaScriptModule()`): dashboard.js + `modules/{util,i18n,export}.js`;
-  `tsc --checkJs`-Typpruefung (`npm run typecheck`) und JS-Tests in der CI;
-  referrer_type-Datenwerte werden fuer die Anzeige lokalisiert.
+  `tsc --checkJs` type checking (`npm run typecheck`) and JS tests in CI;
+  referrer_type data values are localized for display.
 
-### TER-Vorbereitung
-- **Vollstaendige Lokalisierung**: alle UI-Texte (Template, dashboard.js, Fehlerseite)
-  aus `locallang_mod.xlf` (Default Englisch) mit deutscher Uebersetzung
-  (`de.locallang_mod.xlf`). dashboard.js erhaelt die Labels als `lang`-Map im Payload
-  (`DashboardController::jsLabels()`), Laendernamen via `Intl.DisplayNames` in der
-  Sprache des BE-Benutzers, Zahlenformate via BE-User-Locale.
-- **ReST-Dokumentation** unter `Documentation/` (docs.typo3.org-Format, Englisch):
-  Introduction, Installation, Configuration, Usage, Known Problems – inkl. deutlichem
-  Hinweis, dass die separat betriebene SightMetrics-Ingestion Voraussetzung ist.
-- **Formalia**: Author/E-Mail in `ext_emconf.php`/`composer.json`, `support`-Links,
-  englische Extension-Beschreibung; `ext_conf_template.txt`-Labels englisch,
-  Fehlerseiten-Defaults englisch (per Extension-Konfiguration ueberschreibbar).
+### TER preparation
+- **Complete localization**: all UI text (template, dashboard.js, error
+  page) sourced from `locallang_mod.xlf` (English default) with a German
+  translation (`de.locallang_mod.xlf`). dashboard.js receives the labels as
+  a `lang` map in the payload (`DashboardController::jsLabels()`), country
+  names via `Intl.DisplayNames` in the backend user's language, number
+  formats via the backend user's locale.
+- **ReST documentation** under `Documentation/` (docs.typo3.org format,
+  English): Introduction, Installation, Configuration, Usage, Known
+  Problems — including a clear note that the separately operated
+  SightMetrics ingestion is a prerequisite.
+- **Formalities**: author/email in `ext_emconf.php`/`composer.json`,
+  `support` links, English extension description; `ext_conf_template.txt`
+  labels in English, error-page defaults in English (overridable via
+  extension configuration).
 
-### Geaendert (Ingestion, Paket A)
-- Tagesgrenzen-Cut im inkrementellen Import (kein Datenverlust an der Tagesgrenze;
-  ein Tag erscheint erst nach Abschluss), Bot-/Crawler-Filter (`SM_BOT_FILTER`),
-  IPv6-robustes Parsing (Land `??`), Statuscode-Panel zeigt 4xx/5xx,
-  Edge/Opera-Erkennung, verankerte Referrer-Heuristik, `SM_TZ` fuer Besuchszeiten,
-  konfigurierbare Download-Endungen (`SM_DOWNLOAD_RE`).
-- Container gehaertet (non-root UID 10001, readOnlyRootFilesystem-tauglich),
-  vollstaendige k8s-Manifeste (`ingestion/scheduling/k8s/`), GHCR-Image-Workflow.
+### Changed (Ingestion, package A)
+- Day-boundary cut in the incremental import (no data loss at the day
+  boundary; a day only appears once complete), bot/crawler filter
+  (`SM_BOT_FILTER`), IPv6-robust parsing (country `??`), status-code panel
+  shows 4xx/5xx, Edge/Opera detection, anchored referrer heuristic, `SM_TZ`
+  for visit times, configurable download extensions (`SM_DOWNLOAD_RE`).
+- Container hardened (non-root UID 10001, readOnlyRootFilesystem-capable),
+  complete k8s manifests (`ingestion/scheduling/k8s/`), GHCR image workflow.
 
 ## 1.2.0 (2026-07-03)
 
-### Sicherheit
-- **Mandantentrennung benutzerbezogen**: Site-Sichtbarkeit folgt dem TYPO3-Webmount-
-  Modell (`SiteSelector::allowedSiteIds()`); ein Benutzer ohne Webmount auf eine
-  gemappte Site sieht deren Analytics nicht mehr. Leere Berechtigungsmenge wird nicht
-  mit "kein Mapping konfiguriert" verwechselt (kein Rueckfall auf "alle Sites").
-- **Ajax-Route erbt Modul-Berechtigung** (`inheritAccessFromModule`): Backend-Benutzer
-  ohne das Modul `web_sightmetrics` erhalten 403.
-- **CSV-Export gegen Formel-Injection gehaertet** (fuehrende `=`/`+`/`-`/`@`
-  entschaerft); technische Fehlermeldungen nur noch fuer Admins; Error-Logging via
-  `LoggerAwareInterface`.
+### Security
+- **User-based tenant separation**: site visibility follows the TYPO3
+  webmount model (`SiteSelector::allowedSiteIds()`); a user without a
+  webmount on a mapped site no longer sees that site's analytics. An empty
+  permission set is no longer confused with "no mapping configured" (no
+  fallback to "all sites").
+- **Ajax route inherits module permission** (`inheritAccessFromModule`):
+  backend users without the `web_sightmetrics` module get a 403.
+- **CSV export hardened against formula injection** (leading `=`/`+`/`-`/`@`
+  neutralized); technical error messages now only shown to admins; error
+  logging via `LoggerAwareInterface`.
 
-### Neu
-- **Serverseitiges Top-N + Nachladen** fuer alle hochkardinalen Barlisten (Suchbegriffe,
-  Einstiegs-/Ausstiegsseiten, Downloads, Statuscodes, HTTP-Methoden, Browser, OS,
-  Geraetetyp, Referrer): initial nur Top-8 (Referrer-URLs: 10) im Payload; "+ N weitere"
-  und Drill-down-Kinder (Browser-Version usw.) werden per Ajax-Route
-  `ajax_sightmetrics_topn` nachgeladen (`TopNAjaxController`, `TopNDims`-Whitelists,
-  `CubeRepository::topN()`/`dimSummary()` mit `parentKey`-Praefixfilter).
-- **Seitenbaum serverseitig segmentiert + lazy**: `CubeRepository::urlTree()` extrahiert
-  Pfad-Segmente mit Unterbaum-Summen direkt in SQL (portable SUBSTR/INSTR, MariaDB +
-  SQLite); Initial-Payload enthaelt zwei Ebenen (Top-8 je Ebene), tiefere Aeste und
-  "+ N weitere" laedt die Ajax-Route `ajax_sightmetrics_tree` nach
-  (`TreeAjaxController`). Die `url`-Zeilen stehen damit nicht mehr komplett im Payload.
-  Gemeinsame Site-Zugriffspruefung beider Ajax-Endpunkte in `AjaxSiteGuard` gebuendelt.
-- **Query-Caching**: Cube-DB-Reads laufen ueber den TYPO3-Cache `sight_metrics`
-  (Extension-Konfiguration `cacheLifetime`, Default 60 s, 0 = aus). Betrieb: Cache-GC
-  einrichten, siehe Handbuch "Bekannte Grenzen".
-- **CLI `sightmetrics:health`**: Datenaktualitaet je Site, Nagios-kompatible Exit-Codes,
-  optional JSON (Monitoring-Agenten). Validiert `--crit-hours >= --warn-hours`.
-- **JS-Smoke-Test** (`Tests/JavaScript/`, node:test + jsdom) inkl. Top-N-/Drill-down-
-  Nachladen; neue Test-Stufe 2d in `run-tests.sh`.
+### New
+- **Server-side Top-N + lazy loading** for all high-cardinality bar lists
+  (search terms, entry/exit pages, downloads, status codes, HTTP methods,
+  browser, OS, device type, referrer): only the top 8 (referrer URLs: 10)
+  are in the initial payload; "+ N more" and drill-down children (browser
+  version etc.) are lazy-loaded via the Ajax route `ajax_sightmetrics_topn`
+  (`TopNAjaxController`, `TopNDims` whitelists,
+  `CubeRepository::topN()`/`dimSummary()` with `parentKey` prefix filter).
+- **Server-side segmented + lazy page tree**: `CubeRepository::urlTree()`
+  extracts path segments with subtree sums directly in SQL (portable
+  SUBSTR/INSTR, MariaDB + SQLite); the initial payload contains two levels
+  (top 8 per level), deeper branches and "+ N more" are lazy-loaded via the
+  Ajax route `ajax_sightmetrics_tree` (`TreeAjaxController`). The `url` rows
+  are therefore no longer fully present in the payload. The shared
+  site-access check for both Ajax endpoints is bundled in `AjaxSiteGuard`.
+- **Query caching**: cube DB reads go through the TYPO3 cache
+  `sight_metrics` (extension configuration `cacheLifetime`, default 60s, 0 =
+  off). Operations: set up cache GC, see the handbook's "Known limitations".
+- **CLI `sightmetrics:health`**: data freshness per site, Nagios-compatible
+  exit codes, optional JSON (monitoring agents). Validates `--crit-hours >=
+  --warn-hours`.
+- **JS smoke test** (`Tests/JavaScript/`, node:test + jsdom) including
+  Top-N/drill-down lazy loading; new test stage 2d in `run-tests.sh`.
 
-### Geaendert
-- **Diagramm-Bibliothek**: Apache ECharts (Apache-2.0) ersetzt durch
-  [Chart.js](https://www.chartjs.org/) (MIT) fuer Verlaufs- und Stundendiagramm.
-- **Besucherkarte**: statt des ECharts-Kartentyps (bzw. des zunaechst getesteten,
-  aber nicht ausgereiften `chartjs-chart-geo`-Plugins) kommt jetzt
-  [Leaflet](https://leafletjs.com/) (BSD-2-Clause) mit `L.geoJSON`-Choroplethen-Styling
-  zum Einsatz.
-- Grund: Apache-2.0 haette bei Einbindung in ein GPLv2-Projekt eine Lizenzpruefung
-  noetig gemacht (GPLv3-Aufwaertskompatibilitaet der Extension war zwar gegeben, aber
-  MIT/BSD-2-Clause sind unabhaengig von der GPL-Version des Zielprojekts unproblematisch
-  einzubinden).
-- **Weltkarten-Geodaten** (`world.js`) durch verifizierte Quelle ersetzt (Natural Earth
-  via [world-atlas](https://github.com/topojson/world-atlas) 2.0.2, public domain;
-  Herkunft/Pruefsummen in `NOTICE.md`).
-- **Vendor-Bezug ueber npm mit Versions-Pinning** (`package.json`/`package-lock.json`,
-  `npm run vendor:update`) statt Ad-hoc-`curl`; REUSE-konforme Lizenzstruktur
-  (`LICENSES/`, `REUSE.toml`, `LICENSE`).
+### Changed
+- **Charting library**: Apache ECharts (Apache-2.0) replaced by
+  [Chart.js](https://www.chartjs.org/) (MIT) for the trend and hourly
+  charts.
+- **Visitor map**: instead of the ECharts map type (or the initially tested
+  but not mature `chartjs-chart-geo` plugin), [Leaflet](https://leafletjs.com/)
+  (BSD-2-Clause) is now used with `L.geoJSON` choropleth styling.
+- Reason: bundling Apache-2.0 into a GPLv2 project would have required a
+  license review (the extension's GPLv3 upward compatibility was in place,
+  but MIT/BSD-2-Clause can be bundled without issue regardless of the target
+  project's GPL version).
+- **World map geodata** (`world.js`) replaced with a verified source (Natural
+  Earth via [world-atlas](https://github.com/topojson/world-atlas) 2.0.2,
+  public domain; provenance/checksums in `NOTICE.md`).
+- **Vendor assets sourced via npm with version pinning**
+  (`package.json`/`package-lock.json`, `npm run vendor:update`) instead of
+  ad-hoc `curl`; REUSE-compliant license structure (`LICENSES/`,
+  `REUSE.toml`, `LICENSE`).
 
 ## 1.1.0
-- Siehe Git-Historie.
+- See git history.

@@ -1,36 +1,36 @@
-# Scheduling & Betrieb – SightMetrics Ingestion
+# Scheduling & operations – SightMetrics ingestion
 
-Betriebsmodell: **nächtlicher Wegwerf-Container.** Ein externer Scheduler
-(Kubernetes-CronJob, Docker-/Compose-Scheduler oder Host-Cron) startet den
-Container kurz, er importiert alle Sites (`run_all.sh`) und beendet sich wieder.
-Es läuft **kein systemd** im Container – Planung, Neustart und Alarm auf Exit-Code
-übernimmt der Scheduler.
+Operating model: **nightly disposable container.** An external scheduler
+(Kubernetes CronJob, Docker/Compose scheduler, or host cron) starts the
+container briefly, it imports all sites (`run_all.sh`), and exits again. No
+**systemd** runs inside the container — scheduling, restart, and alerting on
+exit code are the scheduler's job.
 
-## Pflicht: State persistent halten
+## Required: keep state persistent
 
-`run_all.sh`/`load_cube.sh` merken sich pro Site den Byte-Offset im `STATE_DIR`.
-Ist dieser **nicht** auf einem persistenten Volume, importiert jeder Lauf das
-komplette Log neu. Also immer ein Volume mounten:
+`run_all.sh`/`load_cube.sh` remember the byte offset per site in
+`STATE_DIR`. If this is **not** on a persistent volume, every run re-imports
+the entire log. Always mount a volume:
 
 ```
-STATE_DIR=/state   ->   Volume/PVC auf /state
+STATE_DIR=/state   ->   volume/PVC at /state
 ```
 
-## DSN als Laufzeit-Secret
+## DSN as a runtime secret
 
-Niemals in das Image backen. Zur Laufzeit injizieren:
+Never bake it into the image. Inject it at runtime:
 
 ```bash
-# Datei-Variante (empfohlen): CUBE_DSN_FILE zeigt auf ein gemountetes Secret
+# File variant (recommended): CUBE_DSN_FILE points to a mounted secret
 CUBE_DSN_FILE=/run/secrets/cube_dsn
-# oder direkt
+# or directly
 CUBE_DSN="host=db port=3306 user=cube_rw password=… database=analytics"
 ```
 
-## Nächtlicher Import (Beispiele)
+## Nightly import (examples)
 
 ```bash
-# Docker (one-shot), State- und Log-Volume + Secret + Alarm-Kanal
+# Docker (one-shot), state and log volume + secret + alert channel
 docker run --rm \
   -v sightmetrics_state:/state \
   -v /var/log/access:/logs:ro \
@@ -40,71 +40,74 @@ docker run --rm \
   sightmetrics-ingestion run_all.sh
 ```
 
-## Kubernetes (vollständige Manifeste)
+## Kubernetes (complete manifests)
 
-Copy-paste-fähige, „restricted"-PSS-konforme Manifeste liegen in
+Copy-paste-ready, "restricted" PSS-compliant manifests are in
 [`k8s/`](k8s/):
 
-| Datei | Inhalt |
+| File | Content |
 |---|---|
-| `cronjob.yaml` | CronJob inkl. `securityContext`, `resources`, allen Volumes (State-PVC, Log-Volume, sites.conf-ConfigMap, DSN-Secret, Geo-Volume, /tmp-emptyDir) |
-| `pvc-state.yaml` | Pflicht-PVC für den Offset-State |
-| `secret-cube-dsn.example.yaml` | DSN-Secret (Vorlage) |
-| `configmap-sites.example.yaml` | sites.conf als ConfigMap (Vorlage) |
+| `cronjob.yaml` | CronJob including `securityContext`, `resources`, all volumes (state PVC, log volume, sites.conf ConfigMap, DSN secret, geo volume, /tmp emptyDir) |
+| `pvc-state.yaml` | Required PVC for the offset state |
+| `secret-cube-dsn.example.yaml` | DSN secret (template) |
+| `configmap-sites.example.yaml` | sites.conf as a ConfigMap (template) |
 
-Wichtige Betriebs-Punkte:
+Key operational points:
 
-- **Non-root & read-only**: das Image läuft als UID 10001 mit
-  `readOnlyRootFilesystem: true`; beschreibbar sind nur `/state` (PVC) und
-  `/tmp` (emptyDir). Die DuckDB-MySQL-Extension ist ins Image gebacken
-  (kein Laufzeit-Download).
-- **`concurrencyPolicy: Forbid`** ergänzt das `flock` der Skripte auf
-  Scheduler-Ebene. **Achtung NFS:** `flock` ist auf NFS-basierten PVCs
-  unzuverlässig – für `/state` Block-Storage (RWO) verwenden.
-- **Image per Digest pinnen**: `ghcr.io/<org>/sightmetrics-ingestion@sha256:…`
-  – den Digest liefert der CI-Workflow `.github/workflows/image.yml`
-  (baut/pusht bei `v*`-Tags nach GHCR).
-- **GeoIP-Datensatz** ist nicht im Image (lizenzpflichtig, Runbook §3a):
-  als Volume mounten und `SM_GEO_PATH` setzen.
-- **Logs**: entweder als read-only Volume mounten – oder ganz ohne Log-Volume
-  über Loki importieren (`fetch_loki_logs.sh`).
+- **Non-root & read-only**: the image runs as UID 10001 with
+  `readOnlyRootFilesystem: true`; only `/state` (PVC) and `/tmp` (emptyDir)
+  are writable. The DuckDB MySQL extension is baked into the image (no
+  runtime download).
+- **`concurrencyPolicy: Forbid`** complements the scripts' `flock` at the
+  scheduler level. **NFS caveat:** `flock` is unreliable on NFS-based PVCs —
+  use block storage (RWO) for `/state`.
+- **Pin the image by digest**: `ghcr.io/<org>/sightmetrics-ingestion@sha256:…`
+  — the digest comes from the CI workflow `.github/workflows/image.yml`
+  (builds/pushes to GHCR on `v*` tags).
+- **GeoIP dataset** is not in the image (license-restricted, runbook §3a):
+  mount it as a volume and set `SM_GEO_PATH`.
+- **Logs**: either mount as a read-only volume — or import entirely without
+  a log volume via Loki (`fetch_loki_logs.sh`).
 
-**Tagesgrenze:** Der Import hält Zeilen des noch laufenden Tages (UTC) zurück
-und importiert einen Tag erst, wenn er abgeschlossen ist (Runbook §8). Beim
-nächtlichen Lauf erscheint also jeweils der **komplette Vortag** – mehrere
-Läufe pro Tag sind dadurch ebenfalls sicher (kein Überschreiben von Teil-Tagen).
+**Day boundary:** the import holds back lines from the still-running day
+(UTC) and only imports a day once it's complete (runbook §8). A nightly run
+therefore always shows the **complete previous day** — multiple runs per day
+are safe as a result (no overwriting of partial days).
 
-**Exit-Code:** `run_all.sh` endet mit ≠0, wenn mind. eine Site fehlschlägt →
-der Scheduler (CronJob/`backoffLimit`, Cron-MAILTO) meldet das. Zusätzlich ruft
-`run_all.sh` bei Fehlern **inline `notify.sh`** auf (E-Mail/Webhook), sofern
-`ALERT_EMAIL`/`ALERT_WEBHOOK` gesetzt sind (sonst No-op). Siehe Runbook §12.
+**Exit code:** `run_all.sh` exits ≠0 if at least one site fails → the
+scheduler (CronJob/`backoffLimit`, cron MAILTO) reports this. `run_all.sh`
+also calls `notify.sh` **inline** on failure (email/webhook) if
+`ALERT_EMAIL`/`ALERT_WEBHOOK` are set (no-op otherwise). See runbook §12.
 
-## Freshness-Monitoring (lief der Import überhaupt?)
+## Freshness monitoring (did the import even run?)
 
-Aus der **dauerhaft laufenden** TYPO3-Instanz prüfen – nicht aus dem Wegwerf-Container:
+Check from the **continuously running** TYPO3 instance — not from the
+disposable container:
 
 ```bash
 vendor/bin/typo3 sightmetrics:health --warn-hours=26 --crit-hours=50 --json
 # Exit 0=OK, 1=WARNING, 2=CRITICAL, 3=UNKNOWN
 ```
 
-Per TYPO3-Scheduler oder externem Monitoring (z. B. Uptime-Check) takten.
+Schedule via the TYPO3 scheduler or external monitoring (e.g. an uptime
+check).
 
-## Retention/Purge & Backup (gelegentlich)
+## Retention/purge & backup (occasional)
 
-Kein eigener Daueranbieter nötig – als separater Scheduler-Job (z. B. monatlich):
+No dedicated always-on service needed — run as a separate scheduled job
+(e.g. monthly):
 
 ```bash
-# Rollback-Punkt sichern, dann alte Daten löschen
+# Save a rollback point, then delete old data
 BACKUP_DIR=/state/backups CUBE_DSN_FILE=/run/secrets/cube_dsn ./backup_cube.sh
 RETENTION_MONTHS=12 CUBE_DSN_FILE=/run/secrets/cube_dsn ./purge_cube.sh
 ```
 
-> Hinweis: Liegt der Cube in **eurer** MariaDB, die ohnehin gesichert wird, ist
-> `backup_cube.sh` nur als gezielter Rollback-Punkt vor dem Purge nötig – das
-> reguläre DB-Backup deckt den Cube bereits ab.
+> Note: if the cube lives in **your** MariaDB, which is backed up anyway,
+> `backup_cube.sh` is only needed as a targeted rollback point before the
+> purge — the regular DB backup already covers the cube.
 
-## Secrets-Rotation (bei Bedarf, manuell/orchestriert)
+## Secret rotation (as needed, manual/orchestrated)
 
 ```bash
 CUBE_DSN_FILE=/etc/sightmetrics/cube_dsn.env \
@@ -112,4 +115,4 @@ CUBE_DSN_FILE=/etc/sightmetrics/cube_dsn.env \
   ./rotate_cube_secret.sh
 ```
 
-Siehe Runbook §6 (Secrets-Rotation) und §10 (Concurrency/Parallelität).
+See runbook §6 (secret rotation) and §10 (concurrency/parallelization).

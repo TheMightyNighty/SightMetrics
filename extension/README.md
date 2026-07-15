@@ -1,94 +1,96 @@
-# Paket B – TYPO3-Reporting-Extension `sight_metrics`
+# Package B – TYPO3 reporting extension `sight_metrics`
 
-Das **TYPO3-Backend-Modul „Logauswertung"** (TYPO3 v13.4 LTS / v14). Es liest die
-vorberechneten Auswertungsdaten (den „Cube") aus der MariaDB und stellt sie als
-interaktives Dashboard dar – Diagramme, Barlisten mit Drill-down, Weltkarte und
-Seitenbaum. Vollständig lokalisiert (Englisch/Deutsch).
+The **TYPO3 backend module "Web Analytics"** (TYPO3 v13.4 LTS / v14). It
+reads the precomputed analytics data (the "cube") from MariaDB and renders it
+as an interactive dashboard — charts, drill-down bar lists, world map, and
+page tree. Fully localized (English/German).
 
-Diese Extension ist der **Lese-Teil** von SightMetrics. Sie enthält **kein**
-DuckDB und schreibt **nichts** in die Datenbank: Sie greift ausschließlich
-**read-only** (DB-User `report_ro`, nur `SELECT`) auf den Cube zu, den
-[Paket A (`ingestion/`)](../ingestion/README.md) befüllt. → Gesamtüberblick:
-[Repo-README](../README.md).
+This extension is the **read side** of SightMetrics. It contains **no**
+DuckDB and writes **nothing** to the database: it accesses the cube
+**read-only** (DB user `report_ro`, `SELECT` only), populated by
+[package A (`ingestion/`)](../ingestion/README.md). → Overall overview:
+[repo README](../README.md).
 
-![SightMetrics Backend-Modul „Logauswertung"](typo3-Logauswertung.png)
-
----
-
-## Was das Modul zeigt
-
-- **KPI-Leiste:** Besuche, eindeutige Besucher, Seitenaufrufe, Absprungrate, Bandbreite
-- **Verlauf** über die Zeit (Seitenaufrufe / Besuche / eindeutige Besucher)
-- **Besucherkarte** (Choropleth-Weltkarte) und **Länder**-Liste
-- **Besuchszeiten** nach Stunde
-- **Browser / Betriebssystem / Gerätetyp** mit **Drill-down** in Versionen bzw. Modelle
-- **Akquise:** Referrer-Typen, Referrer-URLs, Suchbegriffe
-- **Verhalten:** Seitenbaum-Drill-down, Ein-/Ausstiegsseiten
-- **Downloads, Statuscodes, HTTP-Methoden**
-- **Zeitraum-Auswahl** (Matomo-artiges Dropdown: relativ / Kalender / einzelne Jahre /
-  benutzerdefiniert), **Perioden-Vergleich**, **CSV-/PDF-Export**, **Dark Mode**
-- **Site-Auswahl** bei Multi-Site-Betrieb
-
-> Hinweis im Screenshot-Footer: Eindeutige Besucher über einen Mehrtages-Zeitraum
-> sind als Summe der Tageswerte angenähert (additiv nicht exakt); Tageswerte sind
-> exakt. Alle Daten kommen read-only aus dem Cube.
+![SightMetrics backend module "Web Analytics"](typo3-Logauswertung.png)
 
 ---
 
-## Aufbau
+## What the module shows
+
+- **KPI bar:** visits, unique visitors, pageviews, bounce rate, bandwidth
+- **Trend** over time (pageviews / visits / unique visitors)
+- **Visitor map** (choropleth world map) and **country** list
+- **Visit times** by hour
+- **Browser / OS / device type** with **drill-down** into versions/models
+- **Acquisition:** referrer types, referrer URLs, search terms
+- **Behavior:** page-tree drill-down, entry/exit pages
+- **Downloads, status codes, HTTP methods**
+- **Time range selector** (Matomo-style dropdown: relative / calendar /
+  individual years / custom), **period comparison**, **CSV/PDF export**,
+  **dark mode**
+- **Site selector** for multi-site setups
+
+> Note in the screenshot footer: unique visitors over a multi-day range are
+> approximated as the sum of the daily values (not additive-exact); daily
+> values are exact. All data comes read-only from the cube.
+
+---
+
+## Structure
 
 ```
 extension/
-├── README.md                  diese Datei
-├── lint.sh                    Linting: PHPStan level max + strict-rules + TYPO3 Coding Standards
-├── run-tests.sh               Test-Runner (Unit / Functional / Smoke)
-└── sight_metrics/             Composer-Paket  sightmetrics/sight-metrics
-    (im Demo-Stack per Bind-Mount live als packages/sight_metrics eingebunden,
-     siehe demo/docker-compose.yml – kein Deploy-/Sync-Schritt nötig)
+├── README.md                  this file
+├── lint.sh                    linting: PHPStan level max + strict-rules + TYPO3 coding standards
+├── run-tests.sh               test runner (unit / functional / smoke)
+└── sight_metrics/             composer package  sightmetrics/sight-metrics
+    (bind-mounted live as packages/sight_metrics in the demo stack,
+     see demo/docker-compose.yml – no deploy/sync step needed)
     ├── Classes/
-    │   ├── Controller/        DashboardController  (baut das Modul-Payload)
-    │   ├── Domain/Repository/ CubeRepository       (read-only SELECTs auf cube/daily/meta)
-    │   ├── Support/           SiteSelector, WindowResolver (Zeitfenster), ErrorPage
-    │   └── Command/           Health-/Smoke-Commands
-    ├── Configuration/         Backend-Modul-Registrierung, Services, Icons
-    ├── Resources/             Fluid-Template, CSS, JavaScript (native ES-Module),
-    │                          Vendor: Chart.js + Leaflet + Weltkarten-Daten, XLF (en/de)
-    ├── ext_conf_template.txt  Extension-Konfiguration (Fehlerseitentext, showTechnical, windowDays, cacheLifetime)
-    └── Tests/                 Unit + Functional (SQLite) + Contract (echte MariaDB) + JavaScript (jsdom)
+    │   ├── Controller/        DashboardController  (builds the module payload)
+    │   ├── Domain/Repository/ CubeRepository       (read-only SELECTs against cube/daily/meta)
+    │   ├── Support/           SiteSelector, WindowResolver (time window), ErrorPage
+    │   └── Command/           health/smoke commands
+    ├── Configuration/         backend module registration, services, icons
+    ├── Resources/             Fluid template, CSS, JavaScript (native ES modules),
+    │                          vendor: Chart.js + Leaflet + world map data, XLF (en/de)
+    ├── ext_conf_template.txt  extension configuration (error-page text, showTechnical, windowDays, cacheLifetime)
+    └── Tests/                 unit + functional (SQLite) + contract (real MariaDB) + JavaScript (jsdom)
 ```
 
 ---
 
-## Installation & Konfiguration (Kurzfassung)
+## Installation & configuration (short version)
 
-1. **Paket einbinden** – als Composer-Paket `sightmetrics/sight-metrics` (im Demo als
-   path-Repository eingebunden).
-2. **Cube-Connection** `cube` konfigurieren (Doctrine-Connection in `additional.php`),
-   zeigend auf die Cube-DB mit dem **read-only**-User `report_ro`.
-3. **TYPO3-Site → Cube-Site zuordnen** über `sightmetrics_site_id` in der
-   Site-Konfiguration (siehe Multi-Site im Repo-README).
-4. Modul im Backend unter **Web → „Logauswertung"** öffnen.
+1. **Include the package** — as the composer package
+   `sightmetrics/sight-metrics` (included as a path repository in the demo).
+2. **Configure the `cube` connection** (Doctrine connection in
+   `additional.php`), pointing at the cube DB with the **read-only** user
+   `report_ro`.
+3. **Map the TYPO3 site to a cube site** via `sightmetrics_site_id` in the
+   site configuration (see multi-site in the repo README).
+4. Open the module in the backend under **Web → "Web Analytics"**.
 
-> **Version 2.x** benötigt Cube-**Schema v2**. Wer von einer älteren Ingestion
-> kommt, migriert die Cube-DB einmalig mit
-> `ingestion/migrations/v1_to_v2.sql` (idempotent) oder importiert neu –
-> Details in [`docs/SCHEMA.md`](../docs/SCHEMA.md). Das Modul meldet eine
-> inkompatible Version mit klarem Hinweis.
+> **Version 2.x** requires cube **schema v2**. If you're coming from an
+> older ingestion, migrate the cube DB once with
+> `ingestion/migrations/v1_to_v2.sql` (idempotent) or re-import — details in
+> [`docs/SCHEMA.md`](../docs/SCHEMA.md). The module reports an incompatible
+> version with a clear message.
 
-Die vollständige Anleitung – Installation, Connection, Site-Mapping, Fehlerseite,
-Versionsmatrix, Architektur, Troubleshooting – steht im
-**[Extension-Handbuch](../docs/extension-handbuch.md)**.
+The full guide — installation, connection, site mapping, error page, version
+matrix, architecture, troubleshooting — is in the
+**[extension handbook](../docs/extension-handbuch.md)**.
 
 ---
 
-## Entwicklung
+## Development
 
 ```bash
-./lint.sh                 # PHPStan (level max + strict-rules) + TYPO3 Coding Standards
-./run-tests.sh            # Unit-, Functional- (SQLite), Smoke-, Contract- und JS-Tests
+./lint.sh                 # PHPStan (level max + strict-rules) + TYPO3 coding standards
+./run-tests.sh            # unit, functional (SQLite), smoke, contract, and JS tests
 ```
 
-Die Extension ist offen für **TYPO3 v13.4 LTS und v14**, PHP 8.2–8.4. Im Backend-Modul
-kommt [Chart.js](https://www.chartjs.org/) (MIT-Lizenz) für Verlaufs-/Balkendiagramme und
-[Leaflet](https://leafletjs.com/) (BSD-2-Clause) für die Besucherkarte (Choropleth via
-`L.geoJSON`) zum Einsatz.
+The extension supports **TYPO3 v13.4 LTS and v14**, PHP 8.2–8.4. The backend
+module uses [Chart.js](https://www.chartjs.org/) (MIT license) for the
+trend/bar charts and [Leaflet](https://leafletjs.com/) (BSD-2-Clause) for the
+visitor map (choropleth via `L.geoJSON`).

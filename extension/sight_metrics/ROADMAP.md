@@ -1,9 +1,10 @@
 # Roadmap
 
-Offene Punkte (Stand 2026-07-03). Behobene Findings wurden entfernt — Details zu
-abgeschlossenen Themen stehen in `CHANGELOG.md` (Version 1.2.0) und der Git-Historie.
-Zuletzt abgeschlossen: alle 12 Findings der Projektpruefung vom 2026-07-02 (zweiter
-Durchgang) sowie das Seitenbaum-Nachladen (2026-07-03) — damit haengt kein Dashboard-
-Panel mehr an der vollstaendigen Zeilenmenge einer hochkardinalen Dimension.
+Open items (as of 2026-07-03). Resolved findings have been removed — details
+on completed topics are in `CHANGELOG.md` (version 1.2.0) and the git
+history. Most recently completed: all 12 findings from the 2026-07-02 project
+review (second pass) as well as lazy-loading the page tree (2026-07-03) —
+no dashboard panel now depends on the full row set of a high-cardinality
+dimension anymore.
 
-*Aktuell keine offenen Punkte.*
+*No open items at the moment.*
