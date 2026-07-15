@@ -28,6 +28,13 @@ final class CubeContractTest extends FunctionalTestCase
     private const FROM = '2026-01-01';
     private const TO = '2026-01-31';
 
+    // Matomo path (docs/matomo-import.md): frozen real-Matomo fixture,
+    // ingestion/tests/matomo_fixture/, imported as this site by
+    // tests/contract/run.sh via matomo_to_cube.sql + sink_mysql.sql directly
+    // (no live Matomo instance needed -- see the fixture's README.md).
+    private const MATOMO_SITE_ID = 991;
+    private const MATOMO_DATE = '2026-06-01';
+
     protected array $testExtensionsToLoad = [];
 
     protected function setUp(): void
@@ -141,5 +148,57 @@ final class CubeContractTest extends FunctionalTestCase
         // [von,bis] after clamping, so all of them "match" here by construction.)
         $unsupported = $repo->topN(self::SITE_ID, $von, $bis, 'referrer_type', 'v', 10, 0, null, 'bogus-window');
         self::assertSame($liveRoot, $unsupported, 'Unbekanntes Fenster-Label darf nur auf live zurueckfallen, nie falsche Daten liefern');
+    }
+
+    /**
+     * Matomo import path contract (docs/matomo-import.md): the frozen fixture
+     * (ingestion/tests/matomo_fixture/, real Matomo 5.12.0 output for a
+     * 5-request/3-visitor seed log) must read back through CubeRepository
+     * with the expected values -- and specifically confirms the country
+     * dimkey is the ISO-2 code ('US'), never Matomo's display name
+     * ("United States"), surviving the full sink + reader round trip, not
+     * just the DuckDB-only check in ingestion/tests/matomo_pipeline_test.sql.
+     */
+    public function testMatomoContractFixtureRoundTrip(): void
+    {
+        $repo = $this->repo();
+
+        $sites = $repo->sites([self::MATOMO_SITE_ID]);
+        self::assertCount(1, $sites, 'Matomo-Fixture-Site 991 muss in meta stehen');
+
+        $meta = $repo->meta(self::MATOMO_SITE_ID);
+        self::assertSame(5, (int)$meta['pageviews_total']);
+        self::assertSame(3, (int)$meta['visits_total']);
+        self::assertSame(3, (int)$meta['uniques_total']);
+        self::assertSame(1, (int)$meta['bounces_total']);
+        self::assertSame(0, (int)$meta['bytes_total'], 'Matomo trackt keine Bandbreite');
+
+        $daily = $repo->daily(self::MATOMO_SITE_ID, self::MATOMO_DATE, self::MATOMO_DATE);
+        self::assertSame(5, array_sum(array_map(static fn(array $d): int => (int)$d['pageviews'], $daily)));
+        self::assertSame(3, array_sum(array_map(static fn(array $d): int => (int)$d['visits'], $daily)));
+
+        $urls = $repo->topN(self::MATOMO_SITE_ID, self::MATOMO_DATE, self::MATOMO_DATE, 'url', 'pv', 10);
+        $byUrl = array_column($urls, 'pv', 'dimkey');
+        self::assertSame(3, $byUrl['/a'] ?? null);
+        self::assertSame(1, $byUrl['/b'] ?? null);
+
+        // Country-code fix (docs/matomo-import.md): ISO-2 code, not Matomo's
+        // display-name label.
+        $countries = $repo->topN(self::MATOMO_SITE_ID, self::MATOMO_DATE, self::MATOMO_DATE, 'country', 'v', 10);
+        $byCountry = array_column($countries, 'v', 'dimkey');
+        self::assertSame(2, $byCountry['US'] ?? null, 'country dimkey muss der ISO-2-Code sein, nicht "United States"');
+        self::assertSame(1, $byCountry['AU'] ?? null);
+
+        // Neutral referrer_type keys, mapped from Matomo's own labels
+        // ("Direct Entry", "Search Engines") in matomo_to_cube.sql.
+        $refs = $repo->topN(self::MATOMO_SITE_ID, self::MATOMO_DATE, self::MATOMO_DATE, 'referrer_type', 'v', 10);
+        $byRef = array_column($refs, 'v', 'dimkey');
+        self::assertSame(2, $byRef['direct'] ?? null);
+        self::assertSame(1, $byRef['search'] ?? null);
+
+        // Known gap (docs/matomo-import.md): drill-down children stay empty,
+        // the Matomo path only ever writes root dims (parent always NULL).
+        $browserVersions = $repo->topN(self::MATOMO_SITE_ID, self::MATOMO_DATE, self::MATOMO_DATE, 'browser_version', 'v', 10, 0, 'Chrome');
+        self::assertSame([], $browserVersions, 'browser_version bleibt fuer den Matomo-Pfad leer (dokumentierte Luecke)');
     }
 }

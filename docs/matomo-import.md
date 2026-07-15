@@ -1,87 +1,131 @@
-# Matomo-Altdaten-Import
+# Matomo Legacy-Data Import
 
-Einmaliger Import historischer Analytics-Daten aus einer bestehenden
-**Matomo**-Installation in den SightMetrics-Cube – pro Kundensite, typischerweise
-einmal beim Onboarding („die Kunden wollen ihre alten Daten sehen").
+One-off import of historical analytics data from an existing **Matomo**
+installation into the SightMetrics cube — per customer site, typically once
+during onboarding ("customers want to see their old data").
 
-Der Import nutzt **Matomos Reporting-API** (JSON), nicht die Rohlogs. Damit
-funktioniert er auch dann, wenn die Roh-Trackingdaten in Matomo längst per
-Aufbewahrungsregel gelöscht wurden – die aggregierten Report-Archive bleiben
-erhalten und genau die liefert die API.
+The import uses **Matomo's Reporting API** (JSON), not the raw logs. This
+means it still works even if Matomo's raw tracking data has long since been
+deleted by a retention rule — the aggregated report archives remain, and
+that's exactly what the API returns.
 
 ---
 
-## Verhältnis zum täglichen Log-Import
+## Supported Matomo version
 
-Beide Pfade bestehen **parallel** und schreiben in denselben Cube:
+Tested and supported is exclusively **the current Matomo release** (as of
+this writing: **5.12.0**). Compatibility with older Matomo/Piwik versions is
+deliberately **not** attempted or tested — the customer's Matomo instance
+should be brought up to date within Matomo itself (Matomo's own,
+well-documented update path) before the legacy-data import, rather than us
+maintaining version fallbacks here.
 
-| | Compute-Skript | Treiber | Quelle |
+**Why this matters especially for `browser`/`os`/`device`:** these three
+dimensions use the API methods `DevicesDetection.getBrowsers`,
+`DevicesDetection.getOsFamilies`, `DevicesDetection.getType`. The
+`DevicesDetection` plugin replaced the older `UserSettings.getBrowser`/`getOS`
+endpoints in older Matomo/Piwik versions — on a non-updated legacy
+installation these calls could fail. That wouldn't abort the import (see
+"Error handling" below: individual failing reports degrade to `{}` with a
+`WARN`), but the three dimensions would end up **silently empty** for the
+customer if nobody checks the log — one more reason to update first instead
+of running it and hoping for the best.
+
+---
+
+## Verification
+
+`ingestion/tests/matomo/docker-compose.yml` sets up a disposable Matomo
+instance for verifying the importer against a real Matomo release; see
+`ingestion/tests/matomo_fixture/README.md` for the exact steps
+(installation, seeding, capturing a fixture), to be re-run whenever the
+supported Matomo version is bumped. The frozen, real-output fixture from
+such a run is checked in under `ingestion/tests/matomo_fixture/` and
+covered by two automated tests: `ingestion/tests/matomo_pipeline_test.sql`
+(parsing/mapping, DuckDB-only) and
+`CubeContractTest::testMatomoContractFixtureRoundTrip` (full round trip
+through the real cube DB and `CubeRepository`).
+
+Cross-checking the same input against both the log path and the Matomo path
+shows `daily.visits`/`daily.pageviews`/`daily.bounces` matching exactly;
+`daily.uniques` differs by a small margin (the two systems deduplicate
+unique visitors slightly differently); `referrer_type` can differ by a
+handful of visits for ambiguous referrer domains (the two systems maintain
+independent referrer-classification tables).
+
+---
+
+## Relationship to the daily log import
+
+Both paths run **in parallel** and write into the same cube:
+
+| | Compute script | Driver | Source |
 |---|---|---|---|
-| **Täglicher Betrieb** | `cube_to_mysql.sql` + `transform.sql` | `load_cube.sh` / `run_all.sh` | Webserver-Logs |
-| **Altdaten (einmalig)** | `matomo_to_cube.sql` | `matomo_import.sh` | Matomo Reporting-API |
+| **Daily operation** | `cube_to_mysql.sql` + `transform.sql` | `load_cube.sh` / `run_all.sh` | Web server logs |
+| **Legacy data (one-off)** | `matomo_to_cube.sql` | `matomo_import.sh` | Matomo Reporting API |
 
-Beide erzeugen dieselben TEMP-Tabellen `daily_rows`/`cube_rows` und benutzen
-denselben MariaDB-Sink **`sink_mysql.sql`**. Der Sink ersetzt immer nur den
-**Datumsbereich des aktuellen Batches** (Bereichs-DELETE je `site_id`). Solange
-sich die Zeiträume nicht überschneiden, stören sich die beiden Pfade nicht:
+Both produce the same TEMP tables `daily_rows`/`cube_rows` and use the same
+MariaDB sink **`sink_mysql.sql`**. The sink always only replaces the
+**date range of the current batch** (range-`DELETE` per `site_id`). As long
+as the time ranges don't overlap, the two paths don't interfere:
 
 ```
-   Vergangenheit                      Heute / laufend
-   |-------- Matomo-Import --------|---- täglicher Log-Import ---->
-   2019 ............... gestern        ab Live-Schaltung
+   Past                                Today / ongoing
+   |-------- Matomo import ---------|---- daily log import ---->
+   2019 ................ yesterday      since go-live
 ```
 
-Praxis: Matomo-Import bis zum Tag **vor** Beginn des Log-Imports laufen lassen.
-Überschneiden sich Tage, gewinnt der zuletzt geschriebene Lauf für diese Tage –
-beide Quellen sind für denselben Tag nicht additiv, sondern ersetzend.
+In practice: run the Matomo import up to the day **before** the log import
+starts. If days overlap, the most recently written run wins for those days —
+the two sources are not additive for the same day, they replace each other.
 
 ---
 
-## Voraussetzungen
+## Prerequisites
 
-1. **Matomo-Zugang:** URL der Installation, `idSite` der Quell-Site und ein
-   **Auth-Token** mit **View-Recht** auf diese Site.
+1. **Matomo access:** URL of the installation, the `idSite` of the source
+   site, and an **auth token** with **view rights** on that site.
 
-   > Hinweis: Matomo authentifiziert die API ausschließlich über `token_auth`,
-   > **nicht** über Benutzername/Passwort (der Passwort-→-Token-Endpoint wurde
-   > aus Sicherheitsgründen entfernt). Token erzeugen in Matomo unter
-   > **Administration → Persönlich → Sicherheit → Auth-Tokens**. Ein reines
-   > View-Token genügt.
+   > Note: Matomo authenticates the API exclusively via `token_auth`,
+   > **not** via username/password (the password-to-token endpoint was
+   > removed for security reasons). Create a token in Matomo under
+   > **Administration → Personal → Security → Auth tokens**. A plain view
+   > token is enough.
 
-2. **Cube-DB:** derselbe `CUBE_DSN` wie beim Log-Import (DuckDB-MySQL-DSN).
+2. **Cube DB:** the same `CUBE_DSN` as for the log import (DuckDB MySQL DSN).
 
-3. Das DuckDB-Binary unter `ingestion/bin/duckdb` (wie beim Log-Import).
+3. The DuckDB binary at `ingestion/bin/duckdb` (as for the log import).
 
 ---
 
-## Aufruf
+## Usage
 
 ```bash
 cd ingestion
 
-export MATOMO_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"   # oder MATOMO_TOKEN_FILE
+export MATOMO_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"   # or MATOMO_TOKEN_FILE
 export CUBE_DSN="host=... port=3306 user=cube_rw password=... database=analytics"
 
 ./matomo_import.sh \
   --url https://matomo.example.org \
   --matomo-idsite 7 \
   --site-id 3 \
-  --site-name "Musterbehörde" \
+  --site-name "Sample Authority" \
   --from 2020-01-01 \
   --to   2024-12-31
 ```
 
-| Parameter | Bedeutung |
+| Parameter | Meaning |
 |---|---|
-| `--url` | Basis-URL der Matomo-Installation |
-| `--matomo-idsite` | `idSite` **in Matomo** (Quelle) |
-| `--site-id` | `site_id` **in SightMetrics** (Ziel im Cube) |
-| `--site-name` | Anzeigename (wandert in die `meta`-Tabelle) |
-| `--from` / `--to` | Zeitraum `YYYY-MM-DD` (inklusive) |
-| `--json-dir DIR` | heruntergeladene JSONs behalten (sonst temporär + Auto-Cleanup) |
-| `--dry-run` | nur JSON laden, **nicht** in die DB schreiben (kein `CUBE_DSN` nötig) |
+| `--url` | Base URL of the Matomo installation |
+| `--matomo-idsite` | `idSite` **in Matomo** (source) |
+| `--site-id` | `site_id` **in SightMetrics** (target in the cube) |
+| `--site-name` | Display name (goes into the `meta` table) |
+| `--from` / `--to` | Time range `YYYY-MM-DD` (inclusive) |
+| `--json-dir DIR` | keep the downloaded JSON files (otherwise temporary + auto-cleanup) |
+| `--dry-run` | only load JSON, **don't** write to the DB (no `CUBE_DSN` needed) |
 
-### Secrets als Datei (Docker-Secrets-Pattern)
+### Secrets as a file (Docker secrets pattern)
 
 ```bash
 MATOMO_TOKEN_FILE=/run/secrets/matomo_token \
@@ -90,7 +134,7 @@ CUBE_DSN_FILE=/run/secrets/cube_dsn \
                    --from 2020-01-01 --to 2024-12-31
 ```
 
-### Trockenlauf (Mapping prüfen, JSON ablegen)
+### Dry run (check the mapping, keep the JSON)
 
 ```bash
 ./matomo_import.sh --url https://matomo.example.org --matomo-idsite 7 \
@@ -98,21 +142,21 @@ CUBE_DSN_FILE=/run/secrets/cube_dsn \
   --json-dir /tmp/matomo_check --dry-run
 ```
 
-Legt die Rohantworten unter `/tmp/matomo_check/chunk_N/<dim>.json` ab.
+Stores the raw responses under `/tmp/matomo_check/chunk_N/<dim>.json`.
 
 ---
 
-## Was importiert wird
+## What gets imported
 
 `VisitsSummary.get` → `daily` (visits, pageviews, uniques, bounces).
-Pro Dimension ein Report → `cube` (`pv` ← Pageviews, `v` ← Visits):
+One report per dimension → `cube` (`pv` ← pageviews, `v` ← visits):
 
-| Cube-`dim` | Matomo-API-Methode |
+| Cube `dim` | Matomo API method |
 |---|---|
 | `url` | `Actions.getPageUrls` (`flat=1`) |
 | `entry` / `exit` | `Actions.getEntryPageUrls` / `getExitPageUrls` |
 | `download` | `Actions.getDownloads` |
-| `country` | `UserCountry.getCountry` |
+| `country` | `UserCountry.getCountry` (via the ISO-2 `code` field, not the `label` display name) |
 | `browser` | `DevicesDetection.getBrowsers` |
 | `os` | `DevicesDetection.getOsFamilies` |
 | `device` | `DevicesDetection.getType` |
@@ -120,67 +164,77 @@ Pro Dimension ein Report → `cube` (`pv` ← Pageviews, `v` ← Visits):
 | `keyword` | `Referrers.getKeywords` |
 | `hour` | `VisitTime.getVisitInformationPerLocalTime` |
 
-### Bewusste Lücken (v1)
+### Known gaps (v1)
 
-* **`status`, `method`, `bytes`/Bandbreite:** trackt Matomo nicht → bleiben für
-  historische Tage leer (`bytes`=0). Sind reine Log-Kennzahlen.
-* **Zusammengesetzte Unter-Dimensionen** `browser_version`, `os_version`,
-  `device_model`, `referrer_name`, `referrer_url`: Der Cube speichert deren
-  `dimkey` als `Eltern\x1fKind`; Matomos flache Reports liefern den Eltern-Prefix
-  nicht zuverlässig. Diese Drill-down-Ansichten bleiben für importierte Zeiträume
-  leer; die übergeordneten Dimensionen (browser, os, device, referrer_type) sind
-  vorhanden.
-* **Sprache der Labels:** `referrer_type` trägt die Matomo-Labels (z. B.
-  „Search Engines"), der Log-Pfad nutzt deutsche („Suchmaschine"). Kosmetisch.
+* **`status`, `method`, `bytes`/bandwidth:** Matomo doesn't track these →
+  stay empty for historical days (`bytes`=0). These are pure log-derived
+  metrics.
+* **Composite sub-dimensions** `browser_version`, `os_version`,
+  `device_model`, `referrer_name`, `referrer_url`: the cube stores their
+  `dimkey` as `parent\x1fchild`; Matomo's flat reports don't reliably provide
+  the parent prefix. These drill-down views stay empty for imported
+  historical periods; the parent dimensions (browser, os, device,
+  referrer_type) are present.
+* **Label language:** `referrer_type` carries Matomo's own labels (e.g.
+  "Search Engines"); these are mapped to the contract's neutral keys
+  (`direct`/`search`/`social`/`website`) in `matomo_to_cube.sql`, so this is
+  not actually a display-language gap — just noting the source labels differ
+  from the log path's, in case that mapping ever needs extending for a
+  Matomo referrer type not yet covered.
 
 ---
 
-## Skalierung (Sites mit Millionen Hits/Tag)
+## Scaling (sites with millions of hits/day)
 
-Der Import zieht **Aggregate**, keine Rohzeilen – ein Tag mit 2 Mio. Hits ergibt
-nur so viele Cube-Zeilen wie es distinkte Dimensionswerte gibt. Damit bleibt der
-Ansatz auch über 4–5 Jahre handhabbar.
+The import pulls **aggregates**, not raw rows — a day with 2M hits results in
+only as many cube rows as there are distinct dimension values. That keeps the
+approach manageable even over 4–5 years.
 
-* **Monats-Chunking:** Pro Monat ein API-Call je Report (`period=day` + Range
-  liefert die Tage einzeln gebucketet). 5 Jahre ≈ 60 Chunks × 12 Reports.
-* **`filter_limit`:** High-Cardinality-Dimensionen (`url`, `entry`, `exit`,
-  `keyword`) werden auf **Top-N pro Tag** begrenzt (`FILTER_LIMIT_HIGH`, Default
-  `1000`); Low-Cardinality-Dims (country/browser/os/device/referrer_type/hour)
-  vollständig (`filter_limit=-1`). Anpassen:
+* **Monthly chunking:** one API call per report per month (`period=day` +
+  range returns the days individually bucketed in one call). 5 years ≈ 60
+  chunks × 12 reports.
+* **`filter_limit`:** high-cardinality dimensions (`url`, `entry`, `exit`,
+  `keyword`) are capped to **top-N per day** (`FILTER_LIMIT_HIGH`, default
+  `1000`); low-cardinality dims (country/browser/os/device/referrer_type/hour)
+  are pulled in full (`filter_limit=-1`). Adjust via:
 
   ```bash
   FILTER_LIMIT_HIGH=500 ./matomo_import.sh ...
   ```
 
-* **Archiving:** Trifft ein Call einen in Matomo noch **nicht archivierten**
-  Alt-Zeitraum, archiviert Matomo on-the-fly – bei großen Sites auf dem
-  Matomo-Server spürbar. Historische Zeiträume sind i. d. R. längst archiviert;
-  falls nicht, vorab beim Kunden `./console core:archive` laufen lassen.
+* **Archiving:** if a call hits a historical period Matomo hasn't archived
+  yet, Matomo archives it on the fly — noticeable on the Matomo server for
+  large sites. Historical periods are usually archived already; if not, run
+  `./console core:archive` on the customer's Matomo beforehand.
 
 ---
 
-## Wiederholbarkeit
+## Repeatability
 
-Der Import ist **idempotent**: ein erneuter Lauf für denselben Zeitraum ersetzt
-die betroffenen Tage (Bereichs-DELETE im Sink, dann INSERT) – die Zahlen werden
-**nicht doppelt**, es entstehen keine Duplikate. Ein abgebrochener Lauf kann
-gefahrlos wiederholt werden.
+The import is **idempotent**: re-running it for the same time range replaces
+the affected days (range-`DELETE` in the sink, then `INSERT`) — numbers are
+**not duplicated**. An aborted run can be safely repeated.
 
-Der Matomo-Pfad löscht dabei den **vollen Chunk-Zeitraum** (`range_from`/
-`range_to` = `--from/--to` je Monat), nicht nur die Tage mit zurückgelieferten
-Daten. So werden auch Tage, die in Matomo (inzwischen) leer sind, sauber geleert
-statt mit veralteten Werten stehen zu bleiben.
+The Matomo path deletes the **full chunk range** (`range_from`/`range_to` =
+`--from`/`--to` per month), not just the days that actually returned data.
+That way, days that are (now) empty in Matomo get cleanly cleared instead of
+being left with stale values.
 
-> Quellen sind **ersetzend, nicht additiv:** Überschreibt ein Matomo-Lauf Tage,
-> die schon der Log-Import geschrieben hat, gelten danach die Matomo-Zahlen für
-> diese Tage (kein Aufsummieren). Daher Matomo nur bis zum Tag vor Log-Start.
+> Sources are **replacing, not additive:** if a Matomo run overwrites days
+> the log import already wrote, the Matomo numbers win for those days (no
+> summing). That's why Matomo should only run up to the day before the log
+> import starts.
 
 ---
 
-## Fehlerbehandlung
+## Error handling
 
-* Einzelne fehlschlagende Reports (HTTP-Fehler oder `"result":"error"`) werden zu
-  `{}` degradiert und mit `WARN` geloggt – der Import läuft weiter, die betroffene
-  Dimension bleibt für den Chunk leer. Mit `--json-dir` lassen sich die
-  Rohantworten nachträglich inspizieren.
-* `--dry-run` zum Prüfen von Zugang/Token/Mapping ohne DB-Schreibzugriff.
+* Individual failing reports (HTTP errors or `"result":"error"`) degrade to
+  `{}` and are logged with `WARN` — the import continues, the affected
+  dimension stays empty for that chunk. `--json-dir` lets you inspect the raw
+  responses afterwards.
+* `--dry-run` to check access/token/mapping without DB write access.
+  **Recommended before every real customer import**, in particular to catch
+  the `DevicesDetection` pitfall (see "Supported Matomo version" above)
+  early: check `--json-dir` to see whether `browser.json`/`os.json`/`device.json`
+  contain real data or just `{}` before importing the full range.

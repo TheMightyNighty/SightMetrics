@@ -1,0 +1,43 @@
+# ---------------------------------------------------------------------------
+# Throwaway Matomo instance used to verify ingestion/matomo_import.sh against
+# a real Matomo release (docs/matomo-import.md, "Supported Matomo version").
+#
+# NOT part of the demo stack or CI -- this is a one-off manual verification
+# helper, re-run whenever the supported Matomo version is bumped. Pin the
+# version explicitly (not `latest`) so the verification is reproducible.
+#
+# Usage:
+#   cd ingestion/tests/matomo
+#   docker compose up -d
+#   # ... install Matomo, seed data, create a token_auth, capture the fixture
+#   # (see ingestion/tests/matomo_fixture/README.md for the exact steps) ...
+#   docker compose down -v   # tear down when done, nothing here is persistent-worthy
+# ---------------------------------------------------------------------------
+name: sightmetrics-matomo-verify
+
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: matomo
+      MARIADB_USER: matomo
+      MARIADB_PASSWORD: matomo
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  matomo:
+    image: matomo:5.12.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MATOMO_DATABASE_HOST: db
+      MATOMO_DATABASE_USERNAME: matomo
+      MATOMO_DATABASE_PASSWORD: matomo
+      MATOMO_DATABASE_DBNAME: matomo
+    ports:
+      - "8092:80"

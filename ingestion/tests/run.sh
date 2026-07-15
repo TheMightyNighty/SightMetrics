@@ -23,6 +23,23 @@ else
   echo ">> PIPELINE-TEST: OK"
 fi
 
+# ---- 1.1b Matomo path: matomo_to_cube.sql against a frozen fixture --------
+# Real Matomo 5.12.0 Reporting API responses (docs/matomo-import.md
+# "Verified against a real Matomo instance"), not hand-written -- see
+# tests/matomo_fixture/README.md for provenance/regeneration.
+echo; echo "== Pipeline: matomo_to_cube.sql against fixture =="
+OUT=$(./bin/duckdb <<'SQL'
+SET VARIABLE jsondir = 'tests/matomo_fixture';
+.read 'tests/matomo_pipeline_test.sql'
+SQL
+)
+echo "$OUT"
+if echo "$OUT" | grep -q 'FAIL'; then
+  echo ">> MATOMO-PIPELINE-TEST: FAILED"; fail=1
+else
+  echo ">> MATOMO-PIPELINE-TEST: OK"
+fi
+
 # ---- 1.2 Envsubst: SM_TABLE_* -----------------------------------------------
 echo; echo "== Pipeline: SM_TABLE_* Envsubst =="
 ENVSUBST_TMP=$(mktemp /tmp/sm_envsubst_XXXXXX.sql)
