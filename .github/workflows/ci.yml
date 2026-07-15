@@ -139,11 +139,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # setup.sh ist idempotent + nicht-interaktiv: laedt DuckDB, erzeugt
-      # Beispiel-Log + synthetische Geo-CSV, installiert TYPO3 im Container.
-      - name: Demo-Stack aufbauen
+      - name: DuckDB CLI laden (ingestion/bin/duckdb)
+        working-directory: ingestion
+        run: |
+          mkdir -p bin
+          curl -fsSL -o /tmp/duckdb.zip \
+            https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip
+          unzip -o /tmp/duckdb.zip duckdb -d bin/
+          chmod +x bin/duckdb
+
+      - name: Beispiel-Log + synthetische Geo-CSV erzeugen
+        run: |
+          mkdir -p logs ingestion/geo
+          python3 ingestion/generate_logs.py --clean -n 1000 --days 14 -o logs/example_1k.log
+          python3 ingestion/generate_demo_geo.py -o ingestion/geo/country-ipv4-num.csv
+
+      # entrypoint.sh installiert TYPO3 im web-Container selbst beim Start
+      # (siehe demo/entrypoint.sh) - kein separates Setup-Skript noetig.
+      - name: Demo-Stack starten (db + web)
         working-directory: demo
-        run: ./setup.sh
+        run: docker compose up -d db web
 
       - name: Beispieldaten importieren (2 Sites fuer den Multi-Site-Check)
         working-directory: ingestion

@@ -13,7 +13,7 @@ cd "$(dirname "$0")/../.."   # -> Repo-Root
 fail=0
 
 echo "== Contract: Demo-MariaDB starten =="
-docker compose -f demo/docker-compose.yml up -d db >/dev/null
+docker compose -f demo/docker-compose.yaml up -d db >/dev/null
 until [ "$(docker inspect -f '{{.State.Health.Status}}' sightmetrics-db 2>/dev/null)" = "healthy" ]; do
   sleep 2
 done
@@ -51,7 +51,7 @@ if docker exec \
      -e CONTRACT_DB_HOST=db -e CONTRACT_DB_PORT=3306 \
      -e CONTRACT_DB_USER=report_ro -e CONTRACT_DB_PASS=report_ro -e CONTRACT_DB_NAME=analytics \
      sightmetrics-web bash -c "cd /var/www/html && php vendor/bin/phpunit \
-       -c packages/sight_metrics/phpunit.functional.xml.dist \
+       -c vendor/sightmetrics/sight-metrics/phpunit.functional.xml.dist \
        --bootstrap vendor/typo3/testing-framework/Resources/Core/Build/FunctionalTestsBootstrap.php \
        --filter CubeContractTest"; then
   echo "PASS contract: Ingestion-Zahlen kommen identisch durch CubeRepository an"
