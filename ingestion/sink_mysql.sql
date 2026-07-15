@@ -31,6 +31,15 @@ CREATE TABLE IF NOT EXISTS m.${SM_TABLE_META}  (site_id INTEGER, site VARCHAR, v
                                     visits_total BIGINT, pageviews_total BIGINT, uniques_total BIGINT,
                                     bounces_total BIGINT, bytes_total BIGINT, erzeugt VARCHAR,
                                     schema_version INTEGER, tz VARCHAR);
+-- Top-N precompute (additive, docs/topn-precompute-spec.md): top-100 rows per
+-- site/window/dim(/parent), derived from ${SM_TABLE_CUBE} at import time so
+-- CubeRepository::topN() can serve the common preset windows without a live
+-- GROUP BY over the whole range on high-cardinality dims. Column is named
+-- 'win' not 'window' -- reserved word in both DuckDB and MariaDB (window
+-- functions). parent=NULL rows are the flat root-dim lists (no parent
+-- filter, matches topN()'s behaviour when parentKey is null); parent<>NULL
+-- rows are drill-down children.
+CREATE TABLE IF NOT EXISTS m.${SM_TABLE_TOPN} (site_id INTEGER, win VARCHAR, dim VARCHAR, parent VARCHAR, dimkey VARCHAR, pv BIGINT, v BIGINT, rnk SMALLINT);
 -- Backfill existing DBs (pre schema version); MariaDB understands IF NOT EXISTS.
 CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_META} ADD COLUMN IF NOT EXISTS schema_version INTEGER');
 CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_META} ADD COLUMN IF NOT EXISTS tz VARCHAR(64)');
@@ -49,6 +58,7 @@ CALL mysql_execute('m', 'ALTER TABLE ${SM_TABLE_CUBE} ADD COLUMN IF NOT EXISTS p
 CALL mysql_execute('m', 'CREATE INDEX IF NOT EXISTS sm_dim_datum ON ${SM_TABLE_CUBE} (site_id, dim(32), datum)');
 CALL mysql_execute('m', 'CREATE INDEX IF NOT EXISTS sm_drilldown ON ${SM_TABLE_CUBE} (site_id, dim(32), parent(191), datum)');
 CALL mysql_execute('m', 'CREATE INDEX IF NOT EXISTS sm_daily ON ${SM_TABLE_DAILY} (site_id, datum)');
+CALL mysql_execute('m', 'CREATE INDEX IF NOT EXISTS sm_topn_lookup ON ${SM_TABLE_TOPN} (site_id, dim(32), win(16), parent(191), rnk)');
 
 -- Date range of the batch to be replaced (VARCHAR 'YYYY-MM-DD').
 -- Priority is given to an explicitly set range_from/range_to (the Matomo path
@@ -90,5 +100,78 @@ INSERT INTO m.${SM_TABLE_META}
          COALESCE(NULLIF(getvariable('tz'), ''), 'UTC')
   FROM m.${SM_TABLE_DAILY} WHERE site_id = getvariable('site_id')::INTEGER;
 
+-- ---------------------------------------------------------------------------
+-- Top-N precompute (docs/topn-precompute-spec.md). Recomputed in full for
+-- this site on every import (cheap DELETE+INSERT, same replace pattern as
+-- above) -- windows are anchored on meta.bis (the site's newest complete
+-- day), which mirrors the frontend's anchor() in presets.js (min(today,
+-- meta.bis)): ingestion always lags at least one day behind "today", so
+-- meta.bis IS that clamp target in practice.
+SET VARIABLE meta_von = (SELECT von FROM m.${SM_TABLE_META} WHERE site_id = getvariable('site_id')::INTEGER);
+SET VARIABLE meta_bis = (SELECT bis FROM m.${SM_TABLE_META} WHERE site_id = getvariable('site_id')::INTEGER);
+
+CALL mysql_execute('m', 'DELETE FROM ${SM_TABLE_TOPN} WHERE site_id = ' || getvariable('sid'));
+
+-- One row per supported preset win (docs/topn-precompute-spec.md
+-- "Abgedeckte Fenster"); bounds match presets.js applyPreset() exactly.
+-- wfrom is clamped to meta_von below (a fresh site has less than 365 days).
+CREATE OR REPLACE TEMP TABLE topn_windows AS
+  SELECT * FROM (VALUES
+    ('last30',   CAST(getvariable('meta_bis') AS DATE) - INTERVAL 29 DAY,  CAST(getvariable('meta_bis') AS DATE)),
+    ('last90',   CAST(getvariable('meta_bis') AS DATE) - INTERVAL 89 DAY,  CAST(getvariable('meta_bis') AS DATE)),
+    ('last365',  CAST(getvariable('meta_bis') AS DATE) - INTERVAL 364 DAY, CAST(getvariable('meta_bis') AS DATE)),
+    ('thisyear', date_trunc('year', CAST(getvariable('meta_bis') AS DATE)),
+                 date_trunc('year', CAST(getvariable('meta_bis') AS DATE)) + INTERVAL 1 YEAR - INTERVAL 1 DAY),
+    ('lastyear', date_trunc('year', CAST(getvariable('meta_bis') AS DATE) - INTERVAL 1 YEAR),
+                 date_trunc('year', CAST(getvariable('meta_bis') AS DATE)) - INTERVAL 1 DAY),
+    ('all',      CAST(getvariable('meta_von') AS DATE), CAST(getvariable('meta_bis') AS DATE))
+  ) AS t(win, wfrom, wto);
+
+-- Root dims (TopNDims::ROOT_METRIC_BY_DIM): parent is ignored (topN() with
+-- parentKey=null does not filter on it either -- flat, ungrouped list), so
+-- rows are written with parent=NULL. Metric is 'pv' for download/status/
+-- method, 'v' for the rest (must stay in sync with TopNDims.php).
+CREATE OR REPLACE TEMP TABLE topn_root AS
+  SELECT win, dim, CAST(NULL AS VARCHAR) AS parent, dimkey, pv, v,
+         ROW_NUMBER() OVER (
+           PARTITION BY win, dim
+           ORDER BY (CASE WHEN dim IN ('download', 'status', 'method') THEN pv ELSE v END) DESC
+         ) AS rnk
+  FROM (
+    SELECT tw.win, c.dim, c.dimkey, SUM(c.pv)::BIGINT AS pv, SUM(c.v)::BIGINT AS v
+    FROM topn_windows tw
+    JOIN m.${SM_TABLE_CUBE} c
+      ON c.datum BETWEEN GREATEST(tw.wfrom, CAST(getvariable('meta_von') AS DATE)) AND tw.wto
+    WHERE c.site_id = getvariable('site_id')::INTEGER
+      AND c.dim IN ('keyword', 'entry', 'exit', 'download', 'status', 'method',
+                     'browser', 'os', 'device', 'referrer_type', 'referrer_url')
+      AND c.dimkey <> ''
+    GROUP BY tw.win, c.dim, c.dimkey
+  );
+
+-- Drill-down children (TopNDims::CHILD_METRIC_BY_DIM), all metric 'v':
+-- ranked within each (win, dim, parent) group, so every parent category
+-- (e.g. each browser) gets its own top-100 of children.
+CREATE OR REPLACE TEMP TABLE topn_child AS
+  SELECT tw.win, c.dim, c.parent, c.dimkey, SUM(c.pv)::BIGINT AS pv, SUM(c.v)::BIGINT AS v,
+         ROW_NUMBER() OVER (
+           PARTITION BY tw.win, c.dim, c.parent
+           ORDER BY SUM(c.v) DESC
+         ) AS rnk
+  FROM topn_windows tw
+  JOIN m.${SM_TABLE_CUBE} c
+    ON c.datum BETWEEN GREATEST(tw.wfrom, CAST(getvariable('meta_von') AS DATE)) AND tw.wto
+  WHERE c.site_id = getvariable('site_id')::INTEGER
+    AND c.dim IN ('browser_version', 'os_version', 'device_model', 'referrer_name', 'referrer_url')
+    AND c.parent IS NOT NULL
+    AND c.dimkey <> ''
+  GROUP BY tw.win, c.dim, c.parent, c.dimkey;
+
+INSERT INTO m.${SM_TABLE_TOPN}
+  SELECT getvariable('site_id')::INTEGER, win, dim, parent, dimkey, pv, v, rnk FROM topn_root WHERE rnk <= 100
+  UNION ALL
+  SELECT getvariable('site_id')::INTEGER, win, dim, parent, dimkey, pv, v, rnk FROM topn_child WHERE rnk <= 100;
+
 SELECT 'cube_rows_this_site' k, (SELECT count(*) FROM m.${SM_TABLE_CUBE} WHERE site_id = getvariable('site_id')::INTEGER) n
-UNION ALL SELECT 'sites_total', (SELECT count(DISTINCT site_id) FROM m.${SM_TABLE_META});
+UNION ALL SELECT 'sites_total', (SELECT count(DISTINCT site_id) FROM m.${SM_TABLE_META})
+UNION ALL SELECT 'topn_rows_this_site', (SELECT count(*) FROM m.${SM_TABLE_TOPN} WHERE site_id = getvariable('site_id')::INTEGER);

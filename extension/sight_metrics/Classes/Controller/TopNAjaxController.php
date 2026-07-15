@@ -61,9 +61,14 @@ final class TopNAjaxController implements LoggerAwareInterface
         // dimension per page; beyond 10000 rows the UI is no longer useful anyway.
         $offset = max(0, min(10000, Params::toInt($params['offset'] ?? null)));
         $metric = $metricMap[$dim];
+        // Optional: the preset label the frontend's date range currently matches
+        // (presets.js `w-preset` value), only used to serve the precomputed `topn`
+        // table (docs/topn-precompute-spec.md) -- CubeRepository verifies it against
+        // from/to itself, so an unknown/stale/forged value simply has no effect.
+        $window = Params::toStringOrNull($params['window'] ?? null);
 
         try {
-            $rows = $this->cubeRepository->topN($siteId, $from, $to, $dim, $metric, $limit, $offset, $parentKey);
+            $rows = $this->cubeRepository->topN($siteId, $from, $to, $dim, $metric, $limit, $offset, $parentKey, $window);
             $total = $this->cubeRepository->dimSummary($siteId, $from, $to, $dim, $parentKey);
         } catch (\Throwable $e) {
             $this->logger?->error('SightMetrics: Top-N-Ajax fehlgeschlagen', [

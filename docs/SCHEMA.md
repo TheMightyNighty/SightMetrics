@@ -53,6 +53,25 @@ default `cube`/`daily`/`meta`).
 | `tz` | VARCHAR | Site timezone used for `datum`/`hour` bucketing (`SM_TZ`, e.g. `Europe/Berlin`; since v2) |
 | `schema_version` | INTEGER | Contract version written by the ingestion (since v1; NULL = legacy) |
 
+## `topn` — precomputed Top-N rows (additive, since 2026-07)
+
+Speeds up `CubeRepository::topN()` for the standard preset windows without a
+live `GROUP BY` over the whole range on high-cardinality dims. Fully
+recomputed from `cube` on every import (`sink_mysql.sql`); readers must treat
+missing/stale rows as "not available" and fall back to a live query — this
+table is a cache, not a source of truth. Details:
+`docs/topn-precompute-spec.md`.
+
+| Column | Type | Meaning |
+|---|---|---|
+| `site_id` | INTEGER | |
+| `win` | VARCHAR | one of `last30`, `last90`, `last365`, `thisyear`, `lastyear`, `all` (named `win`, not `window` -- reserved word in DuckDB/MariaDB) |
+| `dim` | VARCHAR | see `cube.dim`; only dims listed in `TopNDims::ROOT_METRIC_BY_DIM`/`CHILD_METRIC_BY_DIM` |
+| `parent` | VARCHAR NULL | `NULL` = flat root-dim list (no parent filter, matches `topN()` with `parentKey=null`); set = drill-down children of that parent value |
+| `dimkey` | VARCHAR | same as `cube.dimkey` |
+| `pv`, `v` | BIGINT | summed over the window |
+| `rnk` | SMALLINT | rank 1..100 within `(win, dim, parent)`, by the dim's fixed metric (`pv` or `v`) |
+
 ## Indexes (additive, no version bump)
 
 The writer creates query indexes for the reader (idempotent,
@@ -65,6 +84,7 @@ time instead):
 | `sm_dim_datum` | `cube (site_id, dim(32), datum)` | all per-panel Top-N/summary queries |
 | `sm_drilldown` | `cube (site_id, dim(32), parent(191), datum)` | drill-down child queries (only possible since the v2 `parent` column) |
 | `sm_daily` | `daily (site_id, datum)` | daily series / KPI window |
+| `sm_topn_lookup` | `topn (site_id, dim(32), win(16), parent(191), rnk)` | Top-N precompute lookup |
 
 ## Semantics guaranteed by the writer
 

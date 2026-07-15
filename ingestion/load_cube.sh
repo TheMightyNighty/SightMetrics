@@ -13,10 +13,11 @@
 #   CUBE_DSN_FILE     path to a file containing the DSN  (Docker secrets pattern,
 #                     default: /run/secrets/cube_dsn)
 #
-# Table names (default: cube / daily / meta):
+# Table names (default: cube / daily / meta / topn):
 #   SM_TABLE_CUBE     name of the cube table
 #   SM_TABLE_DAILY    name of the daily table
 #   SM_TABLE_META     name of the meta table
+#   SM_TABLE_TOPN     name of the top-N precompute table (docs/topn-precompute-spec.md)
 #
 # GeoIP (TODO for operators: file is NOT part of the repo, see
 #        docs/ingestion-runbook.md -> section "GeoIP dataset"):
@@ -69,7 +70,8 @@ DSN="${CUBE_DSN:?Fehler: CUBE_DSN nicht gesetzt. Setze CUBE_DSN oder lege die Se
 SM_TABLE_CUBE="${SM_TABLE_CUBE:-cube}"
 SM_TABLE_DAILY="${SM_TABLE_DAILY:-daily}"
 SM_TABLE_META="${SM_TABLE_META:-meta}"
-export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META
+SM_TABLE_TOPN="${SM_TABLE_TOPN:-topn}"
+export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META SM_TABLE_TOPN
 
 # ---- Log format -------------------------------------------------------------
 source "$(pwd)/lib_logformat.sh"
@@ -108,7 +110,7 @@ TIME_TMP=$(mktemp /tmp/sm_time_XXXXXX.txt)      # separate file per run: PARALLE
 CONSUMED_TMP=$(mktemp /tmp/sm_consumed_XXXXXX.csv)
 trap 'rm -f "$TMPLOG" "$SQL_TMP" "$TIME_TMP" "$CONSUMED_TMP"' EXIT
 cat "$(pwd)/cube_to_mysql.sql" "$(pwd)/sink_mysql.sql" \
-  | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
+  | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META} ${SM_TABLE_TOPN}' > "$SQL_TMP"
 tail -c "+$((OFFSET + 1))" "$LOGFILE" > "$TMPLOG"
 NEW_BYTES=$(wc -c < "$TMPLOG")
 

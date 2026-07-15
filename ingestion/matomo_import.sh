@@ -76,7 +76,8 @@ fi
 SM_TABLE_CUBE="${SM_TABLE_CUBE:-cube}"
 SM_TABLE_DAILY="${SM_TABLE_DAILY:-daily}"
 SM_TABLE_META="${SM_TABLE_META:-meta}"
-export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META
+SM_TABLE_TOPN="${SM_TABLE_TOPN:-topn}"
+export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META SM_TABLE_TOPN
 FILTER_LIMIT_HIGH="${FILTER_LIMIT_HIGH:-1000}"
 
 API="${MATOMO_URL%/}/index.php"
@@ -158,7 +159,7 @@ for range in "${CHUNKS[@]}"; do
   # Compute (matomo_to_cube.sql) + shared sink, one DuckDB run per chunk.
   SQL_TMP=$(mktemp "${WORK}/sql_XXXXXX.sql")
   cat matomo_to_cube.sql sink_mysql.sql \
-    | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
+    | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META} ${SM_TABLE_TOPN}' > "$SQL_TMP"
   # range_from/range_to = full chunk range -> the sink clears exactly these
   # days, even if Matomo returns no data for individual days (clean
   # replace instead of just MIN/MAX of the returned data).

@@ -61,8 +61,12 @@ import { initPresets } from './modules/presets.js';
 
     renderBarlist(ctx, 'bl-country', 'country', a, b, 'v', { fmt: function (k) { return esc(landName(k)); } });
     // Keyword/entry/exit/download/status/method/browser/OS/device/referrer type/URL:
-    // server-side Top-N + lazy loading.
-    topN.reloadAll(a, b);
+    // server-side Top-N + lazy loading. Preset label (if any) lets the server use
+    // the precomputed topn table (docs/topn-precompute-spec.md); only meaningful
+    // for calendar-anchored presets, so 'custom'/'window'/'today' etc. are passed
+    // through too but simply never match server-side and stay on the live path.
+    const presetEl = $('w-preset');
+    topN.reloadAll(a, b, presetEl ? presetEl.value : null);
   }
 
   function resizeAll() { charts.resizeAll(); map.invalidate(); }

@@ -163,7 +163,8 @@ DSN="${CUBE_DSN:?Fehler: CUBE_DSN nicht gesetzt. Setze CUBE_DSN oder lege die Se
 SM_TABLE_CUBE="${SM_TABLE_CUBE:-cube}"
 SM_TABLE_DAILY="${SM_TABLE_DAILY:-daily}"
 SM_TABLE_META="${SM_TABLE_META:-meta}"
-export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META
+SM_TABLE_TOPN="${SM_TABLE_TOPN:-topn}"
+export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META SM_TABLE_TOPN
 
 STATE_DIR="${STATE_DIR:-${REPO}/state}"
 mkdir -p "$STATE_DIR"
@@ -209,7 +210,7 @@ fi
 # ---- Prepare sink SQL once (substitute table names) --------------------------
 SQL_TMP=$(mktemp "${SM_TMPDIR}/sm_sql_XXXXXX.sql")
 cat "$(pwd)/cube_to_mysql.sql" "$(pwd)/sink_mysql.sql" \
-  | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
+  | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META} ${SM_TABLE_TOPN}' > "$SQL_TMP"
 
 CURL_HEADERS=()
 [ -n "$LOKI_ORG_ID" ] && CURL_HEADERS+=(-H "X-Scope-OrgID: ${LOKI_ORG_ID}")

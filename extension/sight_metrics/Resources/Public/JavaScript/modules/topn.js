@@ -32,13 +32,14 @@ export const TOPN_CHILD = {
 
 /**
  * @param {any} ctx dashboard context (createContext())
- * @returns {{ TOPN: Record<string, any>, reloadAll: (a: string, b: string) => void }}
+ * @returns {{ TOPN: Record<string, any>, reloadAll: (a: string, b: string, windowLabel?: string|null) => void }}
  */
 export function createTopN(ctx) {
   const { DATA, WIN, i18n, $ } = ctx;
   const t = i18n.t, tf = i18n.tf, nf = i18n.nf;
   const url = DATA.topNUrl || null;
   let curA = WIN.von, curB = WIN.bis; // currently selected range (for child fetches)
+  let curWindow = null; // preset label of the current range (w-preset value), see reloadAll()
 
   /** @type {Record<string, any>} dim -> {rows, total:{pv,v,count}, metric, from, to, loading, limit} */
   const TOPN = {};
@@ -54,10 +55,14 @@ export function createTopN(ctx) {
     };
   });
 
-  function fetchRows(dim, a, b, offset, limit, parentKey) {
+  function fetchRows(dim, a, b, offset, limit, parentKey, windowLabel) {
     if (!url) return Promise.resolve({ rows: [], total: { pv: 0, v: 0, count: 0 } });
     const params = { dim: dim, from: a, to: b, limit: String(limit), offset: String(offset) };
     if (parentKey != null) params.parentKey = parentKey;
+    // Preset label of [a,b] if known (docs/topn-precompute-spec.md); the server
+    // verifies it against a/b itself, so passing a stale/wrong value is harmless
+    // (falls back to the live query), never produces wrong data.
+    if (windowLabel != null) params.window = windowLabel;
     return ctx.fetchJson(url, params);
   }
 
@@ -77,7 +82,7 @@ export function createTopN(ctx) {
       m.setAttribute('role', 'button'); m.tabIndex = 0;
       const loadMore = function () {
         state.loading = true; paint(cont, state, rowFactory);
-        fetchRows(state.dim, state.from, state.to, state.rows.length, state.limit, state.parentKey).then(function (res) {
+        fetchRows(state.dim, state.from, state.to, state.rows.length, state.limit, state.parentKey, state.window).then(function (res) {
           state.rows = state.rows.concat(res.rows || []); state.total = res.total || state.total; state.loading = false;
           paint(cont, state, rowFactory);
         }).catch(function () { state.loading = false; paint(cont, state, rowFactory); });
@@ -106,12 +111,12 @@ export function createTopN(ctx) {
           built = true;
           const childMeta = TOPN_CHILD[meta.child];
           const childState = {
-            dim: meta.child, from: curA, to: curB, parentKey: r.dimkey,
+            dim: meta.child, from: curA, to: curB, parentKey: r.dimkey, window: curWindow,
             rows: [], total: { pv: 0, v: 0, count: 0 }, metric: childMeta.metric, limit: 8, loading: true,
           };
           const childFactory = rowFactory(meta.child, childMeta);
           paint(sub, childState, childFactory);
-          fetchRows(childState.dim, childState.from, childState.to, 0, childState.limit, childState.parentKey)
+          fetchRows(childState.dim, childState.from, childState.to, 0, childState.limit, childState.parentKey, childState.window)
             .then(function (res) {
               childState.rows = res.rows || []; childState.total = res.total || childState.total; childState.loading = false;
               paint(sub, childState, childFactory);
@@ -135,15 +140,19 @@ export function createTopN(ctx) {
   // On date change: show current state immediately, reload each list via Ajax
   // for [a,b] on a differing range. Race guard via st.from/st.to. A full
   // re-render discards expanded child lists (consistent with prior behavior).
-  function reloadAll(a, b) {
-    curA = a; curB = b;
+  // windowLabel: the active preset (w-preset value), if any -- passed through to
+  // fetchRows so the server can serve from the precomputed `topn` table
+  // (docs/topn-precompute-spec.md); irrelevant/wrong values are simply ignored
+  // server-side, so this never needs to be exact.
+  function reloadAll(a, b, windowLabel) {
+    curA = a; curB = b; curWindow = windowLabel == null ? null : windowLabel;
     Object.keys(TOPN_ROOT).forEach(function (dim) {
       const st = TOPN[dim];
       renderRoot(dim);
       if (st.from === a && st.to === b) return;
-      st.loading = true; st.from = a; st.to = b;
+      st.loading = true; st.from = a; st.to = b; st.window = curWindow;
       renderRoot(dim);
-      fetchRows(dim, a, b, 0, st.limit).then(function (res) {
+      fetchRows(dim, a, b, 0, st.limit, null, curWindow).then(function (res) {
         if (st.from !== a || st.to !== b) return; // superseded by a newer range change
         st.rows = res.rows || []; st.total = res.total || { pv: 0, v: 0, count: 0 }; st.loading = false;
         renderRoot(dim);

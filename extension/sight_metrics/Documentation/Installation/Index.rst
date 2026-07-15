@@ -119,6 +119,41 @@ The cube connection is completely separate from the main TYPO3 database
 connection — an outage of the cube database does not take down the TYPO3
 backend.
 
+Updating
+========
+
+.. code-block:: bash
+
+   composer update sightmetrics/sight-metrics
+   vendor/bin/typo3 cache:flush
+
+The extension and the separately deployed ingestion pipeline (package A) are
+versioned independently — they only share the read-only database contract
+(the ``cube``/``daily``/``meta`` tables the ingestion writes and the
+extension reads). This makes routine updates order-independent, and **no
+existing row in the cube database is ever deleted or lost** as part of a
+regular update:
+
+- **Additive contract changes** (new tables/columns, e.g. performance
+  indexes or a Top-N precompute cache) only ever *add* structure. The
+  ingestion side creates them idempotently on its next import; existing rows
+  are untouched. Until the ingestion side has run with the new version, the
+  extension simply keeps using its previous (correct, just not accelerated)
+  query path — nothing breaks either way, and there is no required order.
+- **Breaking contract changes** (a new schema version) are rare and always
+  documented with an explicit migration for the ingestion side, which
+  transforms existing rows in place (no data is dropped) and is safe to
+  re-run. Until that migration has run, the extension detects the version
+  mismatch on every module load and in ``sightmetrics:health`` and refuses
+  to render with a clear error message — it never shows silently wrong
+  numbers for old data. Update/migrate the ingestion pipeline first in this
+  case (consult that component's own documentation for the migration
+  script), then update the extension.
+
+See ``CHANGELOG.md`` for which released version introduced which schema
+version, and back up the cube database before a breaking update as you
+would before any schema migration.
+
 Guided onboarding
 =================
 

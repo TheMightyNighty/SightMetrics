@@ -7,6 +7,7 @@ namespace SightMetrics\Domain\Repository;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\ParameterType;
 use SightMetrics\Support\Params;
+use SightMetrics\Support\TopNWindows;
 use TYPO3\CMS\Core\Cache\CacheManager;
 use TYPO3\CMS\Core\Cache\Frontend\FrontendInterface;
 use TYPO3\CMS\Core\Configuration\ExtensionConfiguration;
@@ -220,12 +221,26 @@ final class CubeRepository
      * TopNDims/ROADMAP.md). $parentKey: if set, only child rows of this parent category
      * (drill-down, 'parent' column) -- see applyParentFilter().
      *
+     * $windowLabel: optional preset label the client claims [$from,$bis] corresponds
+     * to (docs/topn-precompute-spec.md). Only used to serve from the precomputed
+     * `topn` table when it verifiably matches (TopNWindows::boundsFor()) AND the
+     * requested page lies within the precomputed top-100 ($offset+$limit<=100);
+     * any mismatch or precomputed-table miss falls back to the live query below
+     * -- the label is never trusted blindly, so a stale/forged value cannot
+     * produce wrong results, only a slower live query.
+     *
      * @return list<array{dimkey: string, pv: int, v: int}>
      */
-    public function topN(int $siteId, string $from, string $bis, string $dim, string $metric, int $limit, int $offset = 0, ?string $parentKey = null): array
+    public function topN(int $siteId, string $from, string $bis, string $dim, string $metric, int $limit, int $offset = 0, ?string $parentKey = null, ?string $windowLabel = null): array
     {
         if (!in_array($metric, ['pv', 'v'], true)) {
             throw new \InvalidArgumentException('Ungueltige Metrik: ' . $metric);
+        }
+        if ($windowLabel !== null && $offset + $limit <= 100) {
+            $precomputed = $this->topNFromPrecompute($siteId, $from, $bis, $dim, $limit, $offset, $parentKey, $windowLabel);
+            if ($precomputed !== null) {
+                return $precomputed;
+            }
         }
         $cacheKey = "topN:$siteId:$from:$bis:$dim:$metric:$limit:$offset:" . ($parentKey ?? '');
         /** @var list<array{dimkey: string, pv: int, v: int}> $rows cached() is untyped (mixed) */
@@ -258,6 +273,62 @@ final class CubeRepository
             ], $rows);
         });
         return $rows;
+    }
+
+    /** WHERE site_id/dim/window/parent for `topn` lookups (SELECT columns/order left to the caller). */
+    private function topnQueryBase(int $siteId, string $dim, string $windowLabel, ?string $parentKey): QueryBuilder
+    {
+        $qb = $this->qb('topn');
+        $qb->from('topn')->where(
+            $qb->expr()->eq('site_id', $qb->createNamedParameter($siteId, ParameterType::INTEGER)),
+            $qb->expr()->eq('dim', $qb->createNamedParameter($dim)),
+            // Column 'win', not 'window' -- reserved word in DuckDB/MariaDB (window functions).
+            $qb->expr()->eq('win', $qb->createNamedParameter($windowLabel)),
+        );
+        if ($parentKey === null) {
+            $qb->andWhere($qb->expr()->isNull('parent'));
+        } else {
+            $qb->andWhere($qb->expr()->eq('parent', $qb->createNamedParameter($parentKey)));
+        }
+        return $qb;
+    }
+
+    /**
+     * Serves topN() from the precomputed `topn` table (docs/topn-precompute-spec.md)
+     * when $windowLabel verifiably corresponds to [$from,$bis] (TopNWindows::boundsFor()).
+     * Returns null (defer to the live query in topN()) on any mismatch, or if the
+     * table simply hasn't been populated yet for this (site, window, dim, parent) --
+     * detected via a separate rnk=1 probe, since an empty page at $offset>0 is
+     * otherwise indistinguishable from "not populated" (both look like zero rows).
+     *
+     * @return list<array{dimkey: string, pv: int, v: int}>|null
+     */
+    private function topNFromPrecompute(int $siteId, string $from, string $bis, string $dim, int $limit, int $offset, ?string $parentKey, string $windowLabel): ?array
+    {
+        $meta = $this->meta($siteId);
+        $bounds = TopNWindows::boundsFor($windowLabel, Params::toString($meta['von'] ?? null), Params::toString($meta['bis'] ?? null));
+        if ($bounds === null || $bounds[0] !== $from || $bounds[1] !== $bis) {
+            return null;
+        }
+
+        $populated = $this->topnQueryBase($siteId, $dim, $windowLabel, $parentKey)
+            ->select('rnk')->andWhere($this->qb('topn')->expr()->eq('rnk', 1))
+            ->executeQuery()->fetchOne();
+        if ($populated === false) {
+            return null; // not populated yet (fresh site / pre-rollout DB) -- fall back to live
+        }
+
+        $rows = $this->topnQueryBase($siteId, $dim, $windowLabel, $parentKey)
+            ->select('dimkey', 'pv', 'v')
+            ->orderBy('rnk')
+            ->setMaxResults($limit)
+            ->setFirstResult($offset)
+            ->executeQuery()->fetchAllAssociative();
+        return array_map(static fn(array $r): array => [
+            'dimkey' => Params::toString($r['dimkey'] ?? null),
+            'pv' => Params::toInt($r['pv'] ?? null),
+            'v' => Params::toInt($r['v'] ?? null),
+        ], $rows);
     }
 
     /**
