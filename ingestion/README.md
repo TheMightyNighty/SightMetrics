@@ -35,7 +35,7 @@ Laufen verdoppelt nichts.
 |---|---|
 | `run_all.sh` | **Orchestrator**: importiert alle Sites aus `sites.conf` (flock-geschützt, `PARALLEL`/`auto`), alarmiert bei Fehler über `notify.sh`. Standardlauf des Containers. |
 | `load_cube.sh` | **Einzel-Site-Import (Datei)**: DuckDB → `ATTACH` MariaDB, inkrementell (Byte-Offset), Per-Site-Lock, misst Wall/CPU. Aufruf: `load_cube.sh <Logdatei> "<Site-Name>" <site_id>`. |
-| `fetch_loki_logs.sh` | **Einzel-Site-Import (Grafana Loki, alternativ zur Datei)**: holt neue Zeilen per LogQL, verarbeitet sie direkt (keine Zwischendatei), inkrementell über Zeitstempel-State statt Byte-Offset. |
+| `fetch_loki_logs.sh` | **Einzel-Site-Import (Grafana Loki, alternativ zur Datei)**: holt Zeilen per LogQL **tageweise** (lokaler Kalendertag 00:00→24:00 als Temp-Datei), schreibt jeden Tag einzeln nach MariaDB; inkrementell über Tages-State statt Byte-Offset, der Vortag wird bei erneutem Lauf überschrieben. |
 | `transform.sql` | **Auswerte-Logik** (sink-neutral): Parse → Sessionisierung → `cube_rows`/`daily_rows`. |
 | `cube_to_mysql.sql` | Compute-Treiber des Log-Pfads (liest `transform.sql`). |
 | `sink_mysql.sql` | **Gemeinsamer MariaDB-Sink** (Schema, idempotentes Range-DELETE+INSERT, Meta). Wird von Log- **und** Matomo-Pfad genutzt. |
@@ -85,11 +85,15 @@ cd ../demo && docker compose --profile import run --rm ingestion
 ## Alternative Log-Quelle: Grafana Loki
 
 Wer Logs bereits zentral über **Loki** sammelt (z. B. Promtail + Grafana/Prometheus-
-Stack), kann statt einer Logdatei `fetch_loki_logs.sh` verwenden – ruft per LogQL nur
-die seit dem letzten Lauf neuen Zeilen ab und verarbeitet sie **direkt**, ohne
-Zwischendatei (Zeilen bleiben im Prozessspeicher und werden per Pipe an DuckDB
-gestreamt). Voraussetzung: Die Loki-Zeilen enthalten die volle Rohzeile
-(Apache/nginx Combined), z. B. weil Promtail `access.log` unverändert scraped.
+Stack), kann statt einer Logdatei `fetch_loki_logs.sh` verwenden – verarbeitet
+**tageweise**: pro lokalem Kalendertag (`--timezone`, Standard `Europe/Berlin`)
+wird das Fenster 00:00:00→23:59:59 per LogQL in eine Temp-Datei geholt
+(`SM_TMPDIR`, Standard `/tmp`), von DuckDB aggregiert (Speicherlimit
+`DUCKDB_MEMORY_LIMIT`, Standard 2 GB, Spill auf Platte) und nach MariaDB
+geschrieben, erst dann folgt der nächste Tag. So bleiben auch 1–2 GB Logs pro
+Tag beherrschbar, und pro Tag entsteht genau eine `daily`-Zeile. Voraussetzung:
+Die Loki-Zeilen enthalten die volle Rohzeile (Apache/nginx Combined oder
+JSON/ECS, siehe `SM_LOG_FORMAT`).
 
 ```bash
 CUBE_DSN="host=… user=cube_rw password=… database=analytics" \
@@ -98,10 +102,15 @@ CUBE_DSN="host=… user=cube_rw password=… database=analytics" \
                        --site-id 1 --site-name "Behörde A"
 ```
 
-Inkrementell über einen **Zeitstempel-State** (nicht Byte-Offset, da keine Datei
-existiert) – `--namespace` ist eine Bequemlichkeitsoption, die als zusätzlicher
-Label-Matcher in `--query` eingemischt wird. Details, Grenzen (Pagination,
-Speicherbedarf bei großen Batches) und alle Optionen: `fetch_loki_logs.sh --help`.
+Gedacht für **einen Lauf pro Tag** (z. B. kurz nach Mitternacht): importiert
+den Vortag; verpasste Tage werden über den **Tages-State** (`<hash>.loki_day`
+statt Byte-Offset) nachgeholt, der laufende (unvollständige) Tag wird
+ausgelassen. Der Vortag wird bei jedem Lauf **erneut importiert und ersetzt**
+(Range-DELETE+INSERT im Sink) – das Skript kann also gefahrlos auch mehrfach
+bzw. tagsüber laufen. Erstlauf: `--lookback-days N` (volle Tage rückwirkend,
+endend gestern). `--namespace` ist eine Bequemlichkeitsoption, die als
+zusätzlicher Label-Matcher in `--query` eingemischt wird. Alle Optionen:
+`fetch_loki_logs.sh --help`.
 
 ## Heartbeat-Monitoring (healthchecks.io)
 

@@ -1,54 +1,65 @@
 #!/usr/bin/env bash
 # ---------------------------------------------------------------------------
 # SightMetrics – alternative log path: lines from Grafana Loki instead of a
-# log file. Fetches the lines new since the last run via a LogQL range query
-# and processes them without an intermediate file: lines stay in process
-# memory and are streamed directly into DuckDB via process substitution.
-# Parsing, sessionization and aggregation use the same logic as the
-# file-based import (transform.sql); the source is an HTTP API instead of a
-# file with a byte offset.
+# log file. Processes DAY BY DAY (one local calendar day per pass): per day
+# the window 00:00:00 -> 23:59:59 (next local midnight, exclusive) is fetched
+# into a temp file, aggregated by DuckDB and written to MariaDB before the
+# next day starts. This keeps memory bounded with 1-2 GB of logs per day
+# (file on disk instead of everything in RAM), and each day yields exactly
+# one daily row (sessionization/uniques need the full day at once).
+#
+# Only COMPLETE past days are processed (up to yesterday, local time); the
+# running day is incomplete and skipped. Intended schedule: one run per day
+# (e.g. shortly after midnight) imports yesterday. The last complete day
+# (yesterday) is ALWAYS (re)imported and REPLACED in MariaDB, even if the
+# state says it is already done – so the script may also run again during
+# the day and simply refreshes yesterday's data (the sink range-DELETEs
+# exactly the imported day before inserting, see sink_mysql.sql).
 #
 # Requirement: Loki log lines contain the complete raw line
-# (Apache/nginx combined or similar), e.g. because Promtail scrapes access.log 1:1.
-# For structured/JSON Loki lines, use a LogQL pipeline (| line_format) beforehand
-# to turn them into a line in an SM_LOG_FORMAT-compatible format.
+# (Apache/nginx combined or similar OR JSON/ECS). SM_LOG_FORMAT selects the
+# parser (combined [default] | combined_vhost | common | custom | json_ecs).
 #
 # Usage:
-#   ./fetch_loki_logs.sh --url http://loki:3100 \
-#                        --query '{job="nginx",site="behoerde-a"}' \
-#                        --site-id 1 --site-name "Behörde A"
+#   SM_LOG_FORMAT=json_ecs ./fetch_loki_logs.sh \
+#       --url http://loki:3100 --query '{job="nginx"}' \
+#       --site-id 1 --site-name "Behörde A" \
+#       --lookback-days 7 --timezone Europe/Berlin
 #
-# Incremental via timestamp (not byte offset/inode as with files):
-#   State is in STATE_DIR/<hash>.loki_ts (last processed Loki
-#   timestamp in nanoseconds). First run: see --lookback-hours.
+# Incremental via the last imported day:
+#   State is in STATE_DIR/<hash>.loki_day (last imported local date
+#   YYYY-MM-DD). Days before yesterday that are covered by the state are
+#   skipped; yesterday itself is always re-imported (see above).
+#   First run: see --lookback-days.
 #
-# Options (or ENV vars of the same name with a LOKI_ prefix, e.g. LOKI_URL):
-#   --url              Loki base URL, e.g. http://loki:3100          (required)
-#   --query            LogQL stream selector                         (required)
-#   --site-id / --site-name   as in load_cube.sh                     (required)
-#   --namespace        convenience filter: mixed into --query as an
-#                       additional label matcher "namespace=..."
-#                       (e.g. Kubernetes/Promtail namespace), optional
+# Options (or ENV vars, see parentheses):
+#   --url              Loki base URL, e.g. http://loki:3100  (LOKI_URL, required)
+#   --query            LogQL stream selector                 (LOKI_QUERY, required)
+#   --site-id / --site-name   as in load_cube.sh             (required)
+#   --lookback-days    first run: how many FULL days back, ending at the last
+#                       complete day (yesterday). Example: on Jul 2nd 03:00,
+#                       --lookback-days 1 imports Jul 1st 00:00->23:59.
+#                       (LOKI_LOOKBACK_DAYS, default 1)
+#   --timezone/--tz    timezone for day boundaries + datum/stunde, DST-aware
+#                       (23-/25-hour days); an unknown zone is rejected instead
+#                       of silently treated as UTC. (SM_TZ, default Europe/Berlin)
+#   --namespace        convenience filter: additional label matcher
+#                       "namespace=..." mixed into --query (LOKI_NAMESPACE), optional
 #   --org-id           X-Scope-OrgID header (Loki multi-tenant), optional
-#   --limit            batch size per Loki query (default: 5000)
-#   --lookback-hours   only on the very first run: how far back (default: 24)
-#   --safety-seconds   safety margin to "now" against late-arriving,
-#                       retroactively pushed lines (default: 30)
+#   --limit            batch size per Loki query (LOKI_LIMIT, default 5000)
 #
-# Takes over the same ENV vars as load_cube.sh: CUBE_DSN/CUBE_DSN_FILE,
-#   SM_TABLE_*, SM_LOG_FORMAT/SM_LOG_REGEX_CUSTOM/SM_TS_FORMAT_CUSTOM,
-#   SM_GEO_*, STATE_DIR. Uses the same per-site lock as load_cube.sh
-#   (state/site_<id>.lock) – file-based and Loki import of the same site never
-#   run in parallel.
+# Additional ENV:
+#   SM_TMPDIR             directory for the per-day temp files + DuckDB spill
+#                         (default /tmp; a discardable volume in the demo container).
+#   DUCKDB_MEMORY_LIMIT   DuckDB memory limit (default 2GB); beyond it DuckDB
+#                         spills to SM_TMPDIR/duckdb instead of OOMing.
+#   As load_cube.sh: CUBE_DSN/CUBE_DSN_FILE, SM_TABLE_*, SM_LOG_FORMAT/
+#     SM_LOG_REGEX_CUSTOM/SM_TS_FORMAT_CUSTOM, SM_GEO_*, SM_BOT_*, STATE_DIR.
 #
 # Heartbeat (healthchecks.io or similar, optional, see lib_healthcheck.sh):
-#   HEALTHCHECK_URL / HEALTHCHECK_URL_FILE   ping on start/success/failure,
-#     so that a MISSING run is also noticed (not just active errors).
+#   HEALTHCHECK_URL / HEALTHCHECK_URL_FILE
 #
-# Requires: curl, jq (on the host/container running this script).
-# The fetched lines are held in process memory, not streamed from the
-# Loki response – plan RAM accordingly for very large batches (--limit x
-# many pages).
+# Requires: curl, jq, GNU date, md5sum, duckdb – all part of the ingestion image.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 export LC_ALL=C
@@ -65,8 +76,10 @@ LOKI_URL="${LOKI_URL:-}"; LOKI_QUERY="${LOKI_QUERY:-}"
 LOKI_NAMESPACE="${LOKI_NAMESPACE:-}"
 LOKI_ORG_ID="${LOKI_ORG_ID:-}"
 LOKI_LIMIT="${LOKI_LIMIT:-5000}"
-LOKI_LOOKBACK_HOURS="${LOKI_LOOKBACK_HOURS:-24}"
-LOKI_SAFETY_SECONDS="${LOKI_SAFETY_SECONDS:-30}"
+LOKI_LOOKBACK_DAYS="${LOKI_LOOKBACK_DAYS:-1}"
+SM_TZ="${SM_TZ:-Europe/Berlin}"
+SM_TMPDIR="${SM_TMPDIR:-/tmp}"
+DUCKDB_MEMORY_LIMIT="${DUCKDB_MEMORY_LIMIT:-2GB}"
 SITE_ID=""; SITE_NAME=""
 
 while [[ $# -gt 0 ]]; do
@@ -76,16 +89,18 @@ while [[ $# -gt 0 ]]; do
     --namespace)       LOKI_NAMESPACE="$2"; shift 2 ;;
     --org-id)          LOKI_ORG_ID="$2"; shift 2 ;;
     --limit)           LOKI_LIMIT="$2"; shift 2 ;;
-    --lookback-hours)  LOKI_LOOKBACK_HOURS="$2"; shift 2 ;;
-    --safety-seconds)  LOKI_SAFETY_SECONDS="$2"; shift 2 ;;
+    --lookback-days)   LOKI_LOOKBACK_DAYS="$2"; shift 2 ;;
+    --timezone|--tz)   SM_TZ="$2"; shift 2 ;;
     --site-id)         SITE_ID="$2"; shift 2 ;;
     --site-name)       SITE_NAME="$2"; shift 2 ;;
-    -h|--help)         sed -n '2,40p' "$0"; exit 0 ;;
+    -h|--help)         sed -n '2,63p' "$0"; exit 0 ;;
     *) echo "Unbekannte Option: $1" >&2; exit 1 ;;
   esac
 done
 : "${LOKI_URL:?--url/LOKI_URL fehlt}"; : "${LOKI_QUERY:?--query/LOKI_QUERY fehlt}"
 : "${SITE_ID:?--site-id fehlt}"; : "${SITE_NAME:?--site-name fehlt}"
+case "$LOKI_LOOKBACK_DAYS" in ''|*[!0-9]*) echo "Fehler: --lookback-days muss eine positive Ganzzahl sein." >&2; exit 1 ;; esac
+[ "$LOKI_LOOKBACK_DAYS" -ge 1 ] || { echo "Fehler: --lookback-days muss >= 1 sein." >&2; exit 1; }
 
 # ---- Namespace filter (Kubernetes/Promtail label "namespace") -------------
 # Convenience option in addition to --query: mixed in as an additional
@@ -103,6 +118,18 @@ fi
 command -v curl >/dev/null || { echo "Fehler: curl nicht gefunden." >&2; exit 1; }
 command -v jq   >/dev/null || { echo "Fehler: jq nicht gefunden." >&2; exit 1; }
 
+# ---- GNU date + timezone check ----------------------------------------------
+# Day arithmetic needs GNU 'date -d' (part of the ingestion image; BSD/macOS
+# date would fail with confusing errors otherwise).
+date -d "2026-01-01 +1 day" +%F >/dev/null 2>&1 \
+  || { echo "Fehler: GNU date (date -d) benötigt – im Ingestion-Container vorhanden." >&2; exit 1; }
+# GNU date silently accepts an unknown TZ as UTC -> check explicitly against
+# the zoneinfo DB so a typo does not silently produce UTC days.
+if [ "$SM_TZ" != "UTC" ] && [ ! -e "/usr/share/zoneinfo/$SM_TZ" ]; then
+  echo "Fehler: Zeitzone '$SM_TZ' nicht gefunden (siehe /usr/share/zoneinfo)." >&2
+  exit 1
+fi
+
 # ---- Healthcheck heartbeat (healthchecks.io or similar, optional) ---------
 # Trap covers all exit paths, including early errors like a missing CUBE_DSN
 # or a missing geo file, and reads the exit code on termination.
@@ -110,7 +137,7 @@ source "$(pwd)/lib_healthcheck.sh"
 cleanup_and_ping() {
   local rc=$?
   [ -n "${SQL_TMP:-}" ] && rm -f "$SQL_TMP"
-  [ -n "${LOGFD:-}" ] && exec {LOGFD}<&- 2>/dev/null
+  [ -n "${LOG_FILE:-}" ] && rm -f "$LOG_FILE"
   if [ "$rc" -eq 0 ]; then
     hc_ping ""
   else
@@ -140,6 +167,7 @@ export SM_TABLE_CUBE SM_TABLE_DAILY SM_TABLE_META
 
 STATE_DIR="${STATE_DIR:-${REPO}/state}"
 mkdir -p "$STATE_DIR"
+mkdir -p "$SM_TMPDIR" "${SM_TMPDIR}/duckdb"
 
 # ---- Per-site lock (shared with load_cube.sh) -------------------------------
 SITE_LOCK="${STATE_DIR}/site_${SITE_ID}.lock"
@@ -149,109 +177,124 @@ if ! flock -n 9; then
   exit 0
 fi
 
-# ---- Timestamp state (instead of byte offset/inode) ------------------------
+# ---- Determine day range (local calendar days in SM_TZ) ---------------------
+# Only complete past days: up to and including yesterday (local time).
+TODAY=$(TZ="$SM_TZ" date +%F)
+LAST_COMPLETE=$(TZ="$SM_TZ" date -d "$TODAY -1 day" +%F)
+
 STATE_KEY=$(printf '%s:%s' "$SITE_ID" "$LOKI_QUERY" | md5sum | cut -c1-16)
-TS_FILE="${STATE_DIR}/${STATE_KEY}.loki_ts"
+DAY_FILE="${STATE_DIR}/${STATE_KEY}.loki_day"
+# State of the former timestamp-based (ns) implementation; superseded by the
+# day state -> remove so no stale file lingers in STATE_DIR.
+rm -f "${STATE_DIR}/${STATE_KEY}.loki_ts"
 
-NOW_NS=$(($(date +%s%N) - LOKI_SAFETY_SECONDS * 1000000000))
-if [ -f "$TS_FILE" ]; then
-  START_NS=$(( $(cat "$TS_FILE") + 1 ))
+if [ -f "$DAY_FILE" ] && [ -s "$DAY_FILE" ]; then
+  LAST_DONE=$(cat "$DAY_FILE")
+  START_DAY=$(TZ="$SM_TZ" date -d "$LAST_DONE +1 day" +%F)
+  # Yesterday is always re-imported (and replaced in MariaDB) even if the
+  # state already covers it -> an intraday re-run refreshes the last
+  # complete day instead of being a no-op.
+  # (String comparison on YYYY-MM-DD is lexicographic == chronological.)
+  if [[ "$START_DAY" > "$LAST_COMPLETE" ]]; then
+    START_DAY="$LAST_COMPLETE"
+    echo ">> State: ${LAST_DONE} bereits importiert -> Vortag ${START_DAY} wird erneut importiert und überschrieben (TZ ${SM_TZ})."
+  else
+    echo ">> State: zuletzt verarbeitet ${LAST_DONE} -> starte bei ${START_DAY} (TZ ${SM_TZ})."
+  fi
 else
-  START_NS=$(( NOW_NS - LOKI_LOOKBACK_HOURS * 3600 * 1000000000 ))
-  echo ">> Kein State gefunden -> erster Lauf, Lookback ${LOKI_LOOKBACK_HOURS}h."
-fi
-END_NS="$NOW_NS"
-
-if [ "$START_NS" -ge "$END_NS" ]; then
-  echo ">> Nichts zu tun (Fenster leer, Sicherheitsabstand ${LOKI_SAFETY_SECONDS}s)."
-  exit 0
+  START_DAY=$(TZ="$SM_TZ" date -d "$LAST_COMPLETE -$((LOKI_LOOKBACK_DAYS - 1)) day" +%F)
+  echo ">> Kein State -> Lookback ${LOKI_LOOKBACK_DAYS} Tag(e), starte bei ${START_DAY} (TZ ${SM_TZ})."
 fi
 
-# ---- Fetch from Loki (paginated), collect lines in memory -----------------
+# ---- Prepare sink SQL once (substitute table names) --------------------------
+SQL_TMP=$(mktemp "${SM_TMPDIR}/sm_sql_XXXXXX.sql")
+cat "$(pwd)/cube_to_mysql.sql" "$(pwd)/sink_mysql.sql" \
+  | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
+
 CURL_HEADERS=()
 [ -n "$LOKI_ORG_ID" ] && CURL_HEADERS+=(-H "X-Scope-OrgID: ${LOKI_ORG_ID}")
 
-echo ">> Hole neue Zeilen aus Loki: ${LOKI_QUERY}"
-LINES=""
-cursor="$START_NS"
-# Loki treats the range as [start, end) - start inclusive, end exclusive.
-# Query with end=END_NS+1, so the interval [START_NS, END_NS] is covered
-# inclusively (otherwise a line with a timestamp of exactly END_NS would be
-# fetched neither in this nor in the next run).
-QUERY_END_NS=$((END_NS + 1))
-total=0
-max_ts=0
-page=0
-max_pages=1000   # safety guard against infinite loop in degenerate cases
-while [ "$page" -lt "$max_pages" ]; do
-  page=$((page + 1))
-  RESP=$(curl -fsS -G "${LOKI_URL%/}/loki/api/v1/query_range" \
-    "${CURL_HEADERS[@]}" \
-    --data-urlencode "query=${LOKI_QUERY}" \
-    --data-urlencode "start=${cursor}" \
-    --data-urlencode "end=${QUERY_END_NS}" \
-    --data-urlencode "limit=${LOKI_LIMIT}" \
-    --data-urlencode "direction=forward")
-
-  count=$(echo "$RESP" | jq '[.data.result[].values[]] | length')
-  [ "$count" -eq 0 ] && break
-
-  LINES+="$(echo "$RESP" | jq -r '.data.result[].values[][1]')"$'\n'
-  page_max_ts=$(echo "$RESP" | jq -r '[.data.result[].values[][0] | tonumber] | max')
-  [ "$page_max_ts" -gt "$max_ts" ] && max_ts="$page_max_ts"
-  total=$((total + count))
-
-  if [ "$count" -lt "$LOKI_LIMIT" ]; then
-    break
-  fi
-  cursor=$((page_max_ts + 1))
-  [ "$cursor" -gt "$END_NS" ] && break
-done
-# State upper bound: normally END_NS (window fully drained). If the
-# max_pages guard is hit, the window was not fully fetched -
-# advance state only up to the last processed timestamp (max_ts) then,
-# so the next run continues there instead of skipping the remaining lines.
-STATE_NS="$END_NS"
-if [ "$page" -ge "$max_pages" ]; then
-  echo ">> Warnung: max_pages (${max_pages}) erreicht – Fenster nicht vollstaendig abgeholt." >&2
-  echo "   Setze State nur bis zum letzten abgeholten Zeitstempel (${max_ts}), nicht bis Fensterende." >&2
-  STATE_NS="$max_ts"
-fi
-
-if [ "$total" -eq 0 ]; then
-  echo ">> Keine neuen Zeilen im Fenster."
-  echo "$STATE_NS" > "$TS_FILE"
-  exit 0
-fi
-echo ">> ${total} neue Zeile(n) geholt -> direkt an DuckDB gestreamt (keine Zwischendatei)."
-
-# ---- Process directly: lines via anonymous pipe to DuckDB -----------------
-# 'exec {fd}< <(...)' keeps the pipe open (unlike a plain assignment) for
-# the rest of the script, so DuckDB can still open /dev/fd/<fd> afterwards.
-exec {LOGFD}< <(printf '%s' "$LINES")
-
-SQL_TMP=$(mktemp /tmp/sm_sql_XXXXXX.sql)
-cat "$(pwd)/cube_to_mysql.sql" "$(pwd)/sink_mysql.sql" \
-  | envsubst '${SM_TABLE_CUBE} ${SM_TABLE_DAILY} ${SM_TABLE_META}' > "$SQL_TMP"
+METRICS_LAST="${STATE_DIR}/site_${SITE_ID}.last"
+METRICS_LOG="${STATE_DIR}/metrics.log"
 
 # Double single quotes for DuckDB string literals (as in load_cube.sh).
 sq() { printf '%s' "${1//\'/\'\'}"; }
 
-t0=$(date +%s.%N)
-"$DUCKDB" <<SQL
+# ---- Process day by day ------------------------------------------------------
+D="$START_DAY"
+days_done=0
+lines_total=0
+WALL=0
+while [[ ! "$D" > "$LAST_COMPLETE" ]]; do
+  D_NEXT=$(TZ="$SM_TZ" date -d "$D +1 day" +%F)
+  # Local midnight -> Unix epoch (DST-safe: 00:00 never falls into the
+  # spring-forward gap; two midnights are 23/24/25 hours apart).
+  START_NS=$(( $(TZ="$SM_TZ" date -d "$D 00:00:00" +%s) * 1000000000 ))
+  END_NS=$((   $(TZ="$SM_TZ" date -d "$D_NEXT 00:00:00" +%s) * 1000000000 ))
+  DAY_HOURS=$(( (END_NS - START_NS) / 3600000000000 ))
+  LOG_FILE="${SM_TMPDIR}/sm_loki_${SITE_ID}_${D}.jsonl"
+  : > "$LOG_FILE"
+
+  echo ">> Tag ${D} (${DAY_HOURS}h): hole aus Loki [${D} 00:00 .. ${D_NEXT} 00:00) ${SM_TZ} ..."
+
+  # Loki paginates; the range is [start, end) - start inclusive, end exclusive,
+  # so END_NS = next local midnight covers exactly 00:00:00..23:59:59.999….
+  # Stream the lines straight into the temp file (NOT into shell memory)
+  # -> RAM stays constant regardless of the day's size.
+  cursor="$START_NS"; total=0; page=0; max_ts=0
+  max_pages=200000    # guard: 200k pages x limit covers very large days
+  while [ "$page" -lt "$max_pages" ]; do
+    page=$((page + 1))
+    RESP=$(curl -fsS -G "${LOKI_URL%/}/loki/api/v1/query_range" \
+      "${CURL_HEADERS[@]}" \
+      --data-urlencode "query=${LOKI_QUERY}" \
+      --data-urlencode "start=${cursor}" \
+      --data-urlencode "end=${END_NS}" \
+      --data-urlencode "limit=${LOKI_LIMIT}" \
+      --data-urlencode "direction=forward")
+
+    count=$(echo "$RESP" | jq '[.data.result[].values[]] | length')
+    [ "$count" -eq 0 ] && break
+    echo "$RESP" | jq -r '.data.result[].values[] | .[1]' >> "$LOG_FILE"
+    page_max_ts=$(echo "$RESP" | jq -r '[.data.result[].values[][0] | tonumber] | max')
+    [ "$page_max_ts" -gt "$max_ts" ] && max_ts="$page_max_ts"
+    total=$((total + count))
+    [ "$count" -lt "$LOKI_LIMIT" ] && break
+    cursor=$((page_max_ts + 1))
+    [ "$cursor" -ge "$END_NS" ] && break
+  done
+  if [ "$page" -ge "$max_pages" ]; then
+    echo "Fehler: max_pages (${max_pages}) an Tag ${D} erreicht – Tag nicht vollständig geholt, Abbruch." >&2
+    exit 1
+  fi
+  echo ">> Tag ${D}: ${total} Zeile(n) geholt ($(du -h "$LOG_FILE" 2>/dev/null | cut -f1))."
+
+  # One DuckDB run per day: aggregate + write to MariaDB. range_from/range_to=D
+  # make the sink replace EXACTLY this day (empty days are cleared, too).
+  # tagessalt derives from the imported day (not "today"), so a re-import of
+  # the same day produces identical visitor keys (stable uniques). memory_limit
+  # + spill to SM_TMPDIR/duckdb -> no OOM on 1-2 GB day chunks.
+  TS_TAG="${D//-/}"
+  t0=$(date +%s.%N)
+  "$DUCKDB" <<SQL
 INSTALL mysql; LOAD mysql;
+SET memory_limit='${DUCKDB_MEMORY_LIMIT}';
+SET temp_directory='${SM_TMPDIR}/duckdb';
+SET preserve_insertion_order=false;
 ATTACH '$(sq "$DSN")' AS m (TYPE mysql);
-SET VARIABLE logpath    = '/dev/fd/${LOGFD}';
+SET VARIABLE logpath    = '$(sq "$LOG_FILE")';
 SET VARIABLE geopath    = '$(sq "$GEO")';
 SET VARIABLE geolocpath = '$(sq "$GEO_LOC")';
 SET VARIABLE site_name  = '$(sq "$SITE_NAME")';
 SET VARIABLE site_id    = '${SITE_ID}';
-SET VARIABLE tagessalt  = '$(date +%Y%m%d)-sightmetrics';
+SET VARIABLE tagessalt  = '${TS_TAG}-sightmetrics';
 SET VARIABLE logregex   = '$(sq "$SM_LOG_REGEX")';
 SET VARIABLE tsformat   = '$(sq "$SM_TS_FORMAT")';
-SET VARIABLE tz         = '$(sq "${SM_TZ:-UTC}")';
+SET VARIABLE tz         = '$(sq "$SM_TZ")';
 SET VARIABLE botfilter  = '${SM_BOT_FILTER:-1}';
 SET VARIABLE download_re = '$(sq "${SM_DOWNLOAD_RE:-}")';
+SET VARIABLE range_from = '${D}';
+SET VARIABLE range_to   = '${D}';
 ${BOT_SQL}
 .read '${GEO_SOURCE_SQL}'
 .read '${LOG_FORMAT_SQL}'
@@ -259,22 +302,27 @@ ${GEO6_SQL}
 ${UA_SQL}
 .read '${SQL_TMP}'
 SQL
-t1=$(date +%s.%N)
-WALL=$(awk "BEGIN{printf \"%.2f\", $t1-$t0}")
-echo ">> Loki -> MariaDB fertig. Wall=${WALL}s (${total} Zeilen, Site ${SITE_ID})"
+  t1=$(date +%s.%N)
+  WALL=$(awk "BEGIN{printf \"%.2f\", $t1-$t0}")
+  echo ">> Tag ${D} -> MariaDB fertig. Wall=${WALL}s (${total} Zeilen, Site ${SITE_ID})"
 
-# ---- Metrics (same convention as load_cube.sh) -------------------------------
-METRICS_LAST="${STATE_DIR}/site_${SITE_ID}.last"
-METRICS_LOG="${STATE_DIR}/metrics.log"
-TS_NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-printf 'ts=%s site_id=%s status=ok wall_s=%s new_lines=%s source=loki query=%s\n' \
-  "$TS_NOW" "$SITE_ID" "$WALL" "$total" "$LOKI_QUERY" \
-  | tee "$METRICS_LAST" >> "$METRICS_LOG"
+  # Metrics (same convention as load_cube.sh)
+  TS_NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  printf 'ts=%s site_id=%s status=ok wall_s=%s new_lines=%s source=loki day=%s tz=%s query=%s\n' \
+    "$TS_NOW" "$SITE_ID" "$WALL" "$total" "$D" "$SM_TZ" "$LOKI_QUERY" \
+    | tee "$METRICS_LAST" >> "$METRICS_LOG"
+
+  # Advance state only AFTER the day succeeded; drop the temp file right away.
+  echo "$D" > "$DAY_FILE"
+  rm -f "$LOG_FILE"; LOG_FILE=""
+  days_done=$((days_done + 1))
+  lines_total=$((lines_total + total))
+  D="$D_NEXT"
+done
 
 # Prometheus textfile collector (node_exporter) -- see lib_prom.sh / runbook.
 source "$(pwd)/lib_prom.sh"
 prom_site_metrics "$SITE_ID" "$WALL" "" "" "" "loki"
 
-# ---- Only advance state after a successful import ---------------------------
-echo "$STATE_NS" > "$TS_FILE"
-echo ">> Loki-State aktualisiert (bis ${STATE_NS} ns)."
+rm -f "$SQL_TMP"; SQL_TMP=""
+echo ">> Fertig: ${days_done} Tag(e), ${lines_total} Zeile(n) verarbeitet, State bis $(cat "$DAY_FILE") (TZ ${SM_TZ})."

@@ -11,6 +11,14 @@
 -- Parameters (SET VARIABLE): site_id, site_name
 -- ===========================================================================
 
+-- IMPORTANT: the DuckDB->MySQL write path (mysql extension) is not crash-safe
+-- with multiple threads – larger INSERTs sporadically trigger a heap race
+-- (SIGSEGV/SIGBUS/SIGABRT). Force single-threaded execution from here on: the
+-- sink only writes the small aggregates (cube/daily/meta), so single-thread is
+-- imperceptibly slower. The heavy aggregation (transform.sql) has already run
+-- fully parallel before this point; this SET only affects what follows.
+SET threads=1;
+
 -- Versioned DB contract between package A (writer) and package B (reader).
 -- Bump this on INCOMPATIBLE changes to cube/daily/meta and update docs/SCHEMA.md
 -- accordingly; the extension checks the version when building the module.

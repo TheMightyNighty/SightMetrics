@@ -83,6 +83,10 @@ services:
       - ../ingestion:/app
       # Offset-State persistent über Container-Neustarts
       - ../state:/state
+      # Temporär: fetch_loki_logs.sh legt hier je Tag den Loki-Chunk (bis ~2 GB)
+      # ab und DuckDB spillt hierher. Nur Zwischenspeicher – dieses Volume kann
+      # nach jedem Lauf gefahrlos geleert/gelöscht werden (kein persistenter Zustand).
+      - ingestion_tmp:/tmp
     # Allow host.docker.internal to be resolved inside the container (for Docker on Linux)
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -121,3 +125,6 @@ services:
 volumes:
   dbdata:
   loki:
+  # Reiner Zwischenspeicher (Loki-Tageschunks + DuckDB-Spill), leerbar:
+  #   docker compose down -v   ODER   docker volume rm sightmetrics_ingestion_tmp
+  ingestion_tmp:

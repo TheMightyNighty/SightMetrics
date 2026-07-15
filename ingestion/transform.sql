@@ -3,7 +3,7 @@
 -- Creates the TEMP tables cube_rows / daily_rows / meta_row.
 -- Used by cube_to_mysql.sql (import) AND tests/pipeline_test.sql.
 -- Parameters (SET VARIABLE): logpath, site_name, tagessalt, tsformat,
---   tz (hour dimension), botfilter ('0' = off), download_re (download regex)
+--   tz (local calendar day + hour), botfilter ('0' = off), download_re (download regex)
 -- Geo: assumes the TEMP VIEW 'geo_ranges' (start,"end",cc) already
 --      exists -> created by load_cube.sh/tests via geo_sources/<source>.sql
 --      (SM_GEO_SOURCE: native, ip2location, dbip, maxmind).
@@ -17,9 +17,10 @@
 -- tsformat: strptime format for the timestamp string g.tsraw (set by
 -- log_formats/*.sql; default here only as a fallback if used directly without lib_logformat.sh).
 SET VARIABLE tsformat = COALESCE(getvariable('tsformat'), '%d/%b/%Y:%H:%M:%S %z');
--- tz: timezone for the 'hour' dimension (visit-times panel). datum deliberately stays
--- UTC (stable day boundaries for offset/batch logic), only the hour is shown
--- localized. Set by load_cube.sh/fetch_loki_logs.sh via SM_TZ.
+-- tz: timezone for the CALENDAR bucketing (datum + stunde): a "day" is a local
+-- calendar day in this zone, DST-aware (23-/25-hour days). Sessionization keeps
+-- running on the absolute UTC instant (ts), so the 30-minute-gap logic is
+-- unaffected by DST transitions. Set by load_cube.sh/fetch_loki_logs.sh via SM_TZ.
 SET VARIABLE tz = COALESCE(NULLIF(getvariable('tz'), ''), 'UTC');
 -- botfilter: '0' disables the UA-based bot/crawler exclusion (debug/comparison).
 SET VARIABLE botfilter = COALESCE(NULLIF(getvariable('botfilter'), ''), '1');
@@ -156,7 +157,9 @@ SELECT v.*, COALESCE(gc.cc, gc6.cc, '??') AS country,
        WHEN regexp_matches(v.ref_host,'(^|\.)facebook\.com$') THEN 'Facebook'
        ELSE v.ref_host END AS ref_name
 FROM (
-  SELECT vkey, seq, strftime(min(ts),'%Y-%m-%d') AS datum, count(*) AS pageviews,
+  -- datum from ts_local: a visit belongs to the LOCAL calendar day of its first
+  -- hit, consistent with the per-hit bucketing in hits_all (tz variable above).
+  SELECT vkey, seq, strftime(min(ts_local),'%Y-%m-%d') AS datum, count(*) AS pageviews,
          arg_min(url, ts) AS entry_url, arg_max(url, ts) AS exit_url,
          arg_min(ipint, ts) AS ipint, arg_min(ip, ts) AS ip,
          arg_min(browser, ts) AS browser,
