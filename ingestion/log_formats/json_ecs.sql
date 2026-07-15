@@ -18,6 +18,14 @@
 -- separate and keeps tsraw as a plain string, compatible with the
 -- strptime/tsformat logic in transform.sql (as with the regex path).
 --
+-- Lines that are NOT valid JSON are SKIPPED (json_valid filter below): log
+-- streams often carry error-log lines in a different plain-text format in
+-- between (e.g. nginx error.log scraped into the same Loki stream without its
+-- own label). json_extract_string() would abort the whole import on the first
+-- such line ("Malformed JSON ..."); skipping matches the regex path, where a
+-- non-matching line is dropped, not fatal. Valid-JSON lines with a different
+-- schema yield NULL fields and are dropped later by transform.sql (ts IS NULL).
+--
 -- Creates TEMP TABLE parsed_lines(g) in the same schema as log_formats/regex.sql.
 -- Parameters (SET VARIABLE): logpath, tsformat (default see lib_logformat.sh)
 -- ===========================================================================
@@ -38,4 +46,8 @@ SELECT rid, struct_pack(
     referrer := json_extract_string(line, '$.HTTP.req.referer'),
     ua       := json_extract_string(line, '$.user_agent.original')
 ) AS g
-FROM raw_lines;
+FROM raw_lines
+-- Skip non-JSON lines (mixed streams, see header). raw_lines keeps ALL lines,
+-- so the byte accounting of day_cut.sql stays exact (skipped bytes count as
+-- consumed - junk is never re-read).
+WHERE json_valid(line);

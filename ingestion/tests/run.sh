@@ -77,6 +77,34 @@ else
   echo "PASS combined_vhost: gleiche Kennzahlen wie combined"
 fi
 
+# ---- 1.4b Log format: json_ecs skips non-JSON lines (mixed streams) ----------
+# Log streams (esp. Loki) often carry error-log lines in a different plain-text
+# format in between; those must be skipped, not abort the import (would surface
+# as "Table with name parsed_lines does not exist" in the sink).
+echo; echo "== Pipeline: SM_LOG_FORMAT=json_ecs (Mixed-Stream, Skip) =="
+JSON_LOG=$(mktemp /tmp/sm_json_XXXXXX.log)
+cat > "$JSON_LOG" <<'EOF'
+{"@timestamp":"2026-07-14T12:00:00+02:00","client":{"ip":"192.0.2.10"},"http":{"request":{"method":"GET"},"response":{"status_code":"200","bytes":"123"}},"HTTP":{"url_path":"/a","req":{"referer":"-"}},"user_agent":{"original":"Mozilla/5.0 Firefox/140.0"}}
+2026/07/14 12:00:01 [error] 123#123: *456 open() failed (2: No such file or directory)
+{"@timestamp":"2026-07-14T12:05:00+02:00","client":{"ip":"192.0.2.11"},"http":{"request":{"method":"GET"},"response":{"status_code":"200","bytes":"55"}},"HTTP":{"url_path":"/b","req":{"referer":"-"}},"user_agent":{"original":"Mozilla/5.0 Chrome/126.0"}}
+malformed {json
+EOF
+JSON_OUT=$(./bin/duckdb <<SQL
+SET VARIABLE logpath = '${JSON_LOG}';
+.read 'log_formats/json_ecs.sql'
+SELECT 'raw=' || count(*) FROM raw_lines;
+SELECT 'parsed=' || count(*) FROM parsed_lines;
+SQL
+) && json_rc=0 || json_rc=$?
+rm -f "$JSON_LOG"
+if [ "$json_rc" -eq 0 ] && echo "$JSON_OUT" | grep -q 'raw=4' && echo "$JSON_OUT" | grep -q 'parsed=2'; then
+  echo "PASS json_ecs: 2/4 Zeilen geparst, Error-/Malformed-Zeilen übersprungen (kein Abbruch)"
+else
+  echo "FAIL json_ecs: Mixed-Stream nicht korrekt übersprungen (rc=${json_rc})"
+  echo "$JSON_OUT"
+  fail=1
+fi
+
 # ---- 1.5 Backup: configurability, rotation, deactivation ---------------------
 echo; echo "== Pipeline: backup_cube.sh (Stub-mysqldump) =="
 BK_TMP=$(mktemp -d /tmp/sm_bk_XXXXXX)
