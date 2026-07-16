@@ -122,6 +122,41 @@ else
   fail=1
 fi
 
+# ---- 1.4c day_filter.sql: line timestamp is authoritative for the day --------
+# Loki fetches by ingestion time (with a margin); day_filter.sql must keep only
+# lines whose LOCAL calendar day is within [range_from, range_to] - stragglers
+# carrying 23:59:59 of the previous day must not leak into the next day's batch.
+echo; echo "== Pipeline: day_filter.sql (Loki-Tagesfenster) =="
+DF_LOG=$(mktemp /tmp/sm_df_XXXXXX.log)
+cat > "$DF_LOG" <<'EOF'
+{"@timestamp":"2026-07-13T23:59:59+02:00","client":{"ip":"192.0.2.10"},"http":{"request":{"method":"GET"},"response":{"status_code":"200","bytes":"1"}},"HTTP":{"url_path":"/straggler","req":{"referer":"-"}},"user_agent":{"original":"Mozilla/5.0 Firefox/140.0"}}
+{"@timestamp":"2026-07-14T12:00:00+02:00","client":{"ip":"192.0.2.11"},"http":{"request":{"method":"GET"},"response":{"status_code":"200","bytes":"2"}},"HTTP":{"url_path":"/in-day","req":{"referer":"-"}},"user_agent":{"original":"Mozilla/5.0 Firefox/140.0"}}
+{"@timestamp":"2026-07-15T00:00:01+02:00","client":{"ip":"192.0.2.12"},"http":{"request":{"method":"GET"},"response":{"status_code":"200","bytes":"3"}},"HTTP":{"url_path":"/next-day","req":{"referer":"-"}},"user_agent":{"original":"Mozilla/5.0 Firefox/140.0"}}
+EOF
+DF_OUT=$(./bin/duckdb <<SQL
+SET VARIABLE logpath  = '${DF_LOG}';
+SET VARIABLE tsformat = '%Y-%m-%dT%H:%M:%S%z';
+SET VARIABLE tz       = 'Europe/Berlin';
+.read 'log_formats/json_ecs.sql'
+.read 'day_filter.sql'
+SELECT 'nofilter=' || count(*) FROM parsed_lines;
+SET VARIABLE range_from = '2026-07-14';
+SET VARIABLE range_to   = '2026-07-14';
+.read 'day_filter.sql'
+SELECT 'filtered=' || count(*) FROM parsed_lines;
+SELECT 'kept=' || g.url FROM parsed_lines;
+SQL
+) && df_rc=0 || df_rc=$?
+rm -f "$DF_LOG"
+if [ "$df_rc" -eq 0 ] && echo "$DF_OUT" | grep -q 'nofilter=3' \
+   && echo "$DF_OUT" | grep -q 'filtered=1' && echo "$DF_OUT" | grep -q 'kept=/in-day'; then
+  echo "PASS day-filter: ohne range_* inaktiv (3), mit Tagesfenster nur In-Day-Zeile (Nachzügler/Folgetag verworfen)"
+else
+  echo "FAIL day-filter: Tagesfenster nicht korrekt angewendet (rc=${df_rc})"
+  echo "$DF_OUT"
+  fail=1
+fi
+
 # ---- 1.5 Backup: configurability, rotation, deactivation ---------------------
 echo; echo "== Pipeline: backup_cube.sh (Stub-mysqldump) =="
 BK_TMP=$(mktemp -d /tmp/sm_bk_XXXXXX)

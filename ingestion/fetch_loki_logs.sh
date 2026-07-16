@@ -43,6 +43,14 @@
 #   --timezone/--tz    timezone for day boundaries + datum/stunde, DST-aware
 #                       (23-/25-hour days); an unknown zone is rejected instead
 #                       of silently treated as UTC. (SM_TZ, default Europe/Berlin)
+#   --margin-seconds   safety margin around the Loki query window. Loki filters
+#                       by INGESTION time, which lags the timestamp inside the
+#                       line by a few seconds (nginx/promtail buffering) - so
+#                       each day is fetched with +/- margin and day_filter.sql
+#                       then buckets strictly by the LINE's timestamp; anything
+#                       outside the day is discarded. Schedule the daily run at
+#                       least margin seconds after midnight, so the stragglers
+#                       have arrived. (LOKI_MARGIN_SECONDS, default 60)
 #   --namespace        convenience filter: additional label matcher
 #                       "namespace=..." mixed into --query (LOKI_NAMESPACE), optional
 #   --org-id           X-Scope-OrgID header (Loki multi-tenant), optional
@@ -77,6 +85,7 @@ LOKI_NAMESPACE="${LOKI_NAMESPACE:-}"
 LOKI_ORG_ID="${LOKI_ORG_ID:-}"
 LOKI_LIMIT="${LOKI_LIMIT:-5000}"
 LOKI_LOOKBACK_DAYS="${LOKI_LOOKBACK_DAYS:-1}"
+LOKI_MARGIN_SECONDS="${LOKI_MARGIN_SECONDS:-60}"
 SM_TZ="${SM_TZ:-Europe/Berlin}"
 SM_TMPDIR="${SM_TMPDIR:-/tmp}"
 DUCKDB_MEMORY_LIMIT="${DUCKDB_MEMORY_LIMIT:-2GB}"
@@ -90,10 +99,11 @@ while [[ $# -gt 0 ]]; do
     --org-id)          LOKI_ORG_ID="$2"; shift 2 ;;
     --limit)           LOKI_LIMIT="$2"; shift 2 ;;
     --lookback-days)   LOKI_LOOKBACK_DAYS="$2"; shift 2 ;;
+    --margin-seconds)  LOKI_MARGIN_SECONDS="$2"; shift 2 ;;
     --timezone|--tz)   SM_TZ="$2"; shift 2 ;;
     --site-id)         SITE_ID="$2"; shift 2 ;;
     --site-name)       SITE_NAME="$2"; shift 2 ;;
-    -h|--help)         sed -n '2,63p' "$0"; exit 0 ;;
+    -h|--help)         sed -n '2,71p' "$0"; exit 0 ;;
     *) echo "Unbekannte Option: $1" >&2; exit 1 ;;
   esac
 done
@@ -101,6 +111,7 @@ done
 : "${SITE_ID:?--site-id fehlt}"; : "${SITE_NAME:?--site-name fehlt}"
 case "$LOKI_LOOKBACK_DAYS" in ''|*[!0-9]*) echo "Fehler: --lookback-days muss eine positive Ganzzahl sein." >&2; exit 1 ;; esac
 [ "$LOKI_LOOKBACK_DAYS" -ge 1 ] || { echo "Fehler: --lookback-days muss >= 1 sein." >&2; exit 1; }
+case "$LOKI_MARGIN_SECONDS" in ''|*[!0-9]*) echo "Fehler: --margin-seconds muss eine Ganzzahl >= 0 sein." >&2; exit 1 ;; esac
 
 # ---- Namespace filter (Kubernetes/Promtail label "namespace") -------------
 # Convenience option in addition to --query: mixed in as an additional
@@ -233,16 +244,23 @@ while [[ ! "$D" > "$LAST_COMPLETE" ]]; do
   START_NS=$(( $(TZ="$SM_TZ" date -d "$D 00:00:00" +%s) * 1000000000 ))
   END_NS=$((   $(TZ="$SM_TZ" date -d "$D_NEXT 00:00:00" +%s) * 1000000000 ))
   DAY_HOURS=$(( (END_NS - START_NS) / 3600000000000 ))
+  # Loki filters by INGESTION time, which lags the timestamp inside the line
+  # (nginx/promtail buffering): stragglers of day D arrive shortly after
+  # midnight, and lines ingested right at 00:00 may still carry 23:59:59 of
+  # D-1. Fetch with +/- margin; day_filter.sql below then buckets strictly by
+  # the line's own timestamp, so each line lands in exactly one day even
+  # though consecutive fetch windows overlap.
+  FETCH_START_NS=$(( START_NS - LOKI_MARGIN_SECONDS * 1000000000 ))
+  FETCH_END_NS=$((   END_NS   + LOKI_MARGIN_SECONDS * 1000000000 ))
   LOG_FILE="${SM_TMPDIR}/sm_loki_${SITE_ID}_${D}.jsonl"
   : > "$LOG_FILE"
 
-  echo ">> Tag ${D} (${DAY_HOURS}h): hole aus Loki [${D} 00:00 .. ${D_NEXT} 00:00) ${SM_TZ} ..."
+  echo ">> Tag ${D} (${DAY_HOURS}h): hole aus Loki [${D} 00:00 .. ${D_NEXT} 00:00) ±${LOKI_MARGIN_SECONDS}s ${SM_TZ} ..."
 
-  # Loki paginates; the range is [start, end) - start inclusive, end exclusive,
-  # so END_NS = next local midnight covers exactly 00:00:00..23:59:59.999….
+  # Loki paginates; the range is [start, end) - start inclusive, end exclusive.
   # Stream the lines straight into the temp file (NOT into shell memory)
   # -> RAM stays constant regardless of the day's size.
-  cursor="$START_NS"; total=0; page=0; max_ts=0
+  cursor="$FETCH_START_NS"; total=0; page=0; max_ts=0
   max_pages=200000    # guard: 200k pages x limit covers very large days
   while [ "$page" -lt "$max_pages" ]; do
     page=$((page + 1))
@@ -250,7 +268,7 @@ while [[ ! "$D" > "$LAST_COMPLETE" ]]; do
       "${CURL_HEADERS[@]}" \
       --data-urlencode "query=${LOKI_QUERY}" \
       --data-urlencode "start=${cursor}" \
-      --data-urlencode "end=${END_NS}" \
+      --data-urlencode "end=${FETCH_END_NS}" \
       --data-urlencode "limit=${LOKI_LIMIT}" \
       --data-urlencode "direction=forward")
 
@@ -262,7 +280,7 @@ while [[ ! "$D" > "$LAST_COMPLETE" ]]; do
     total=$((total + count))
     [ "$count" -lt "$LOKI_LIMIT" ] && break
     cursor=$((page_max_ts + 1))
-    [ "$cursor" -ge "$END_NS" ] && break
+    [ "$cursor" -ge "$FETCH_END_NS" ] && break
   done
   if [ "$page" -ge "$max_pages" ]; then
     echo "Fehler: max_pages (${max_pages}) an Tag ${D} erreicht – Tag nicht vollständig geholt, Abbruch." >&2
@@ -299,6 +317,7 @@ SET VARIABLE range_to   = '${D}';
 ${BOT_SQL}
 .read '${GEO_SOURCE_SQL}'
 .read '${LOG_FORMAT_SQL}'
+.read 'day_filter.sql'
 ${GEO6_SQL}
 ${UA_SQL}
 .read '${SQL_TMP}'

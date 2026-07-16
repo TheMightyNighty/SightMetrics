@@ -104,10 +104,14 @@ CUBE_DSN="host=… user=cube_rw password=… database=analytics" \
                        --site-id 1 --site-name "Authority A"
 ```
 
-Designed for **one run per day** (e.g. shortly after midnight): imports the
-previous day; missed days are caught up via the **daily state**
+Designed for **one run per day** (e.g. a few minutes after midnight): imports
+the previous day; missed days are caught up via the **daily state**
 (`<hash>.loki_day` instead of a byte offset), the currently running
-(incomplete) day is skipped. The previous day is **re-imported and
+(incomplete) day is skipped. Loki filters by *ingestion* time, which lags the
+timestamp inside the line — each day is therefore fetched with a safety
+margin (`--margin-seconds`, default 60) and `day_filter.sql` buckets strictly
+by the **line's own timestamp**: stragglers still carrying 23:59:59 of the
+previous day are discarded instead of producing a stray extra daily row. The previous day is **re-imported and
 replaced** on every run (range-DELETE+INSERT in the sink) — so the script
 can safely run multiple times, or during the day. First run:
 `--lookback-days N` (full days back, ending yesterday). `--namespace` is a
