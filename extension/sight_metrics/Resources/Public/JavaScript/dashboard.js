@@ -67,9 +67,57 @@ import { initPresets } from './modules/presets.js';
     // through too but simply never match server-side and stay on the live path.
     const presetEl = $('w-preset');
     topN.reloadAll(a, b, presetEl ? presetEl.value : null);
+    pollExportAvailability();
+  }
+
+  // Root Top-N panels now load asynchronously (modules/topn.js: last-complete-day
+  // first, then the real range) instead of arriving in the initial payload --
+  // export.js reads TOPN[dim].rows synchronously, so an export triggered before
+  // the accurate ("final") data has landed for every dim would silently ship
+  // incomplete rows. Disable CSV/PDF until topN.allLoaded(), polling instead of
+  // an event (reloadAll()/toggleSub() have several async completion points).
+  let exportPoll = null;
+  function pollExportAvailability() {
+    if (exportPoll) clearInterval(exportPoll);
+    const apply = function () {
+      const ready = topN.allLoaded();
+      if ($('w-csv')) $('w-csv').disabled = !ready;
+      if ($('w-pdf')) $('w-pdf').disabled = !ready;
+      return ready;
+    };
+    if (apply()) return;
+    exportPoll = setInterval(function () { if (apply()) { clearInterval(exportPoll); exportPoll = null; } }, 300);
   }
 
   function resizeAll() { charts.resizeAll(); map.invalidate(); }
+
+  // Click a card's header to expand it to the full grid width (e.g. for panels
+  // with long lines -- referrer URLs, search terms); the other cards in that
+  // .sm-grid reflow below (plain CSS Grid, .sm-expanded sets grid-column:1/-1).
+  // Accordion per .sm-grid section: expanding one card collapses any other
+  // already-expanded card in the *same* section, not across sections.
+  function initExpandableCards() {
+    document.querySelectorAll('#sightmetrics .sm-grid > .sm-card').forEach(function (card) {
+      const header = /** @type {any} */ (card.querySelector('h2, h3'));
+      if (!header) return;
+      card.classList.add('sm-expandable');
+      header.setAttribute('role', 'button');
+      header.tabIndex = 0;
+      header.setAttribute('aria-expanded', 'false');
+      const toggle = function () {
+        const grid = card.parentElement, willExpand = !card.classList.contains('sm-expanded');
+        grid.querySelectorAll(':scope > .sm-card.sm-expanded').forEach(function (other) {
+          other.classList.remove('sm-expanded');
+          const h = other.querySelector('h2, h3'); if (h) h.setAttribute('aria-expanded', 'false');
+        });
+        card.classList.toggle('sm-expanded', willExpand);
+        header.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+        resizeAll();
+      };
+      header.onclick = toggle;
+      header.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+    });
+  }
 
   function init() {
     if (typeof Chart === 'undefined') return;
@@ -89,6 +137,7 @@ import { initPresets } from './modules/presets.js';
     }
 
     initPresets(ctx, render);
+    initExpandableCards();
     if ($('w-cmp')) $('w-cmp').onchange = render;
     if ($('w-csv')) $('w-csv').onclick = function () { csvExport.exportCsv($('w-from').value, $('w-to').value); };
     if ($('w-pdf')) $('w-pdf').onclick = function () { resizeAll(); window.print(); };

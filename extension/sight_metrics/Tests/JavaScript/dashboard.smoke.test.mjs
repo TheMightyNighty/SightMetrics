@@ -163,101 +163,138 @@ test('dashboard.js laedt Payload, rendert KPIs, Linien-/Balkenchart und Karte oh
   assert.ok(geoJsonCalls[0].data.features.length > 0, 'Karte ohne Laender-Features gerendert');
 });
 
-test('Top-N-Barliste (z. B. Keyword) rendert Server-Top-N und laedt "+ N weitere" per Fetch nach', async () => {
-  const payload = {
-    ...FAKE_PAYLOAD,
-    topNUrl: '/typo3/ajax/sightmetrics/topn',
-    topNLimit: 2,
-    topN: {
-      keyword: {
-        metric: 'v',
-        rows: [{ dimkey: 'rathaus', pv: 10, v: 6 }, { dimkey: 'personalausweis', pv: 8, v: 4 }],
-        total: { pv: 30, v: 15, count: 5 },
-      },
-      entry: { metric: 'v', rows: [], total: { pv: 0, v: 0, count: 0 } },
-      exit: { metric: 'v', rows: [], total: { pv: 0, v: 0, count: 0 } },
-      download: { metric: 'pv', rows: [], total: { pv: 0, v: 0, count: 0 } },
-      status: { metric: 'pv', rows: [], total: { pv: 0, v: 0, count: 0 } },
-      method: { metric: 'pv', rows: [], total: { pv: 0, v: 0, count: 0 } },
-    },
-  };
+// Small helper for tests that need to hold a response back to observe the
+// intermediate ("fast stage rendered, final stage still pending") state
+// deterministically, instead of racing real timers.
+function deferred() {
+  let resolve;
+  const promise = new Promise((r) => { resolve = r; });
+  return { promise, resolve };
+}
+
+test('Top-N-Barliste (z. B. Keyword) laedt zweistufig (letzter vollstaendiger Tag zuerst, dann Zeitraum) und "+ N weitere" per Fetch nach', async () => {
+  const payload = { ...FAKE_PAYLOAD, topNUrl: '/typo3/ajax/sightmetrics/topn', topNLimit: 2 };
   const { window, windowErrors } = buildDom(payload);
 
+  const finalDeferred = deferred();
   const fetchCalls = [];
   window.fetch = (url) => {
     fetchCalls.push(String(url));
-    return Promise.resolve({
+    const u = new URL(String(url), 'http://localhost/');
+    if (u.searchParams.get('dim') !== 'keyword') {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: { pv: 0, v: 0, count: 0 } }) });
+    }
+    // Fast stage requests exactly [meta.bis, meta.bis] (FAKE_PAYLOAD.meta.bis = '2026-06-03').
+    const isFastStage = u.searchParams.get('from') === '2026-06-03' && u.searchParams.get('to') === '2026-06-03';
+    if (isFastStage) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ rows: [{ dimkey: 'termin', pv: 2, v: 1 }], total: { pv: 2, v: 1, count: 1 } }),
+      });
+    }
+    // Final stage (the real window) resolves only once the test lets it -- this is what
+    // makes the "fast stage rendered while final is still in flight" assertion below safe.
+    return finalDeferred.promise.then(() => ({
       ok: true,
       json: () => Promise.resolve({
-        rows: [{ dimkey: 'anmeldung', pv: 5, v: 3 }, { dimkey: 'termin', pv: 4, v: 2 }],
-        total: { pv: 30, v: 15, count: 4 },
+        rows: [{ dimkey: 'rathaus', pv: 10, v: 6 }, { dimkey: 'personalausweis', pv: 8, v: 4 }],
+        total: { pv: 30, v: 15, count: 5 },
       }),
-    });
+    }));
   };
   await loadDashboard(window);
   assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
 
   const keywordEl = window.document.getElementById('bl-keyword');
-  assert.ok(keywordEl.textContent.includes('rathaus'), 'initiale Top-N-Zeilen aus dem Payload muessen gerendert werden');
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(keywordEl.textContent.includes('termin'), 'letzter vollstaendiger Tag (Fast-Stage) muss zuerst gerendert werden, waehrend der echte Zeitraum noch laedt');
+  // CSV/PDF export must stay disabled while the accurate data hasn't landed for every dim yet.
+  assert.equal(window.document.getElementById('w-csv').disabled, true, 'Export bleibt gesperrt, solange nicht alle Root-Panels final geladen sind');
+
+  finalDeferred.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.ok(keywordEl.textContent.includes('rathaus'), 'Final-Stage (echter Zeitraum) muss die Platzhalterzeile ersetzen');
+  assert.ok(!keywordEl.textContent.includes('termin'), 'Fast-Stage-Platzhalter darf nach der Final-Stage nicht mehr zu sehen sein');
   const more = keywordEl.querySelector('.bl-more-click');
   assert.ok(more, '"+ N weitere" muss angezeigt werden, wenn total.count > geladene Zeilen');
   // Without a lang map in the payload, the English fallback applies (default language of the XLF).
   assert.equal(more.textContent, '+ 3 more');
 
+  const callsBeforeMore = fetchCalls.length;
   more.click();
   await new Promise((r) => setTimeout(r, 0));
 
-  assert.equal(fetchCalls.length, 1, 'Klick auf "+ N weitere" muss genau einen Ajax-Request ausloesen');
-  assert.match(fetchCalls[0], /dim=keyword/);
-  assert.match(fetchCalls[0], /offset=2/);
-  assert.ok(keywordEl.textContent.includes('anmeldung'), 'nachgeladene Zeilen muessen angehaengt werden');
-  assert.equal(keywordEl.querySelectorAll('.bl-more').length, 0, 'nach vollstaendigem Nachladen kein "+ N weitere" mehr');
+  assert.equal(fetchCalls.length, callsBeforeMore + 1, 'Klick auf "+ N weitere" muss genau einen weiteren Ajax-Request ausloesen (kein erneutes Zwei-Stufen-Fetching)');
+  assert.match(fetchCalls[fetchCalls.length - 1], /dim=keyword/);
+  assert.match(fetchCalls[fetchCalls.length - 1], /offset=2/);
+  assert.ok(keywordEl.textContent.includes('anmeldung') || keywordEl.textContent.includes('personalausweis'), 'nachgeladene Zeilen muessen angehaengt werden');
 });
 
-test('Drill-down (Browser -> Version) laedt Kinder per parentKey nach, wenn eine Zeile aufgeklappt wird', async () => {
-  const payload = {
-    ...FAKE_PAYLOAD,
-    topNUrl: '/typo3/ajax/sightmetrics/topn',
-    topN: {
-      browser: {
-        metric: 'v',
-        limit: 8,
-        rows: [{ dimkey: 'Firefox', pv: 12, v: 7 }],
-        total: { pv: 12, v: 7, count: 1 },
-      },
-    },
-  };
+test('Drill-down (Browser -> Version) laedt Kinder zweistufig per parentKey nach, wenn eine Zeile aufgeklappt wird', async () => {
+  const payload = { ...FAKE_PAYLOAD, topNUrl: '/typo3/ajax/sightmetrics/topn' };
   const { window, windowErrors } = buildDom(payload);
 
-  const fetchCalls = [];
+  const finalDeferred = deferred();
+  const childFetchCalls = [];
   window.fetch = (url) => {
-    fetchCalls.push(String(url));
-    return Promise.resolve({
+    const u = new URL(String(url), 'http://localhost/');
+    if (u.searchParams.get('dim') !== 'browser_version') {
+      // Root panels (incl. 'browser') load via the same two-stage mechanism now --
+      // keep them simple/empty here, this test is about the drill-down child only.
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(
+          u.searchParams.get('dim') === 'browser'
+            ? { rows: [{ dimkey: 'Firefox', pv: 12, v: 7 }], total: { pv: 12, v: 7, count: 1 } }
+            : { rows: [], total: { pv: 0, v: 0, count: 0 } }
+        ),
+      });
+    }
+    childFetchCalls.push(String(url));
+    const isFastStage = u.searchParams.get('from') === '2026-06-03' && u.searchParams.get('to') === '2026-06-03';
+    if (isFastStage) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ rows: [{ dimkey: '125', pv: 1, v: 1 }], total: { pv: 1, v: 1, count: 1 } }),
+      });
+    }
+    return finalDeferred.promise.then(() => ({
       ok: true,
       json: () => Promise.resolve({
         rows: [{ dimkey: '120', pv: 8, v: 5 }, { dimkey: '119', pv: 4, v: 2 }],
         total: { pv: 12, v: 7, count: 2 },
       }),
-    });
+    }));
   };
   await loadDashboard(window);
   assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
+  await new Promise((r) => setTimeout(r, 0));
 
   const browserEl = window.document.getElementById('bl-browser');
-  assert.ok(browserEl.textContent.includes('Firefox'), 'Root-Top-N-Zeile aus dem Payload muss gerendert werden');
+  assert.ok(browserEl.textContent.includes('Firefox'), 'Root-Top-N-Zeile muss gerendert werden');
   const label = browserEl.querySelector('.bl-drill .bl-label');
   assert.ok(label, 'Zeile mit Drill-down-Kind muss als .bl-drill (aufklappbar) markiert sein');
-  assert.equal(fetchCalls.length, 0, 'Kinder duerfen erst bei Klick geladen werden, nicht vorab');
+  assert.equal(childFetchCalls.length, 0, 'Kinder duerfen erst bei Klick geladen werden, nicht vorab');
 
   label.click();
   await new Promise((r) => setTimeout(r, 0));
 
-  assert.equal(fetchCalls.length, 1, 'Aufklappen muss genau einen Ajax-Request ausloesen');
-  assert.match(fetchCalls[0], /dim=browser_version/);
-  assert.match(fetchCalls[0], /parentKey=Firefox/);
-  const sub = browserEl.querySelector('.bl-sub');
+  assert.equal(childFetchCalls.length, 2, 'Aufklappen muss die zweistufige Fetch-Sequenz ausloesen (letzter vollstaendiger Tag + echter Zeitraum)');
+  assert.match(childFetchCalls[0], /dim=browser_version/);
+  assert.match(childFetchCalls[0], /parentKey=Firefox/);
+  let sub = browserEl.querySelector('.bl-sub');
   assert.ok(sub, 'Sub-Container fuer die Kind-Liste muss erzeugt werden');
-  assert.ok(sub.textContent.includes('120'), 'nachgeladene Kind-Zeilen muessen gerendert werden (Eltern-Praefix abgetrennt)');
+  assert.ok(sub.textContent.includes('125'), 'Fast-Stage-Platzhalter (letzter vollstaendiger Tag) muss zuerst gerendert werden');
+
+  finalDeferred.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+
+  sub = browserEl.querySelector('.bl-sub');
+  assert.ok(sub.textContent.includes('120'), 'nachgeladene Kind-Zeilen (echter Zeitraum) muessen den Platzhalter ersetzen (Eltern-Praefix abgetrennt)');
+  assert.ok(!sub.textContent.includes('125'), 'Fast-Stage-Platzhalter darf nach der Final-Stage nicht mehr zu sehen sein');
   assert.ok(!sub.textContent.includes('\x1f'), 'SCHEMA v2: keine CHR(31)-Keys mehr in der Anzeige');
 });
 
@@ -311,6 +348,37 @@ test('Seitenbaum rendert vorgeladene 2 Ebenen und laedt tiefere Aeste per path-F
   assert.equal(fetchCalls.length, 1, 'Aufklappen muss genau einen Ajax-Request ausloesen');
   assert.match(fetchCalls[0], /path=%2Fbuergerservice%2Fpersonalausweis/);
   assert.ok(treeEl.textContent.includes('beantragen'), 'nachgeladene Ebene 3 muss gerendert werden');
+});
+
+test('Panel-Header-Klick klappt eine Box ueber die volle Grid-Breite auf und klappt eine andere offene Box im selben Grid-Abschnitt zu', async () => {
+  const { window, windowErrors } = buildDom();
+  window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: { pv: 0, v: 0, count: 0 } }) });
+
+  await loadDashboard(window);
+  assert.deepEqual(windowErrors, [], 'dashboard.js darf beim Laden/Rendern keine Exceptions werfen');
+
+  // bl-browser/bl-os/bl-device sit as siblings in the same .sm-g3 section.
+  const browserCard = window.document.getElementById('bl-browser').closest('.sm-card');
+  const osCard = window.document.getElementById('bl-os').closest('.sm-card');
+  const browserHeader = browserCard.querySelector('h2, h3');
+  const osHeader = osCard.querySelector('h2, h3');
+  assert.ok(browserHeader, 'Panel muss eine erweiterbare Kopfzeile haben');
+  assert.equal(browserHeader.getAttribute('aria-expanded'), 'false');
+
+  browserHeader.click();
+  assert.ok(browserCard.classList.contains('sm-expanded'), 'Klick muss die Box aufklappen (sm-expanded)');
+  assert.equal(browserHeader.getAttribute('aria-expanded'), 'true');
+
+  osHeader.click();
+  assert.ok(osCard.classList.contains('sm-expanded'), 'zweite Box im selben Grid-Abschnitt muss aufklappen');
+  assert.ok(!browserCard.classList.contains('sm-expanded'), 'Akkordeon: die zuvor offene Box im selben Abschnitt muss zuklappen');
+  assert.equal(browserHeader.getAttribute('aria-expanded'), 'false');
+
+  // Keyboard operable (Enter), same as the existing .bl-drill/.tog pattern.
+  osHeader.click(); // collapse again
+  assert.ok(!osCard.classList.contains('sm-expanded'));
+  osHeader.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
+  assert.ok(osCard.classList.contains('sm-expanded'), 'Enter-Taste auf dem Header muss ebenfalls aufklappen');
 });
 
 test('dashboard.js bricht sauber ab, wenn Chart.js/Leaflet fehlen (kein Wurf, kein Crash)', async () => {

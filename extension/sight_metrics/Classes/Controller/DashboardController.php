@@ -107,25 +107,18 @@ final class DashboardController implements LoggerAwareInterface
                 Params::toStringOrNull($params['to'] ?? null),
             );
 
-            // Root dims (see TopNDims): Top-N is preloaded. Child dims (drill-down,
-            // e.g. browser_version) are NEVER in the initial payload -- these are only
-            // fetched via Ajax lazy-loading (parentKey) when the user expands a row.
-            $topN = [];
-            foreach (TopNDims::ROOT_METRIC_BY_DIM as $dim => $metric) {
-                $limit = TopNDims::defaultLimitFor($dim);
-                $topN[$dim] = [
-                    'metric' => $metric,
-                    'limit' => $limit,
-                    'rows' => $this->cubeRepository->topN($siteId, $from, $bis, $dim, $metric, $limit),
-                    'total' => $this->cubeRepository->dimSummary($siteId, $from, $bis, $dim),
-                ];
-            }
-
+            // Root dims (see TopNDims) are NEVER preloaded here (used to be, synchronously,
+            // which meant 11 root dims x topN()+dimSummary() -- 22 live aggregate queries --
+            // ran before the page could render anything; expensive at high cardinality).
+            // Child dims (drill-down, e.g. browser_version) already only ever loaded via
+            // Ajax lazy-loading (parentKey) when the user expands a row -- root dims now use
+            // the exact same Ajax route on page load instead (dashboard.js/topn.js), so the
+            // response here stays fast regardless of cube size.
             $payload = [
                 'meta' => $meta,
                 'daily' => $this->cubeRepository->daily($siteId, $from, $bis),
                 'cube' => $this->cubeRepository->cube($siteId, $from, $bis, TopNDims::excludedFromFullPayload()),
-                'topN' => $topN,
+                'topN' => [],
                 // Page tree: 2 levels upfront (first level expanded + its children
                 // visible, like the earlier client-side setup); deeper levels are
                 // lazy-loaded by dashboard.js via the tree Ajax route on expand.

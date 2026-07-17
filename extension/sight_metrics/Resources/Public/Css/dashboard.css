@@ -46,6 +46,16 @@
 #sightmetrics .sm-g23{grid-template-columns:1.3fr 1fr}
 #sightmetrics .sm-card{background:var(--w-card);border:1px solid var(--w-line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
 #sightmetrics .sm-card :is(h2,h3){font-size:13px;margin:0 0 10px;color:var(--w-muted);text-transform:uppercase;letter-spacing:.04em}
+/* Expand-to-full-width: click a card's header to let it span the whole grid
+   row (the other cards in that .sm-grid reflow below), e.g. for panels with
+   long lines (referrer URLs, search terms). One card expanded at a time per
+   .sm-grid section (accordion), see dashboard.js. */
+#sightmetrics .sm-expandable :is(h2,h3){cursor:pointer;user-select:none;display:flex;align-items:center;gap:5px}
+#sightmetrics .sm-expandable :is(h2,h3):hover{color:var(--w-accent)}
+#sightmetrics .sm-expandable :is(h2,h3):focus-visible{outline:2px solid var(--w-accent);outline-offset:2px;border-radius:3px}
+#sightmetrics .sm-expandable :is(h2,h3)::after{content:'⤢';font-size:11px;color:var(--w-muted);margin-left:auto}
+#sightmetrics .sm-expandable.sm-expanded :is(h2,h3)::after{content:'⤡'}
+#sightmetrics .sm-card.sm-expanded{grid-column:1/-1}
 #sightmetrics .sm-chart{height:300px;position:relative}
 #sightmetrics .sm-chart.sm{height:230px}
 #sightmetrics table{width:100%;border-collapse:collapse;font-size:13px}

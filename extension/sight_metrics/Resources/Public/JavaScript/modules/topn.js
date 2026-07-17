@@ -32,26 +32,29 @@ export const TOPN_CHILD = {
 
 /**
  * @param {any} ctx dashboard context (createContext())
- * @returns {{ TOPN: Record<string, any>, reloadAll: (a: string, b: string, windowLabel?: string|null) => void }}
+ * @returns {{ TOPN: Record<string, any>, reloadAll: (a: string, b: string, windowLabel?: string|null) => void, allLoaded: () => boolean }}
  */
 export function createTopN(ctx) {
-  const { DATA, WIN, i18n, $ } = ctx;
+  const { DATA, META, WIN, i18n, $ } = ctx;
   const t = i18n.t, tf = i18n.tf, nf = i18n.nf;
   const url = DATA.topNUrl || null;
   let curA = WIN.von, curB = WIN.bis; // currently selected range (for child fetches)
   let curWindow = null; // preset label of the current range (w-preset value), see reloadAll()
 
-  /** @type {Record<string, any>} dim -> {rows, total:{pv,v,count}, metric, from, to, loading, limit} */
+  /** @type {Record<string, any>} dim -> {rows, total:{pv,v,count}, metric, from, to, loading, loaded, limit} */
   const TOPN = {};
   Object.keys(TOPN_ROOT).forEach(function (dim) {
-    const meta = TOPN_ROOT[dim], t0 = (DATA.topN && DATA.topN[dim]) || {};
+    const meta = TOPN_ROOT[dim];
     TOPN[dim] = {
       dim: dim,
-      rows: (t0.rows || []).slice(),
-      total: t0.total || { pv: 0, v: 0, count: 0 },
-      metric: t0.metric || meta.metric,
-      limit: t0.limit || meta.limit || 8,
-      from: WIN.von, to: WIN.bis, loading: false,
+      rows: [],
+      total: { pv: 0, v: 0, count: 0 },
+      metric: meta.metric,
+      limit: meta.limit || 8,
+      // Root dims are no longer preloaded in the initial payload (see
+      // DashboardController) -- always start in "loading" so the first paint
+      // shows the loading indicator instead of a one-tick "no data" flash.
+      from: WIN.von, to: WIN.bis, loading: true, loaded: false,
     };
   });
 
@@ -64,6 +67,28 @@ export function createTopN(ctx) {
     // (falls back to the live query), never produces wrong data.
     if (windowLabel != null) params.window = windowLabel;
     return ctx.fetchJson(url, params);
+  }
+
+  // Two-stage initial fetch (offset=0 only -- "+ N more" pagination stays a
+  // single fetchRows() call, see paint()): first the single most recent
+  // COMPLETE day (META.bis -- not calendar "today", which the day-boundary
+  // cut leaves empty until the next night's import), always cheap regardless
+  // of total cube size; then the real requested range in the background.
+  // onStage(res, 'fast'|'final') is called for each response that arrives,
+  // in order (a slow 'fast' response arriving after 'final' is dropped by
+  // the caller via the loaded flag, not here). Returns the 'final' promise,
+  // so callers can .catch() it the same way they did the single fetchRows().
+  function fetchTwoStage(dim, a, b, limit, parentKey, windowLabel, onStage) {
+    const anchor = META && META.bis;
+    if (anchor && !(a === anchor && b === anchor)) {
+      fetchRows(dim, anchor, anchor, 0, limit, parentKey, null)
+        .then(function (res) { onStage(res, 'fast'); })
+        .catch(function () { /* fast stage is best-effort, the final fetch below is what counts */ });
+    }
+    return fetchRows(dim, a, b, 0, limit, parentKey, windowLabel).then(function (res) {
+      onStage(res, 'final');
+      return res;
+    });
   }
 
   // Shared renderer for Top-N rows (root OR child) + "+ N more" lazy loading.
@@ -112,15 +137,25 @@ export function createTopN(ctx) {
           const childMeta = TOPN_CHILD[meta.child];
           const childState = {
             dim: meta.child, from: curA, to: curB, parentKey: r.dimkey, window: curWindow,
-            rows: [], total: { pv: 0, v: 0, count: 0 }, metric: childMeta.metric, limit: 8, loading: true,
+            rows: [], total: { pv: 0, v: 0, count: 0 }, metric: childMeta.metric, limit: 8, loading: true, loaded: false,
           };
           const childFactory = rowFactory(meta.child, childMeta);
           paint(sub, childState, childFactory);
-          fetchRows(childState.dim, childState.from, childState.to, 0, childState.limit, childState.parentKey, childState.window)
-            .then(function (res) {
-              childState.rows = res.rows || []; childState.total = res.total || childState.total; childState.loading = false;
+          fetchTwoStage(childState.dim, childState.from, childState.to, childState.limit, childState.parentKey, childState.window, function (res, stage) {
+            const rows = res.rows || [];
+            if (stage === 'fast') {
+              // Late-arriving fast response after final already landed, or a
+              // genuinely empty day (that parent may just not occur today) --
+              // either way don't overwrite the more complete/accurate state.
+              if (childState.loaded || !rows.length) return;
+              childState.rows = rows; childState.total = res.total || childState.total;
               paint(sub, childState, childFactory);
-            }).catch(function () { childState.loading = false; paint(sub, childState, childFactory); });
+              return;
+            }
+            childState.rows = rows; childState.total = res.total || childState.total;
+            childState.loading = false; childState.loaded = true;
+            paint(sub, childState, childFactory);
+          }).catch(function () { childState.loading = false; paint(sub, childState, childFactory); });
         }
         const open = sub.style.display === 'none';
         sub.style.display = open ? 'block' : 'none';
@@ -137,11 +172,13 @@ export function createTopN(ctx) {
     paint(cont, TOPN[dim], rowFactory(dim, meta));
   }
 
-  // On date change: show current state immediately, reload each list via Ajax
-  // for [a,b] on a differing range. Race guard via st.from/st.to. A full
-  // re-render discards expanded child lists (consistent with prior behavior).
-  // windowLabel: the active preset (w-preset value), if any -- passed through to
-  // fetchRows so the server can serve from the precomputed `topn` table
+  // On date change (including the very first call, from dashboard.js's initial
+  // render()): show current state immediately, reload each list via the
+  // two-stage fetch for [a,b] on a differing (or not-yet-loaded) range. Race
+  // guard via st.from/st.to. A full re-render discards expanded child lists
+  // (consistent with prior behavior).
+  // windowLabel: the active preset (w-preset value), if any -- passed through
+  // to fetchRows so the server can serve from the precomputed `topn` table
   // (docs/topn-precompute-spec.md); irrelevant/wrong values are simply ignored
   // server-side, so this never needs to be exact.
   function reloadAll(a, b, windowLabel) {
@@ -149,12 +186,20 @@ export function createTopN(ctx) {
     Object.keys(TOPN_ROOT).forEach(function (dim) {
       const st = TOPN[dim];
       renderRoot(dim);
-      if (st.from === a && st.to === b) return;
-      st.loading = true; st.from = a; st.to = b; st.window = curWindow;
+      if (st.loaded && st.from === a && st.to === b) return;
+      st.loading = true; st.loaded = false; st.from = a; st.to = b; st.window = curWindow;
       renderRoot(dim);
-      fetchRows(dim, a, b, 0, st.limit, null, curWindow).then(function (res) {
+      fetchTwoStage(dim, a, b, st.limit, null, curWindow, function (res, stage) {
         if (st.from !== a || st.to !== b) return; // superseded by a newer range change
-        st.rows = res.rows || []; st.total = res.total || { pv: 0, v: 0, count: 0 }; st.loading = false;
+        const rows = res.rows || [];
+        if (stage === 'fast') {
+          if (st.loaded || !rows.length) return; // see toggleSub() for the same guard
+          st.rows = rows; st.total = res.total || st.total;
+          renderRoot(dim);
+          return;
+        }
+        st.rows = rows; st.total = res.total || { pv: 0, v: 0, count: 0 };
+        st.loading = false; st.loaded = true;
         renderRoot(dim);
       }).catch(function () {
         if (st.from !== a || st.to !== b) return;
@@ -163,5 +208,10 @@ export function createTopN(ctx) {
     });
   }
 
-  return { TOPN: TOPN, reloadAll: reloadAll };
+  /** True once every root dim's accurate ("final") data has loaded at least once. */
+  function allLoaded() {
+    return Object.keys(TOPN_ROOT).every(function (dim) { return TOPN[dim].loaded; });
+  }
+
+  return { TOPN: TOPN, reloadAll: reloadAll, allLoaded: allLoaded };
 }
