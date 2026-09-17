@@ -56,7 +56,7 @@ Datenbank. Das ist schnell, ressourcenschonend und **datenschutzfreundlich**
 | `ingestion/` | **Paket A – Ingestion/Auswertung (DuckDB)**, der operative Teil. Log-Parser, Aggregations-SQL, Import-Skripte, GeoIP-Daten, das DuckDB-Binary. Alleiniger Schreiber der Cube-DB. → [`ingestion/README.de.md`](ingestion/README.de.md) |
 | `extension/` | **Paket B – TYPO3-Reporting-Extension** `sight_metrics`. Read-Only-Backend-Modul, kein DuckDB. → [`extension/README.md`](extension/README.md) |
 | `demo/` | **Wegwerf-Stack** zum Ausprobieren: TYPO3 v13 + MariaDB (Cube-DB) via Docker Compose. Nicht für den Produktivbetrieb. |
-| `docs/` | Detaildokumentation: [Extension-Handbuch](docs/extension-handbuch.de.md) (Entwicklung/Administration) · [Ingestion-Runbook](docs/ingestion-runbook.md) (Betrieb) · [Matomo-Import](docs/matomo-import.md). |
+| `docs/` | Detaildokumentation: [Ingestion-Runbook](docs/ingestion-runbook.md) (Betrieb) · [Matomo-Import](docs/matomo-import.md). |
 | `logs/` | Beispiel-/Test-Logs. |
 
 ---

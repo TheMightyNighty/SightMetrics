@@ -387,8 +387,8 @@ After setting the new password, the script verifies the login (`SELECT
 quarterly).
 
 **Reporting user (`report_ro`):** rotated separately; afterwards adjust the
-TYPO3 connection in `config/system/additional.php` (see extension handbook
-§4). A read-only user without write access is also suitable as backup
+TYPO3 connection in `config/system/additional.php` (see
+`extension/sight_metrics/Documentation/Installation`). A read-only user without write access is also suitable as backup
 credentials (`BACKUP_DSN`).
 
 ---
@@ -613,8 +613,8 @@ mysql -h <typo3-db-host> -u <user> -p <typo3-db> \
   -e "DELETE FROM cache_sight_metrics WHERE expires < UNIX_TIMESTAMP();"
 ```
 
-Details and background: extension handbook, section "Known limitations:
-scaling & caching".
+Details and background: `extension/sight_metrics/Documentation/KnownProblems`, section
+"Scaling and caching".
 
 ### Backup as a rollback point (before purging)
 
@@ -749,7 +749,7 @@ distinguished by `site_id`.
 `sites.conf` lists all sites; `run_all.sh` imports them (sequentially or
 with `PARALLEL`). Each site has its own `state/<hash>.offset` file. In
 TYPO3, `sightmetrics_site_id` in the respective site config maps the
-TYPO3 site to the cube `site_id` (see extension handbook §5); the GUI
+TYPO3 site to the cube `site_id` (see `extension/sight_metrics/Documentation/Configuration`); the GUI
 shows the site selector accordingly.
 
 > Tenant/DB isolation via separate databases is **not needed** for this
@@ -975,7 +975,7 @@ as they exist; until then, the extension automatically uses its previous
 |---|---|---|
 | `ingestion/migrations/v1_to_v2.sql` | **Yes**, for existing v1 data | Breaking change (schema v2): CHR(31) keys → `parent` column. Without this migration, extension 2.x refuses to serve with an error. Alternative: re-import all logs. |
 | `ingestion/migrations/v2_add_indexes.sql` | No (the sink creates the indexes automatically) | Only to run the first index creation (online DDL) on very large cubes at a controlled time outside the nightly import window. |
-| `ingestion/migrations/v2_add_topn.sql` | No (the sink creates the table automatically) | Only to create the table/index ahead of time before the next import runs — purely cosmetic, no correctness risk if skipped (see `docs/topn-precompute-spec.md`). |
+| `ingestion/migrations/v2_add_topn.sql` | No (the sink creates the table automatically) | Only to create the table/index ahead of time before the next import runs — purely cosmetic, no correctness risk if skipped (see `docs/SCHEMA.md`). |
 
 **Rule of thumb:** except for `v1_to_v2.sql`, the migration scripts here
 are optional and idempotent — when in doubt, just wait for the next
@@ -1041,7 +1041,7 @@ exactly what the backup is for.
 | `SM_TABLE_CUBE` | `cube` | cube table name (for non-default table names) |
 | `SM_TABLE_DAILY` | `daily` | daily table name |
 | `SM_TABLE_META` | `meta` | meta table name |
-| `SM_TABLE_TOPN` | `topn` | Top-N precompute table name (§17a, `docs/topn-precompute-spec.md`) |
+| `SM_TABLE_TOPN` | `topn` | Top-N precompute table name (§17a, `docs/SCHEMA.md`) |
 | `RETENTION_MONTHS` | `12` | retention period for purge (positive integer) |
 | `PURGE_DRY_RUN` | *(unset)* | set: only count, don't delete |
 | `PARALLEL` | `1` | parallel import jobs (`xargs -P` in `run_all.sh`) |

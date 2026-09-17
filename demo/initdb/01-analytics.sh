@@ -7,7 +7,7 @@
 # Docker Compose stack works without a fixed container IP. In production, restrict
 # the host to the actual web subnet/web host (e.g. 'report_ro'@'10.0.1.0/255.255.255.0'
 # or a fixed IP) and additionally secure it via network segmentation/firewall — see
-# docs/extension-handbuch.md section "Production hardening".
+# extension/sight_metrics/Documentation/Installation, "Production hardening".
 set -euo pipefail
 
 RW="${CUBE_RW_PASSWORD:-cube_rw}"

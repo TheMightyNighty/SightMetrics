@@ -54,7 +54,7 @@ for public-sector and government use (GDPR/BSI).
 | `ingestion/` | **Package A – ingestion/analytics (DuckDB)**, the operational part. Log parser, aggregation SQL, import scripts, GeoIP data, the DuckDB binary. Sole writer of the cube DB. → [`ingestion/README.md`](ingestion/README.md) |
 | `extension/` | **Package B – TYPO3 reporting extension** `sight_metrics`. Read-only backend module, no DuckDB. → [`extension/README.md`](extension/README.md) |
 | `demo/` | **Disposable stack** to try things out: TYPO3 v13 + MariaDB (cube DB) via Docker Compose. Not for production. |
-| `docs/` | Detailed documentation: [extension handbook](docs/extension-handbuch.md) (developer/admin) · [ingestion runbook](docs/ingestion-runbook.md) (ops) · [Matomo import](docs/matomo-import.md). |
+| `docs/` | Detailed documentation: [ingestion runbook](docs/ingestion-runbook.md) (ops) · [Matomo import](docs/matomo-import.md). |
 | `logs/` | Sample/test logs. |
 
 ---

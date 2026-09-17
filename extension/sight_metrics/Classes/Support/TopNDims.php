@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace SightMetrics\Support;
 
 /**
- * Dimensions whose bar lists are limited server-side to Top-N (ROADMAP.md
- * "Top-N + lazy loading"). Two categories:
+ * Dimensions whose bar lists are limited server-side to Top-N (with lazy
+ * loading). Two categories:
  *
  * - ROOT_METRIC_BY_DIM: top-level dims, preloaded in the initial payload (see
  *   DashboardController). Some have a drill-down child (CHILD_OF_ROOT), whose rows

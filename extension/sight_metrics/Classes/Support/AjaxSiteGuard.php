@@ -12,8 +12,8 @@ use TYPO3\CMS\Core\Site\SiteFinder;
  * Shared site access check for the Ajax endpoints (TopN/Tree). A single
  * implementation, so that the three-valued semantics of SiteSelector::allowedSiteIds()
  * (null = no mapping/unfiltered, [] = nothing allowed, [ids] = only these) cannot
- * be interpreted differently across multiple controllers -- exactly this
- * misinterpretation was the tenant-separation bypass from the 2026-07-02 review.
+ * be interpreted differently across multiple controllers (a differing
+ * interpretation would bypass the tenant separation).
  */
 final class AjaxSiteGuard
 {

@@ -118,7 +118,7 @@ final class CubeContractTest extends FunctionalTestCase
     }
 
     /**
-     * Top-N precompute (docs/topn-precompute-spec.md): the fixture is a single
+     * Top-N precompute (docs/SCHEMA.md, table topn): the fixture is a single
      * day (2026-01-10), so [meta.von, meta.bis] IS the 'all' window exactly --
      * the precomputed `topn` table must return the identical rows as a live
      * query for the same [from,to], for both a root dim and a drill-down child.

@@ -29,7 +29,7 @@
 - **Cache TTL default 60s -> 21600s** (`cacheLifetime`). Cache keys contain
   the date window, which shifts with every nightly import.
 - **Top-N precompute** (additive `topn` table, see
-  `docs/topn-precompute-spec.md`): the sink precomputes the top 100 rows per
+  `docs/SCHEMA.md`): the sink precomputes the top 100 rows per
   dimension for the standard time windows. `CubeRepository::topN()` uses it
   only when the requested range matches a preset exactly, otherwise the live
   query runs unchanged.

@@ -18,7 +18,7 @@ use TYPO3\CMS\Core\Site\SiteFinder;
 
 /**
  * Ajax endpoint for lazy-loading (initial date change + "+ N more") of the
- * server-side Top-N-limited bar lists (see TopNDims/ROADMAP.md). Registered in
+ * server-side Top-N-limited bar lists (see TopNDims). Registered in
  * Configuration/Backend/AjaxRoutes.php, hence automatically CSRF-token-protected
  * (UriBuilder::buildUriFromRoute() appends the token as long as access != 'public').
  */
@@ -63,7 +63,7 @@ final class TopNAjaxController implements LoggerAwareInterface
         $metric = $metricMap[$dim];
         // Optional: the preset label the frontend's date range currently matches
         // (presets.js `w-preset` value), only used to serve the precomputed `topn`
-        // table (docs/topn-precompute-spec.md) -- CubeRepository verifies it against
+        // table (docs/SCHEMA.md, table topn) -- CubeRepository verifies it against
         // from/to itself, so an unknown/stale/forged value simply has no effect.
         $window = Params::toStringOrNull($params['window'] ?? null);
 

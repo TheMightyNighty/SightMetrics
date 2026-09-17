@@ -71,8 +71,9 @@ ein Live-`GROUP BY` über den gesamten Zeitraum bei Dimensionen mit hoher
 Kardinalität. Wird bei jedem Import vollständig aus `cube` neu berechnet
 (`sink_mysql.sql`); Leser müssen fehlende/veraltete Zeilen als "nicht
 verfügbar" behandeln und auf eine Live-Abfrage zurückfallen — diese Tabelle
-ist ein Cache, keine Quelle der Wahrheit. Details:
-`docs/topn-precompute-spec.de.md`.
+ist ein Cache, keine Quelle der Wahrheit. Die Fenstergrenzen sind in
+`TopNWindows` (Extension) und `sink_mysql.sql` definiert und müssen identisch
+bleiben.
 
 | Spalte | Typ | Bedeutung |
 |---|---|---|

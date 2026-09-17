@@ -1,5 +1,5 @@
 -- ===========================================================================
--- Optional migration: Top-N precompute table (docs/topn-precompute-spec.md).
+-- Optional migration: Top-N precompute table (docs/SCHEMA.md, table topn).
 --
 -- Since 2026-07 the ingestion sink creates and populates this table
 -- automatically on the next import (sink_mysql.sql). This script only

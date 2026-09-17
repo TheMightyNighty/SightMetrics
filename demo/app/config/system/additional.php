@@ -13,6 +13,6 @@ $GLOBALS["TYPO3_CONF_VARS"]["DB"]["Connections"]["cube"] = [
 
 // ACHTUNG NUR FUER DIESE LOKALE DEMO, NICHT PRODUKTIV UEBERNEHMEN:
 // ".*" akzeptiert jeden Host-Header (Host-Header-Injection-Risiko). Produktiv auf den
-// tatsaechlichen Domain-Namen einschraenken, siehe docs/extension-handbuch.md
-// Abschnitt "Produktions-Haertung".
+// tatsaechlichen Domain-Namen einschraenken, siehe
+// extension/sight_metrics/Documentation/Installation, "Production hardening".
 $GLOBALS["TYPO3_CONF_VARS"]["SYS"]["trustedHostsPattern"] = ".*";

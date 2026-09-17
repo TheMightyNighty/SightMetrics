@@ -6,7 +6,7 @@ namespace SightMetrics\Support;
 
 /**
  * Boundaries of the preset windows the ingestion precomputes into `topn`
- * (docs/topn-precompute-spec.md). Mirrors presets.js applyPreset() exactly --
+ * (docs/SCHEMA.md, table topn). Mirrors presets.js applyPreset() exactly --
  * anchor = min(today in the site's timezone, meta.bis), never later than the
  * newest imported day, clamped into [meta.von, meta.bis]. Used by
  * CubeRepository::topN() to verify that a client-supplied `window` label

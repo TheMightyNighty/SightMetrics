@@ -7,7 +7,7 @@
 // enthalten Punktfolgen, die z. B. von 179.87 direkt auf -180 springen.
 // Leaflet zeichnet solche Ringe naiv in der flachen Lat/Lon-Darstellung und
 // zieht dabei eine gerade Linie quer ueber die gesamte Kartenbreite -- sichtbar
-// als breite horizontale Streifen im Choropleth (siehe ROADMAP/CHANGELOG).
+// als breite horizontale Streifen im Choropleth.
 //
 // Fix: Ringe mit einer geraden Anzahl an Antimeridian-Uebergaengen werden am
 // Antimeridian in mehrere in sich geschlossene Ringe gesplittet (Standard-Cut

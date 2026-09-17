@@ -79,7 +79,7 @@ extension/
 
 The full guide — installation, connection, site mapping, error page, version
 matrix, architecture, troubleshooting — is in the
-**[extension handbook](../docs/extension-handbuch.md)**.
+**[ReST documentation](sight_metrics/Documentation/)**.
 
 ---
 

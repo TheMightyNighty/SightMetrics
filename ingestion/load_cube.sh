@@ -17,7 +17,7 @@
 #   SM_TABLE_CUBE     name of the cube table
 #   SM_TABLE_DAILY    name of the daily table
 #   SM_TABLE_META     name of the meta table
-#   SM_TABLE_TOPN     name of the top-N precompute table (docs/topn-precompute-spec.md)
+#   SM_TABLE_TOPN     name of the top-N precompute table (docs/SCHEMA.md, table topn)
 #
 # GeoIP (TODO for operators: file is NOT part of the repo, see
 #        docs/ingestion-runbook.md -> section "GeoIP dataset"):

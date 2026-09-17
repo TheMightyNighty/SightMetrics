@@ -62,7 +62,7 @@ export function createTopN(ctx) {
     if (!url) return Promise.resolve({ rows: [], total: { pv: 0, v: 0, count: 0 } });
     const params = { dim: dim, from: a, to: b, limit: String(limit), offset: String(offset) };
     if (parentKey != null) params.parentKey = parentKey;
-    // Preset label of [a,b] if known (docs/topn-precompute-spec.md); the server
+    // Preset label of [a,b] if known (docs/SCHEMA.md, table topn); the server
     // verifies it against a/b itself, so passing a stale/wrong value is harmless
     // (falls back to the live query), never produces wrong data.
     if (windowLabel != null) params.window = windowLabel;
@@ -179,7 +179,7 @@ export function createTopN(ctx) {
   // (consistent with prior behavior).
   // windowLabel: the active preset (w-preset value), if any -- passed through
   // to fetchRows so the server can serve from the precomputed `topn` table
-  // (docs/topn-precompute-spec.md); irrelevant/wrong values are simply ignored
+  // (docs/SCHEMA.md, table topn); irrelevant/wrong values are simply ignored
   // server-side, so this never needs to be exact.
   function reloadAll(a, b, windowLabel) {
     curA = a; curB = b; curWindow = windowLabel == null ? null : windowLabel;

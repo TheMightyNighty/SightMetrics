@@ -395,7 +395,7 @@ ausführen (z. B. vierteljährlich).
 
 **Reporting-Benutzer (`report_ro`):** wird separat rotiert; anschließend
 die TYPO3-Verbindung in `config/system/additional.php` anpassen (siehe
-Extension-Handbuch §4). Ein Nur-Lese-Benutzer ohne Schreibzugriff eignet
+`extension/sight_metrics/Documentation/Installation`). Ein Nur-Lese-Benutzer ohne Schreibzugriff eignet
 sich auch als Backup-Credentials (`BACKUP_DSN`).
 
 ---
@@ -631,8 +631,8 @@ mysql -h <typo3-db-host> -u <user> -p <typo3-db> \
   -e "DELETE FROM cache_sight_metrics WHERE expires < UNIX_TIMESTAMP();"
 ```
 
-Details und Hintergrund: Extension-Handbuch, Abschnitt "Bekannte
-Einschränkungen: Skalierung & Caching".
+Details und Hintergrund: `extension/sight_metrics/Documentation/KnownProblems`, Abschnitt
+"Scaling and caching".
 
 ### Backup als Rollback-Punkt (vor dem Purge)
 
@@ -775,7 +775,7 @@ Namespace, Cube in der **eigenen** MariaDB. Alle Sites liegen in einer
 oder mit `PARALLEL`). Jede Site hat ihre eigene
 `state/<hash>.offset`-Datei. In TYPO3 bildet `sightmetrics_site_id` in
 der jeweiligen Site-Konfiguration die TYPO3-Site auf die Cube-`site_id`
-ab (siehe Extension-Handbuch §5); die GUI zeigt den Site-Selektor
+ab (siehe `extension/sight_metrics/Documentation/Configuration`); die GUI zeigt den Site-Selektor
 entsprechend an.
 
 > Mandanten-/DB-Isolation über separate Datenbanken wird für dieses
@@ -1015,7 +1015,7 @@ bisherigen (langsameren, aber korrekten) Query-Pfad.
 |---|---|---|
 | `ingestion/migrations/v1_to_v2.sql` | **Ja**, bei bestehenden v1-Daten | Breaking Change (Schema v2): CHR(31)-Keys → Spalte `parent`. Ohne diese Migration verweigert Extension 2.x den Dienst mit einer Fehlermeldung. Alternative: alle Logs neu importieren. |
 | `ingestion/migrations/v2_add_indexes.sql` | Nein (die Senke legt die Indizes automatisch an) | Nur um die erste Indexerstellung (Online-DDL) bei sehr großen Cubes gezielt außerhalb des nächtlichen Import-Fensters auszuführen. |
-| `ingestion/migrations/v2_add_topn.sql` | Nein (die Senke legt die Tabelle automatisch an) | Nur um Tabelle/Index vorab anzulegen, bevor der nächste Import läuft — rein kosmetisch, kein Korrektheitsrisiko bei Auslassen (siehe `docs/topn-precompute-spec.md`). |
+| `ingestion/migrations/v2_add_topn.sql` | Nein (die Senke legt die Tabelle automatisch an) | Nur um Tabelle/Index vorab anzulegen, bevor der nächste Import läuft — rein kosmetisch, kein Korrektheitsrisiko bei Auslassen (siehe `docs/SCHEMA.de.md`). |
 
 **Faustregel:** außer `v1_to_v2.sql` sind die Migrationsskripte hier
 optional und idempotent — im Zweifel einfach den nächsten regulären
@@ -1087,7 +1087,7 @@ hinterlassen könnte — genau dafür ist das Backup da.
 | `SM_TABLE_CUBE` | `cube` | Name der Cube-Tabelle (für abweichende Tabellennamen) |
 | `SM_TABLE_DAILY` | `daily` | Name der Daily-Tabelle |
 | `SM_TABLE_META` | `meta` | Name der Meta-Tabelle |
-| `SM_TABLE_TOPN` | `topn` | Name der Top-N-Precompute-Tabelle (§17a, `docs/topn-precompute-spec.md`) |
+| `SM_TABLE_TOPN` | `topn` | Name der Top-N-Precompute-Tabelle (§17a, `docs/SCHEMA.de.md`) |
 | `RETENTION_MONTHS` | `12` | Aufbewahrungsdauer für Purge (positive Ganzzahl) |
 | `PURGE_DRY_RUN` | *(nicht gesetzt)* | gesetzt: nur zählen, nicht löschen |
 | `PARALLEL` | `1` | parallele Import-Jobs (`xargs -P` in `run_all.sh`) |

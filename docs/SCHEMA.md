@@ -66,8 +66,8 @@ Speeds up `CubeRepository::topN()` for the standard preset windows without a
 live `GROUP BY` over the whole range on high-cardinality dims. Fully
 recomputed from `cube` on every import (`sink_mysql.sql`); readers must treat
 missing/stale rows as "not available" and fall back to a live query — this
-table is a cache, not a source of truth. Details:
-`docs/topn-precompute-spec.md`.
+table is a cache, not a source of truth. The window boundaries are defined in
+`TopNWindows` (extension) and `sink_mysql.sql` and must stay identical.
 
 | Column | Type | Meaning |
 |---|---|---|

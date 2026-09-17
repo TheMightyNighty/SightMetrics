@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS m.${SM_TABLE_META}  (site_id INTEGER, site VARCHAR, v
                                     visits_total BIGINT, pageviews_total BIGINT, uniques_total BIGINT,
                                     bounces_total BIGINT, bytes_total BIGINT, erzeugt VARCHAR,
                                     schema_version INTEGER, tz VARCHAR);
--- Top-N precompute (additive, docs/topn-precompute-spec.md): top-100 rows per
+-- Top-N precompute (additive, docs/SCHEMA.md, table topn): top-100 rows per
 -- site/window/dim(/parent), derived from ${SM_TABLE_CUBE} at import time so
 -- CubeRepository::topN() can serve the common preset windows without a live
 -- GROUP BY over the whole range on high-cardinality dims. Column is named
@@ -101,7 +101,7 @@ INSERT INTO m.${SM_TABLE_META}
   FROM m.${SM_TABLE_DAILY} WHERE site_id = getvariable('site_id')::INTEGER;
 
 -- ---------------------------------------------------------------------------
--- Top-N precompute (docs/topn-precompute-spec.md). Recomputed in full for
+-- Top-N precompute (docs/SCHEMA.md, table topn). Recomputed in full for
 -- this site on every import (cheap DELETE+INSERT, same replace pattern as
 -- above) -- windows are anchored on meta.bis (the site's newest complete
 -- day), which mirrors the frontend's anchor() in presets.js (min(today,
@@ -112,8 +112,8 @@ SET VARIABLE meta_bis = (SELECT bis FROM m.${SM_TABLE_META} WHERE site_id = getv
 
 CALL mysql_execute('m', 'DELETE FROM ${SM_TABLE_TOPN} WHERE site_id = ' || getvariable('sid'));
 
--- One row per supported preset win (docs/topn-precompute-spec.md
--- "Abgedeckte Fenster"); bounds match presets.js applyPreset() exactly.
+-- One row per supported preset win (docs/SCHEMA.md, table topn);
+-- bounds match presets.js applyPreset() exactly.
 -- wfrom is clamped to meta_von below (a fresh site has less than 365 days).
 CREATE OR REPLACE TEMP TABLE topn_windows AS
   SELECT * FROM (VALUES

@@ -218,11 +218,11 @@ final class CubeRepository
     /**
      * Top-N rows of a dimension, sorted descending by $metric ('pv' or 'v').
      * For server-side Top-N + lazy-loading on high-cardinality dimensions (see
-     * TopNDims/ROADMAP.md). $parentKey: if set, only child rows of this parent category
+     * TopNDims). $parentKey: if set, only child rows of this parent category
      * (drill-down, 'parent' column) -- see applyParentFilter().
      *
      * $windowLabel: optional preset label the client claims [$from,$bis] corresponds
-     * to (docs/topn-precompute-spec.md). Only used to serve from the precomputed
+     * to (docs/SCHEMA.md, table topn). Only used to serve from the precomputed
      * `topn` table when it verifiably matches (TopNWindows::boundsFor()) AND the
      * requested page lies within the precomputed top-100 ($offset+$limit<=100);
      * any mismatch or precomputed-table miss falls back to the live query below
@@ -294,7 +294,7 @@ final class CubeRepository
     }
 
     /**
-     * Serves topN() from the precomputed `topn` table (docs/topn-precompute-spec.md)
+     * Serves topN() from the precomputed `topn` table (docs/SCHEMA.md)
      * when $windowLabel verifiably corresponds to [$from,$bis] (TopNWindows::boundsFor()).
      * Returns null (defer to the live query in topN()) on any mismatch, or if the
      * table simply hasn't been populated yet for this (site, window, dim, parent) --

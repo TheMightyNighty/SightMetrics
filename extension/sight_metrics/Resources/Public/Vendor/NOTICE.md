@@ -58,9 +58,7 @@ siehe `REUSE.toml` (Extension-Root).
   Interpolation des Kreuzungspunkts). Die Antarktis (komplexere Pol-Wickel-Geometrie mit
   Loch-Ring, fuer Web-Analytics-Besucherdaten ohnehin irrelevant) wurde entfernt statt
   gesplittet. Ergebnis: 240 statt 241 Features, ~1,33 MB statt ~1,4 MB.
-- Ersetzt die urspruengliche `world.js` (ECharts-Weltkarten-Datensatz seit dem allerersten
-  Commit im Repo, Herkunft nicht mehr rekonstruierbar, Lizenzangabe war eine unverifizierte
-  Annahme statt einer belegten Quelle — siehe ROADMAP.md Finding 5).
+- Ersetzt die urspruengliche `world.js`, deren Herkunft und Lizenz nicht belegt waren.
 
 ## Aktualisieren (Chart.js/Leaflet)
 `npm install` (respektiert `package-lock.json`) gefolgt von `npm run vendor:update`
