@@ -1,3 +1,5 @@
+> 🇩🇪 [Deutsche Fassung](SCHEMA.de.md)
+
 # SightMetrics cube database schema (normative contract)
 
 This document is the **contract between package A (ingestion, writer) and

@@ -1,3 +1,5 @@
+> 🇩🇪 [Deutsche Fassung](extension-handbuch.de.md)
+
 # SightMetrics – Extension Handbook (Package B)
 
 > **Note:** The authoritative, maintained extension documentation is the
@@ -299,7 +301,7 @@ instead of a PHP exception. Configuration in the TYPO3 backend under
 | `errorMessage` | "The connection …" | Explanatory text |
 | `showTechnical` | `0` | Show the technical error message (admins/debug only) |
 | `windowDays` | `92` | Server-side time window in days: only this window is loaded from the cube DB (limits transfer volume independently of retention). `0` = unlimited. |
-| `cacheLifetime` | `60` | Cache TTL in seconds for cube DB reads (TYPO3 cache framework, `sight_metrics` cache). `0` = no caching, every call reads live. Operations: see "Cache cleanup is an operator responsibility" (§10). |
+| `cacheLifetime` | `21600` | Cache TTL in seconds for cube DB reads (TYPO3 cache framework, `sight_metrics` cache). `0` = no caching, every call reads live. Operations: see "Cache cleanup is an operator responsibility" (§10). |
 
 The cube connection is completely separate from the main TYPO3 connection —
 a cube DB outage does not take down the TYPO3 backend.
@@ -484,7 +486,7 @@ go through the TYPO3 cache framework's `sight_metrics` cache
 (`VariableFrontend` + `Typo3DatabaseBackend`, registered in
 `ext_localconf.php`; the `cache_sight_metrics` table is created by TYPO3
 itself via `extension:setup`/DB compare). TTL is set via the extension
-configuration `cacheLifetime` (default 60s, 0 = disabled — every call then
+configuration `cacheLifetime` (default 21600s, 0 = disabled — every call then
 reads live again). `sites()`/`meta()` are deliberately left uncached (small
 individual rows/lists; a new site or a fresh ingestion run should be
 visible without delay). If the cache configuration is missing (e.g. unit/
@@ -495,8 +497,8 @@ functional tests without a loaded `ext_localconf.php`),
 does **not** delete expired entries on its own — they remain as dead rows
 in `cache_sight_metrics` until a garbage collection run happens. The cache
 keys are high-cardinality (every combination of time range, dimension,
-offset, and drill-down parent category creates its own entry with only a
-60s TTL), so the table grows continuously in operation. Two options:
+offset, and drill-down parent category creates its own entry), so the table
+grows continuously in operation. Two options:
 
 - **With EXT:scheduler:** set up the core task "Caching framework garbage
   collection" (e.g. daily) and select the `sight_metrics` cache.

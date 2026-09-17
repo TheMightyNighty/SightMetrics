@@ -1,0 +1,32 @@
+version: 2
+
+# Ergänzt die (bereits aktiven) Security-Alerts um regelmäßige Update-PRs.
+# Wöchentlich, klein gehalten: Security-Updates laufen unabhängig davon sofort.
+updates:
+  - package-ecosystem: composer
+    directories:
+      - /extension/sight_metrics
+      - /demo/app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directories:
+      - /extension/sight_metrics
+      - /e2e
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directories:
+      - /ingestion
+      - /demo
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

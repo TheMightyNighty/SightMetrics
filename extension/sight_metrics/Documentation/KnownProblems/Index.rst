@@ -13,7 +13,7 @@ window or dimension cardinality (`daily()`, `cube()`, `topN()`,
 (`VariableFrontend` + `Typo3DatabaseBackend`, registered in
 `ext_localconf.php`; the table `cache_sight_metrics` is created by TYPO3
 itself via `extension:setup`/database compare). The TTL is controlled by the
-extension setting `cacheLifetime` (default 60s, `0` = disabled — every call
+extension setting `cacheLifetime` (default 21600s, `0` = disabled — every call
 then reads live). `sites()`/`meta()` are deliberately left uncached (small,
 single rows/lists; a new site or a fresh ingestion run should be visible
 without delay). If the cache configuration is missing (e.g. in unit/functional
@@ -24,8 +24,8 @@ back gracefully to a live query.
 does **not** delete expired entries on its own — they remain as dead rows in
 `cache_sight_metrics` until a garbage collection run happens. Cache keys are
 high-cardinality (every combination of period, dimension, offset, and
-drill-down parent category produces its own entry with only a 60s TTL), so the
-table grows continuously in operation. Two options:
+drill-down parent category produces its own entry), so the table grows
+continuously in operation. Two options:
 
 - **With EXT:scheduler:** set up the core task "Caching framework garbage
   collection" (e.g. daily) with the `sight_metrics` cache selected.
@@ -68,7 +68,8 @@ Data accuracy limitations
 - **Unique visitors** over multi-day ranges are approximated **additively**
   (the daily unique-visitor counts are summed), not deduplicated across days.
   This can overstate the true number of distinct visitors for longer periods.
-- **Sessions crossing midnight (UTC)** are split at the day boundary — a
+- **Sessions crossing midnight** (in the site timezone ``SM_TZ``) are split
+  at the day boundary — a
   visit that starts before and ends after midnight is counted as two
   sessions, one per day.
 - **GeoIP data is not bundled** with either package. The operator must supply

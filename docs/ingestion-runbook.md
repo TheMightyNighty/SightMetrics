@@ -1,3 +1,5 @@
+> 🇩🇪 [Deutsche Fassung](ingestion-runbook.de.md)
+
 # SightMetrics – Ingestion Runbook (Package A)
 
 Operations documentation for the **DuckDB-based log import** (`ingestion/`).
@@ -595,8 +597,8 @@ monthly), not as part of the nightly import.
 ### TYPO3 side: cleaning up the `cache_sight_metrics` table
 
 Besides the cube DB, there's a second growing dataset — on the **TYPO3
-DB** (not the cube DB): the extension caches its read queries short-lived
-(60s TTL) in the `cache_sight_metrics` table. TYPO3's database cache
+DB** (not the cube DB): the extension caches its read queries
+(`cacheLifetime`, default 21600s) in the `cache_sight_metrics` table. TYPO3's database cache
 backend does **not** delete expired entries on its own; without cleanup,
 the table grows unbounded in operation (the cache keys are
 high-cardinality: every combination of time range, dimension, and
@@ -813,24 +815,56 @@ single import.
 
 ## 16. Privacy & BSI notes
 
+Both log importers — `load_cube.sh` (access log) and `fetch_loki_logs.sh`
+(Loki) — run `anonymize.sql` immediately after the parser and before every
+other step. IP truncation and query-string removal therefore happen *before*
+the geo lookup, the visitor key and the cube; no later stage ever sees a full
+IP address or a query string. This is not optional and has no off switch.
+
 ### IP addresses
 
-- Raw IP addresses are **not stored in the cube DB**.
-- For GeoIP and unique-visitor counting, a **daily-salted hash** is
-  computed: `MD5(ip + daily_salt)` — resistant to reversal and consistent
-  within a single day.
+- IP addresses are **truncated at import time**, in `anonymize.sql`:
+  - IPv4 → last octet zeroed (`203.0.113.77` → `203.0.113.0`)
+  - IPv6 → `/48` prefix (`2001:db8:1234:5678::1` → `2001:db8:1234::`)
+  - IPv4-mapped IPv6 (`::ffff:a.b.c.d`, logged by dual-stack sockets) keeps
+    its prefix and is masked like IPv4.
+- Raw IP addresses are **not stored in the cube DB**. They exist only in the
+  `raw_lines` temp table (the log text itself) for the lifetime of the DuckDB
+  process and are never written to the sink.
+- For GeoIP and unique-visitor counting, a **daily-salted hash** is computed
+  over the *truncated* IP: `MD5(ip + ua + daily_salt)` — resistant to reversal
+  and consistent within a single day.
 - `daily_salt` is re-randomized every day (DuckDB, at import time).
-- For stricter requirements: truncate the IP before import (zero out the
-  last octet).
+- Effects to expect: GeoIP accuracy is unchanged in practice (country ranges
+  are coarser than /24 resp. /48). `uniques` can drop marginally, because
+  visitors sharing a /24 (resp. /48) *and* the exact same user agent now
+  collapse into one visitor key.
 
 ### PII in URLs and referrers
 
-- URLs are stored unmodified. Filter out or mask query parameters
-  containing PII (tokens, names, emails) before import:
+- **URL query strings are removed** at import time: everything from the first
+  `?` or `#` is dropped, since query parameters routinely carry personal data
+  (tokens, mail addresses, search input, form values). `/suche?q=maier` is
+  stored as `/suche`.
+- `SM_URL_KEEP_PARAMS` (comma-separated) keeps named parameters despite the
+  filter. This exists for TYPO3 installations **without slug URLs**, where the
+  page identity lives in the query string — without it, every page would
+  collapse into a single `/index.php` row:
   ```bash
-  # Example: remove the 'token' and 'email' query parameters
-  sed -E 's/[?&](token|email)=[^& "]*/\1=REMOVED/g' access.log | ./load_cube.sh - "Site" 1
+  SM_URL_KEEP_PARAMS="id,L,type" ./load_cube.sh access.log "Site" 1
   ```
+  Only ever name parameters that provably carry no personal data. Anything not
+  named is dropped. Default is empty — nothing is kept.
+- The **referrer is deliberately not stripped**: the `keyword` dimension is
+  derived from its `?q=` parameter, and the `referrer_url` dimension is only
+  useful with the full URL. Referrers are third-party URLs; if your threat
+  model requires it, mask them before import:
+  ```bash
+  sed -E 's#("https?://[^" ?]*)\?[^" ]*#\1#g' access.log | ./load_cube.sh - "Site" 1
+  ```
+- The Matomo legacy import (`matomo_import.sh`) is **not** covered by
+  `anonymize.sql` — it consumes pre-aggregated Reporting API data. Configure
+  anonymization in Matomo itself before exporting.
 
 ### Transmitting logs
 

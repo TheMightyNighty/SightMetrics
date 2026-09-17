@@ -1,3 +1,5 @@
+> 🇩🇪 [Deutsche Fassung](topn-precompute-spec.de.md)
+
 # Spec: Top-N precompute (v2.1)
 
 Status: Implemented (2026-07-15) — ingestion, reader, frontend, contract test

@@ -18,6 +18,13 @@ history is retained beyond the aggregated dimensions, which makes SightMetrics
 well suited for organizations with strict GDPR/DSGVO requirements, such as public
 administrations and the public sector.
 
+The ingestion anonymizes before it aggregates, without an off switch: IPv4
+addresses lose their last octet, IPv6 addresses are truncated to their ``/48``
+prefix, and URL query strings are dropped — all of it directly after parsing,
+so neither the geo lookup nor the visitor key nor the cube ever sees a full IP
+address or a query parameter. Visits are linked via a daily-salted hash only,
+which makes visitors deliberately unlinkable across days.
+
 Two-package architecture
 =========================
 

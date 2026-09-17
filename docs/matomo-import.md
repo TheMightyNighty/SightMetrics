@@ -1,3 +1,5 @@
+> 🇩🇪 [Deutsche Fassung](matomo-import.de.md)
+
 # Matomo Legacy-Data Import
 
 One-off import of historical analytics data from an existing **Matomo**
