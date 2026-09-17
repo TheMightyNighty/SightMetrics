@@ -1,13 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Changed
-- License metadata: SPDX headers in all PHP files, copyright holder in
-  `REUSE.toml`, world map data declared as `ISC AND` Natural Earth public
-  domain, bundled `@kurkle/color` (MIT) listed in `NOTICE.md`.
-- `node_modules` is excluded from the TER package.
-
 ## 2.1.0 (2026-09-17)
 
 ### Privacy
@@ -61,6 +53,10 @@
   for Ajax-loaded panels.
 - Dependency updates: `guzzlehttp/guzzle` 7.15.2, TYPO3 13.4.35 and `undici`
   7.29.1 in the demo/dev tooling (Dependabot alerts).
+- License metadata: SPDX headers in all PHP files, copyright holder in
+  `REUSE.toml`, world map data declared as `ISC AND` Natural Earth public
+  domain, bundled `@kurkle/color` (MIT) listed in `NOTICE.md`;
+  `node_modules` is excluded from the TER package.
 
 ## 2.0.1 (2026-07-08)
 
