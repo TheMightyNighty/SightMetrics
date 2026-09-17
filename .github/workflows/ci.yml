@@ -16,7 +16,7 @@ jobs:
         php: ['8.2', '8.3', '8.4']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: PHP ${{ matrix.php }} einrichten
         uses: shivammathur/setup-php@v2
@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: DuckDB v1.5.4 herunterladen
         run: |
@@ -102,7 +102,7 @@ jobs:
             tf: '^9.0'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: PHP ${{ matrix.php }} einrichten
         uses: shivammathur/setup-php@v2
@@ -137,7 +137,7 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: DuckDB CLI laden (ingestion/bin/duckdb)
         working-directory: ingestion
