@@ -30,7 +30,7 @@ jobs:
 
       - name: Image-Metadaten (Tags/Labels)
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/sightmetrics-ingestion
           tags: |
