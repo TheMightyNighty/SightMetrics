@@ -30,7 +30,7 @@ jobs:
         run: echo "key=${{ hashFiles('extension/sight_metrics/composer.json') }}" >> "$GITHUB_OUTPUT"
 
       - name: Composer-Cache laden
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: extension/sight_metrics/vendor
           key: composer-${{ matrix.php }}-${{ steps.cache-key.outputs.key }}
