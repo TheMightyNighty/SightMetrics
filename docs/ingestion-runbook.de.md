@@ -846,8 +846,9 @@ Beide Log-Importer — `load_cube.sh` (Access-Log) und
 Parser und vor jedem weiteren Schritt aus. IP-Kürzung und Entfernung des
 Query-Strings erfolgen daher *vor* dem Geo-Lookup, dem Besucherschlüssel
 und dem Cube; keine spätere Stufe sieht jemals eine vollständige
-IP-Adresse oder einen Query-String. Das ist nicht optional und hat
-keinen Ausschalter.
+IP-Adresse oder den Query-String der aufgerufenen URL. Das ist nicht
+optional und hat keinen Ausschalter. Der **Referrer** ist die bewusste
+Ausnahme — siehe unten.
 
 ### IP-Adressen
 
@@ -855,7 +856,14 @@ keinen Ausschalter.
   - IPv4 → letztes Oktett genullt (`203.0.113.77` → `203.0.113.0`)
   - IPv6 → `/48`-Präfix (`2001:db8:1234:5678::1` → `2001:db8:1234::`)
   - IPv4-gemappte IPv6-Adressen (`::ffff:a.b.c.d`, von Dual-Stack-Sockets
-    geloggt) behalten ihr Präfix und werden wie IPv4 maskiert.
+    geloggt) behalten ihr Präfix und werden wie IPv4 maskiert. Sie werden
+    nur über die IPv6-Geo-Datei aufgelöst, ohne `SM_GEO6_PATH` bleiben sie
+    also `??`.
+  - Eine IPv4-Adresse mit `:port`-Suffix (Proxy-/Load-Balancer-Formate) wird
+    maskiert und verliert den Port. Alles, was keine erkennbare IP-Adresse
+    ist — ein Hostname, eine `X-Forwarded-For`-Kette — **fällt auf `-`
+    zurück** (fail closed) und wird nie ungekürzt durchgereicht (und hat
+    dann kein Land).
 - Rohe IP-Adressen werden **nicht in der Cube-DB gespeichert**. Sie
   existieren nur in der temporären Tabelle `raw_lines` (der Logtext
   selbst) für die Lebensdauer des DuckDB-Prozesses und werden nie in die
@@ -865,11 +873,17 @@ keinen Ausschalter.
   resistent gegen Rückrechnung und innerhalb eines Tages konsistent.
 - `daily_salt` wird täglich neu zufällig erzeugt (DuckDB, zur
   Importzeit).
-- Zu erwartende Effekte: die GeoIP-Genauigkeit ändert sich praktisch
-  nicht (Länderbereiche sind gröber als /24 bzw. /48). `uniques` kann
-  geringfügig sinken, weil Besucher, die sich ein /24 (bzw. /48) *und*
-  denselben User-Agent teilen, nun zu einem Besucherschlüssel
-  zusammenfallen.
+- Zu erwartende Effekte: `uniques` kann geringfügig sinken, weil Besucher,
+  die sich ein /24 (bzw. /48) *und* denselben User-Agent teilen, nun zu
+  einem Besucherschlüssel zusammenfallen. Die Geo-Auflösung bleibt auf
+  Länderebene, ist aber nicht mehr exakt für Provider mit Bereichen feiner
+  als /24 (bzw. Bereichen, die innerhalb eines /48 beginnen): die gekürzte
+  Adresse kann in den vorhergehenden Bereich fallen, was `??` oder selten
+  ein Nachbarland ergibt.
+- Pageviews können sich für Seiten mit Cache-Busting-Query-Strings leicht
+  verschieben: `/style.css?v=3` passierte bisher den Asset-Filter und zählte
+  als Pageview, `/style.css` wird jetzt korrekt herausgefiltert. Ein
+  erneuter Import historischer Tage schreibt deren Werte entsprechend um.
 
 ### PII in URLs und Referrern
 
@@ -890,9 +904,12 @@ keinen Ausschalter.
   wird behalten.
 - Der **Referrer wird bewusst nicht bereinigt**: die Dimension `keyword`
   wird aus dessen `?q=`-Parameter abgeleitet, und die Dimension
-  `referrer_url` ist nur mit der vollständigen URL nützlich. Referrer
-  sind URLs Dritter; falls das eigene Bedrohungsmodell es verlangt, vor
-  dem Import maskieren:
+  `referrer_url` ist nur mit der vollständigen URL nützlich. Er ist damit
+  die einzige Stelle, an der ein Query-String *doch* im Cube landet — auch
+  bei einem Referrer der eigenen Site wie `https://example.org/reset?token=…`,
+  dessen Parameter `anonymize.sql` aus `url` entfernt. Falls das eigene
+  Bedrohungsmodell es verlangt, vor dem Import maskieren (die Dimension
+  `keyword` entfällt damit):
   ```bash
   sed -E 's#("https?://[^" ?]*)\?[^" ]*#\1#g' access.log | ./load_cube.sh - "Site" 1
   ```

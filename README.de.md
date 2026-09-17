@@ -140,11 +140,12 @@ Details, Mapping und Einschränkungen: [`docs/matomo-import.md`](docs/matomo-imp
 - **Bot-/Crawler-Filter** — es werden nur menschliche Besucher gezählt;
   Statuscodes zeigen zur Fehlerdiagnose zusätzlich 4xx/5xx
 - **Anonymisierung beim Import** — bei IPv4-Adressen wird das letzte Oktett
-  entfernt, IPv6 wird auf `/48` gekürzt, und URL-Query-Strings werden
-  verworfen, bevor überhaupt etwas aggregiert wird. Kein Schalter: keine
-  spätere Stufe der Pipeline sieht jemals eine vollständige IP oder einen
-  Query-Parameter (siehe
-  [Runbook §16](docs/ingestion-runbook.md#16-privacy--bsi-notes))
+  entfernt, IPv6 wird auf `/48` gekürzt, und der Query-String der
+  aufgerufenen URL wird verworfen, bevor überhaupt etwas aggregiert wird.
+  Kein Schalter. Bewusste Ausnahme: der **Referrer** wird unverändert
+  gespeichert, weil daraus die Suchbegriff-Dimension abgeleitet wird — bei
+  entsprechendem Bedrohungsmodell vorab maskieren (siehe
+  [Runbook §16](docs/ingestion-runbook.de.md#16-datenschutz--bsi-hinweise))
 
 Datenqualität und Robustheit der Ingestion (jeweils zu- und abschaltbar/optional):
 

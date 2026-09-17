@@ -124,8 +124,9 @@ async function waitForPanels(frame, timeoutMs = 20000) {
     // Entire module document (iframe content) including the scroll area.
     // Panels below the fold load on demand, so walk down the page and wait
     // for each of them before returning to the top.
-    const height = await frame.evaluate(() => document.body.scrollHeight);
-    for (let y = 0; y < height; y += Math.floor(H * 0.8)) {
+    // scrollHeight is re-read each round: loading a panel makes the page grow.
+    for (let y = 0, steps = 0; steps < 40; y += Math.floor(H * 0.8), steps++) {
+      if (y >= await frame.evaluate(() => document.body.scrollHeight)) break;
       await frame.evaluate((v) => window.scrollTo(0, v), y);
       await new Promise(r => setTimeout(r, 500));
       await waitForPanels(frame);

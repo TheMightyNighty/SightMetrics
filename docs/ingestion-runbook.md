@@ -819,7 +819,8 @@ Both log importers — `load_cube.sh` (access log) and `fetch_loki_logs.sh`
 (Loki) — run `anonymize.sql` immediately after the parser and before every
 other step. IP truncation and query-string removal therefore happen *before*
 the geo lookup, the visitor key and the cube; no later stage ever sees a full
-IP address or a query string. This is not optional and has no off switch.
+IP address or the query string of the requested URL. This is not optional and
+has no off switch. The **referrer** is the deliberate exception — see below.
 
 ### IP addresses
 
@@ -827,7 +828,12 @@ IP address or a query string. This is not optional and has no off switch.
   - IPv4 → last octet zeroed (`203.0.113.77` → `203.0.113.0`)
   - IPv6 → `/48` prefix (`2001:db8:1234:5678::1` → `2001:db8:1234::`)
   - IPv4-mapped IPv6 (`::ffff:a.b.c.d`, logged by dual-stack sockets) keeps
-    its prefix and is masked like IPv4.
+    its prefix and is masked like IPv4. Such addresses resolve via the IPv6
+    geo file only, so without `SM_GEO6_PATH` they stay `??`.
+  - An IPv4 address with a `:port` suffix (proxy/load-balancer formats) is
+    masked and loses the port. Anything that is not a recognisable IP address
+    — a hostname, an `X-Forwarded-For` chain — **fails closed** to `-`; it is
+    never passed through unmasked (and then has no country).
 - Raw IP addresses are **not stored in the cube DB**. They exist only in the
   `raw_lines` temp table (the log text itself) for the lifetime of the DuckDB
   process and are never written to the sink.
@@ -835,10 +841,16 @@ IP address or a query string. This is not optional and has no off switch.
   over the *truncated* IP: `MD5(ip + ua + daily_salt)` — resistant to reversal
   and consistent within a single day.
 - `daily_salt` is re-randomized every day (DuckDB, at import time).
-- Effects to expect: GeoIP accuracy is unchanged in practice (country ranges
-  are coarser than /24 resp. /48). `uniques` can drop marginally, because
-  visitors sharing a /24 (resp. /48) *and* the exact same user agent now
-  collapse into one visitor key.
+- Effects to expect: `uniques` can drop marginally, because visitors sharing
+  a /24 (resp. /48) *and* the exact same user agent now collapse into one
+  visitor key. Geo stays at country level, but is no longer exact for
+  providers whose ranges are finer than /24 (resp. start inside a /48):
+  the truncated address can fall into the preceding range, which yields `??`
+  or, more rarely, a neighbouring country.
+- Pageviews can shift slightly for sites using cache-busting query strings:
+  `/style.css?v=3` used to pass the asset filter and count as a pageview,
+  whereas `/style.css` is now correctly filtered out. Re-importing historical
+  days rewrites their stored figures accordingly.
 
 ### PII in URLs and referrers
 
@@ -857,8 +869,11 @@ IP address or a query string. This is not optional and has no off switch.
   named is dropped. Default is empty — nothing is kept.
 - The **referrer is deliberately not stripped**: the `keyword` dimension is
   derived from its `?q=` parameter, and the `referrer_url` dimension is only
-  useful with the full URL. Referrers are third-party URLs; if your threat
-  model requires it, mask them before import:
+  useful with the full URL. It is therefore the one place where a query string
+  *does* reach the cube — including a same-site referrer such as
+  `https://example.org/reset?token=…`, whose parameters `anonymize.sql` strips
+  from `url`. If your threat model requires it, mask referrers before import
+  (the `keyword` dimension is lost with them):
   ```bash
   sed -E 's#("https?://[^" ?]*)\?[^" ]*#\1#g' access.log | ./load_cube.sh - "Site" 1
   ```

@@ -8,9 +8,11 @@
 -- never written to the sink.
 --
 -- 1) IP: IPv4 -> last octet zeroed (a.b.c.0), IPv6 -> /48 prefix,
---    IPv4-mapped IPv6 (::ffff:a.b.c.d) masked like IPv4 so it stays
---    resolvable for the geo lookup; non-IP values ('-') are left untouched.
---    Geo accuracy is unaffected (ranges are coarser than /24 resp. /48);
+--    IPv4-mapped IPv6 (::ffff:a.b.c.d) masked like IPv4; values that are not
+--    a recognisable IP address fail closed to '-'.
+--    Geo resolution stays at country level; a range that starts inside the
+--    /24 (resp. /48) can be missed, which yields '??' or, where the preceding
+--    range belongs to another country, a wrong country for that address.
 --    'uniques' can drop marginally, since the visitor key (md5 of
 --    ip|ua|daily salt) now merges visitors sharing a /24 and the same UA.
 --
@@ -27,30 +29,37 @@
 SET VARIABLE url_keep_params = COALESCE(getvariable('url_keep_params'), '');
 
 -- url_keep_params -> regex matching exactly the parameters to keep, built once
--- instead of per row. Everything outside [A-Za-z0-9_.-] is stripped from the
--- list, so no parameter name can smuggle regex metacharacters into the
--- pattern. Empty list -> empty pattern = keep nothing.
+-- instead of per row. Characters outside [A-Za-z0-9_.[-]] are dropped from the
+-- list, the remaining regex metacharacters ('.', '[', ']' - TYPO3 array
+-- parameters such as tx_news[news]) are escaped, so no parameter name can
+-- change the pattern's meaning. Empty list -> empty pattern = keep nothing.
 SET VARIABLE url_keep_re = (
   SELECT CASE WHEN alt = '' THEN '' ELSE '(?:^|&)((?:' || alt || ')=[^&]*)' END
   FROM (SELECT regexp_replace(
                  regexp_replace(
-                   regexp_replace(getvariable('url_keep_params'), '[^A-Za-z0-9_,.-]', '', 'g'),
+                   regexp_replace(
+                     regexp_replace(getvariable('url_keep_params'),
+                                    '[^A-Za-z0-9_,.\[\]-]', '', 'g'),
+                     '([.\[\]])', '\\\1', 'g'),
                    ',+', '|', 'g'),
                  '^\||\|$', '', 'g') AS alt));
 
--- IPv4 -> a.b.c.0, IPv6 -> /48, IPv4-mapped IPv6 -> ::ffff:a.b.c.0.
--- The IPv6 branch cuts the textual form before '::' to three groups; already
--- compressed addresses ('2001:db8::1', '::1') fall out of the same expression.
+-- IPv4 -> a.b.c.0, IPv6 -> /48, IPv4-mapped IPv6 -> ::ffff:a.b.c.0. An IPv4
+-- address may carry a ":port" suffix (proxy/load-balancer log formats); the
+-- port is dropped. The IPv6 branch cuts the textual form before '::' to three
+-- groups; already compressed addresses ('2001:db8::1', '::1') fall out of the
+-- same expression. Anything else - '-', an X-Forwarded-For chain, a hostname -
+-- fails CLOSED to '-' instead of being passed through unmasked.
 CREATE OR REPLACE TEMP MACRO sm_anon_ip(ip) AS
   CASE
     WHEN ip IS NULL THEN NULL
-    WHEN regexp_matches(ip, '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
+    WHEN regexp_matches(ip, '^\d{1,3}(\.\d{1,3}){3}(:\d+)?$')
+      THEN regexp_replace(regexp_replace(ip, ':\d+$', ''), '\.\d{1,3}$', '.0')
+    WHEN regexp_matches(ip, '^(?i)::ffff:\d{1,3}(\.\d{1,3}){3}$')
       THEN regexp_replace(ip, '\.\d{1,3}$', '.0')
-    WHEN regexp_matches(ip, '^(?i)::ffff:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$')
-      THEN regexp_replace(ip, '\.\d{1,3}$', '.0')
-    WHEN contains(ip, ':')
+    WHEN regexp_matches(ip, '^[0-9A-Fa-f:]+$') AND contains(ip, ':')
       THEN array_to_string(str_split(split_part(ip, '::', 1), ':')[1:3], ':') || '::'
-    ELSE ip
+    ELSE '-'
   END;
 
 -- The query string reduced to the parameters url_keep_re names, in their

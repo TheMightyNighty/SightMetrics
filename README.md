@@ -137,9 +137,10 @@ Details, mapping, and limitations: [`docs/matomo-import.md`](docs/matomo-import.
 - **Bot/crawler filter** — only human visitors are counted; status codes
   also show 4xx/5xx for error diagnosis
 - **Anonymized at import** — IPv4 addresses lose their last octet, IPv6 is
-  truncated to `/48`, and URL query strings are dropped before anything is
-  aggregated. Not a toggle: no later stage of the pipeline ever sees a full
-  IP or a query parameter (see
+  truncated to `/48`, and the query string of the requested URL is dropped
+  before anything is aggregated. Not a toggle. Exception by design: the
+  **referrer** is stored unchanged, because the search-keyword dimension is
+  derived from it — mask it beforehand if your threat model requires it (see
   [runbook §16](docs/ingestion-runbook.md#16-privacy--bsi-notes))
 
 Data quality and robustness of the ingestion (each switchable/optional):

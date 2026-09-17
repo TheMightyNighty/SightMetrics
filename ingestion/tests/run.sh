@@ -367,6 +367,8 @@ cat > "$PRIV_LOG" <<'EOF'
 2001:db8::1 - - [10/Jan/2026:10:00:02 +0000] "GET /a#frag HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
 ::ffff:203.0.113.77 - - [10/Jan/2026:10:00:03 +0000] "GET /c?x=1 HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
 - - - [10/Jan/2026:10:00:04 +0000] "GET /d HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
+203.0.113.9:51514 - - [10/Jan/2026:10:00:05 +0000] "GET /e HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
+proxy.example.org - - [10/Jan/2026:10:00:06 +0000] "GET /f?tx_news[news]=7 HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
 EOF
 
 priv_probe() { # $1 = url_keep_params -> "ip|url" pro Zeile
@@ -383,7 +385,9 @@ expected_strip='8.8.8.0|/suche
 2001:db8:1234::|/index.php
 2001:db8::|/a
 ::ffff:203.0.113.0|/c
--|/d'
+-|/d
+203.0.113.0|/e
+-|/f'
 out=$(priv_probe "")
 [ "$out" = "$expected_strip" ] \
   || { echo "FAIL Default: erwartet gekuerzte IPs + parameterfreie URLs, ist:"; echo "$out"; priv_ok=0; }
@@ -392,6 +396,11 @@ out=$(priv_probe "")
 out=$(priv_probe "id, L" | sed -n '2p')
 [ "$out" = "2001:db8:1234::|/index.php?id=42&L=1" ] \
   || { echo "FAIL SM_URL_KEEP_PARAMS: erwartet '/index.php?id=42&L=1', ist '${out}'"; priv_ok=0; }
+
+# Klammer-Parameter (TYPO3-Array-Syntax) werden escaped statt verstuemmelt.
+out=$(priv_probe "tx_news[news]" | sed -n '7p')
+[ "$out" = "-|/f?tx_news[news]=7" ] \
+  || { echo "FAIL SM_URL_KEEP_PARAMS mit Klammern: erwartet '/f?tx_news[news]=7', ist '${out}'"; priv_ok=0; }
 
 # Der Referrer bleibt bewusst unangetastet -> keyword-Dimension weiter befuellt.
 out=$(./bin/duckdb -noheader -list <<SQL
@@ -413,7 +422,7 @@ echo "$out" | grep -q 'geo=1'  || { echo "FAIL GeoIP nach IPv4-Kuerzung nicht me
 echo "$out" | grep -q 'leak=0' || { echo "FAIL Query-Parameter im Cube gelandet"; priv_ok=0; }
 rm -f "$PRIV_LOG"
 if [ "$priv_ok" -eq 1 ]; then
-  echo "PASS datenschutz: IPv4 -> a.b.c.0, IPv6 -> /48, URL-Parameter entfernt, Whitelist + Referrer/Geo intakt"
+  echo "PASS datenschutz: IPv4 (auch mit :port) -> a.b.c.0, IPv6 -> /48, Unbekanntes -> '-', URL-Parameter entfernt, Whitelist + Referrer/Geo intakt"
 else
   fail=1
 fi

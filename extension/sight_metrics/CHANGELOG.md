@@ -4,13 +4,17 @@
 
 ### Privacy
 - **IP anonymization at import** (`ingestion/anonymize.sql`, both log
-  importers, always on): IPv4 loses its last octet, IPv6 is cut to `/48`.
-  Runs before geo lookup, visitor key and cube. Geo accuracy is unchanged;
-  `uniques` can drop marginally.
+  importers, always on): IPv4 loses its last octet, IPv6 is cut to `/48`,
+  an address that is not recognisable as an IP fails closed to `-`. Runs
+  before geo lookup, visitor key and cube. `uniques` can drop marginally; geo
+  stays at country level but is no longer exact for ranges finer than /24.
 - **URL query strings are dropped at import** (`/suche?q=maier` -> `/suche`).
   `SM_URL_KEEP_PARAMS` keeps named parameters for TYPO3 installations without
-  slug URLs; empty by default. The referrer is kept, since the `keyword`
-  dimension is derived from it.
+  slug URLs; empty by default. The referrer is kept as logged, since the
+  `keyword` dimension is derived from it — it is the one place where a query
+  string still reaches the cube (see runbook §16).
+- Side effect: `/style.css?v=3` used to pass the asset filter and count as a
+  pageview; without its query string it is now filtered out correctly.
 
 ### Performance
 - **Query indexes on the cube tables** (`sm_dim_datum`, `sm_drilldown`,

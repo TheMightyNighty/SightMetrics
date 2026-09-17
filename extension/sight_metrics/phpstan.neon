@@ -10,5 +10,7 @@ parameters:
         - /var/www/html/vendor/autoload.php
     # Realer Mountpfad, nicht der Symlink: sonst erkennt PHPStan den Code nicht
     # als analysiert, faellt auf Reflection zurueck und meldet Phantomfehler.
-    paths:
+    # "paths!" ersetzt die Liste aus phpstan-base.neon (sonst wird gemergt und
+    # der relative Pfad ueber den Symlink zusaetzlich analysiert).
+    paths!:
         - /packages/sight_metrics/Classes
