@@ -4,9 +4,9 @@
         xsi:schemaLocation="https://www.phpdoc.org/guides ../vendor/phpdocumentor/guides-cli/resources/schema/guides.xsd"
         links-are-relative="true">
     <extension class="\T3Docs\Typo3DocsTheme\DependencyInjection\Typo3DocsThemeExtension"
-               edit-on-github="TheMIghtyNighty/SightMetrics"
+               edit-on-github="TheMightyNighty/SightMetrics"
                edit-on-github-branch="master"
-               project-home="https://github.com/TheMIghtyNighty/SightMetrics"
-               project-issues="https://github.com/TheMIghtyNighty/SightMetrics/issues"/>
+               project-home="https://github.com/TheMightyNighty/SightMetrics"
+               project-issues="https://github.com/TheMightyNighty/SightMetrics/issues"/>
     <project title="SightMetrics" version="2.1.0" release="2.1.0" copyright="Robert Schleiermacher"/>
 </guides>

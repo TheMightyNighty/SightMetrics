@@ -11,8 +11,8 @@
         }
     ],
     "support": {
-        "issues": "https://github.com/TheMIghtyNighty/SightMetrics/issues",
-        "source": "https://github.com/TheMIghtyNighty/SightMetrics",
+        "issues": "https://github.com/TheMightyNighty/SightMetrics/issues",
+        "source": "https://github.com/TheMightyNighty/SightMetrics",
         "docs": "https://docs.typo3.org/p/sightmetrics/sight-metrics/main/en-us/"
     },
     "require": {

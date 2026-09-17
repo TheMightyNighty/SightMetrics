@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- License metadata: SPDX headers in all PHP files, copyright holder in
+  `REUSE.toml`, world map data declared as `ISC AND` Natural Earth public
+  domain, bundled `@kurkle/color` (MIT) listed in `NOTICE.md`.
+- `node_modules` is excluded from the TER package.
+
 ## 2.1.0 (2026-09-17)
 
 ### Privacy

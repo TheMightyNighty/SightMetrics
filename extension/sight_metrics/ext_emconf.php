@@ -1,4 +1,12 @@
 <?php
+
+/*
+ * This file is part of the TYPO3 CMS extension "sight_metrics".
+ *
+ * SPDX-FileCopyrightText: 2026 Robert Schleiermacher
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
 $EM_CONF[$_EXTKEY] = [
     'title' => 'SightMetrics – Web access analytics',
     'description' => 'Privacy-friendly, log-file based web analytics backend module. Reads pre-aggregated data (read-only) from a cube database filled by the separately deployed SightMetrics ingestion pipeline (DuckDB) – no tracker, no cookies.',

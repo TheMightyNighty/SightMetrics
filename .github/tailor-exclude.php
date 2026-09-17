@@ -7,6 +7,7 @@ $default = require \Composer\InstalledVersions::getInstallPath('typo3/tailor') .
 
 return [
     'directories' => array_merge($default['directories'], [
+        'node_modules',
         'scripts',
     ]),
     'files' => array_merge($default['files'], [

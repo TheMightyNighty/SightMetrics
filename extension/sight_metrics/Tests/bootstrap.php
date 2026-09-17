@@ -1,4 +1,12 @@
 <?php
+
+/*
+ * This file is part of the TYPO3 CMS extension "sight_metrics".
+ *
+ * SPDX-FileCopyrightText: 2026 Robert Schleiermacher
+ * SPDX-License-Identifier: GPL-2.0-or-later
+ */
+
 // Lightweight PSR-4 autoloader (without TYPO3) for the unit tests.
 spl_autoload_register(static function (string $class): void {
     $prefix = 'SightMetrics\\';

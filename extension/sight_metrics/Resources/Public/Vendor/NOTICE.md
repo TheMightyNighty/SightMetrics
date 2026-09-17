@@ -6,6 +6,8 @@ siehe `REUSE.toml` (Extension-Root).
 ## Chart.js (chart.umd.min.js)
 - Version: 4.5.1
 - Lizenz: MIT. Copyright (c) 2014-2025 Chart.js Contributors.
+- Enthält gebündelt **@kurkle/color** v0.3.2 (MIT, Copyright (c) 2018-2024 Jukka Kurkela,
+  https://github.com/kurkle/color); der Lizenzhinweis steht als Kommentar im Bundle.
 - Quelle: https://www.chartjs.org / https://github.com/chartjs/Chart.js
 - Bezogen ueber npm (`devDependencies` in `package.json`, versionsgepinnt via
   `package-lock.json`); Datei kopiert aus `node_modules/chart.js/dist/chart.umd.min.js`

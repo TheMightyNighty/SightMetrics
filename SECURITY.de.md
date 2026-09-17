@@ -17,7 +17,7 @@ Unterstützter Plattformbereich: TYPO3 13.4 LTS / 14, PHP 8.2–8.4 (siehe
 
 Bitte **kein** öffentliches GitHub-Issue für Sicherheitsprobleme eröffnen.
 
-- Bevorzugt: [GitHub Private Vulnerability Reporting](https://github.com/TheMIghtyNighty/SightMetrics/security/advisories/new)
+- Bevorzugt: [GitHub Private Vulnerability Reporting](https://github.com/TheMightyNighty/SightMetrics/security/advisories/new)
 - Alternativ per E-Mail: robert.schleiermacher@gmail.com (Betreff-Präfix `[SECURITY]`)
 
 Bitte angeben: betroffene Komponente (TYPO3-Extension `sight_metrics` oder

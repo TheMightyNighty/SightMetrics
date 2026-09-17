@@ -29,7 +29,7 @@ into the cube database.
 
    The ingestion pipeline, its documentation, and operational runbooks are
    maintained in the same repository:
-   https://github.com/TheMIghtyNighty/SightMetrics
+   https://github.com/TheMightyNighty/SightMetrics
 
 .. toctree::
    :maxdepth: 2

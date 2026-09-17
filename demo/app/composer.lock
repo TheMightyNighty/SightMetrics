@@ -2122,8 +2122,8 @@
             ],
             "description": "SightMetrics – privacy-friendly, log-file based web analytics as a TYPO3 backend module (read-only on the cube DB; requires the separately deployed SightMetrics ingestion pipeline)",
             "support": {
-                "issues": "https://github.com/TheMIghtyNighty/SightMetrics/issues",
-                "source": "https://github.com/TheMIghtyNighty/SightMetrics",
+                "issues": "https://github.com/TheMightyNighty/SightMetrics/issues",
+                "source": "https://github.com/TheMightyNighty/SightMetrics",
                 "docs": "https://docs.typo3.org/p/sightmetrics/sight-metrics/main/en-us/"
             },
             "transport-options": {

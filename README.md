@@ -221,3 +221,14 @@ The extension follows SemVer; the cube DB carries its own schema version
 > re-import. Extension 2.x refuses older data with a clear message.
 > Details: [`docs/SCHEMA.md`](docs/SCHEMA.md) and
 > [`CHANGELOG`](extension/sight_metrics/CHANGELOG.md).
+
+## License
+
+SightMetrics is licensed under the
+[GNU General Public License v2.0 or later](LICENSE) (`GPL-2.0-or-later`),
+© 2026 Robert Schleiermacher. Third-party files bundled with the extension
+(Chart.js, Leaflet, map data) keep their own licenses, see
+[`NOTICE.md`](extension/sight_metrics/Resources/Public/Vendor/NOTICE.md) and
+`extension/sight_metrics/REUSE.toml`. Bot and browser/OS patterns from
+matomo/device-detector (LGPL-3.0-or-later) and geo databases are not part of
+the repository or the image; they are fetched or mounted at runtime.
