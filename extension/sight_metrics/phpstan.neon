@@ -1,8 +1,14 @@
 # Static analysis for the extension. Run via extension/lint.sh in the demo container
 # (uses the TYPO3 autoloader + phpstan-strict-rules of the demo app).
+# Alle Pfade absolut: packages/sight_metrics ist ein Symlink, und PHPStan loest
+# relative Includes gegen den echten Pfad der Config auf.
 includes:
     - phpstan-base.neon
-    - ../../vendor/phpstan/phpstan-strict-rules/rules.neon
+    - /var/www/html/vendor/phpstan/phpstan-strict-rules/rules.neon
 parameters:
     bootstrapFiles:
-        - ../../vendor/autoload.php
+        - /var/www/html/vendor/autoload.php
+    # Realer Mountpfad, nicht der Symlink: sonst erkennt PHPStan den Code nicht
+    # als analysiert, faellt auf Reflection zurueck und meldet Phantomfehler.
+    paths:
+        - /packages/sight_metrics/Classes

@@ -26,6 +26,14 @@
 #   SM_GEO_PATH       path to the geo CSV (default: geo/country-ipv4-num.csv)
 #   SM_GEO_LOC_PATH   only SM_GEO_SOURCE=maxmind: path to
 #                     GeoLite2-Country-Locations-en.csv
+#
+# Privacy (anonymize.sql, always active - IPv4 is truncated to a.b.c.0, IPv6 to
+# its /48 prefix, URL query strings are dropped):
+#   SM_URL_KEEP_PARAMS  comma-separated query parameters to keep despite the
+#                       filter, e.g. "id,L,type" for TYPO3 installations
+#                       without slug URLs. Default empty = keep nothing.
+#                       Only ever name parameters that provably carry no
+#                       personal data.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 export LC_ALL=C
@@ -152,10 +160,12 @@ SET VARIABLE tsformat  = '$(sq "$SM_TS_FORMAT")';
 SET VARIABLE tz        = '$(sq "${SM_TZ:-UTC}")';
 SET VARIABLE botfilter = '${SM_BOT_FILTER:-1}';
 SET VARIABLE download_re = '$(sq "${SM_DOWNLOAD_RE:-}")';
+SET VARIABLE url_keep_params = '$(sq "${SM_URL_KEEP_PARAMS:-}")';
 SET VARIABLE cutoff_date = '${CUTOFF_DATE}';
 ${BOT_SQL}
 .read '${GEO_SOURCE_SQL}'
 .read '${LOG_FORMAT_SQL}'
+.read 'anonymize.sql'
 .read 'day_cut.sql'
 ${GEO6_SQL}
 ${UA_SQL}

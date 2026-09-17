@@ -62,7 +62,8 @@
 #   DUCKDB_MEMORY_LIMIT   DuckDB memory limit (default 2GB); beyond it DuckDB
 #                         spills to SM_TMPDIR/duckdb instead of OOMing.
 #   As load_cube.sh: CUBE_DSN/CUBE_DSN_FILE, SM_TABLE_*, SM_LOG_FORMAT/
-#     SM_LOG_REGEX_CUSTOM/SM_TS_FORMAT_CUSTOM, SM_GEO_*, SM_BOT_*, STATE_DIR.
+#     SM_LOG_REGEX_CUSTOM/SM_TS_FORMAT_CUSTOM, SM_GEO_*, SM_BOT_*, STATE_DIR,
+#     SM_URL_KEEP_PARAMS (privacy filter, see anonymize.sql / load_cube.sh).
 #
 # Heartbeat (healthchecks.io or similar, optional, see lib_healthcheck.sh):
 #   HEALTHCHECK_URL / HEALTHCHECK_URL_FILE
@@ -312,11 +313,13 @@ SET VARIABLE tsformat   = '$(sq "$SM_TS_FORMAT")';
 SET VARIABLE tz         = '$(sq "$SM_TZ")';
 SET VARIABLE botfilter  = '${SM_BOT_FILTER:-1}';
 SET VARIABLE download_re = '$(sq "${SM_DOWNLOAD_RE:-}")';
+SET VARIABLE url_keep_params = '$(sq "${SM_URL_KEEP_PARAMS:-}")';
 SET VARIABLE range_from = '${D}';
 SET VARIABLE range_to   = '${D}';
 ${BOT_SQL}
 .read '${GEO_SOURCE_SQL}'
 .read '${LOG_FORMAT_SQL}'
+.read 'anonymize.sql'
 .read 'day_filter.sql'
 ${GEO6_SQL}
 ${UA_SQL}

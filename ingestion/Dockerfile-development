@@ -1,7 +1,7 @@
 # --- Build-Stage: passendes DuckDB-CLI-Binary von GitHub Releases laden --------
 # dpkg --print-architecture liefert amd64/arm64 == DuckDB-Asset-Namen und folgt
 # beim Multi-Plattform-Build automatisch der Ziel-Architektur.
-FROM debian:bookworm-slim AS duckdb
+FROM debian:trixie-slim AS duckdb
 ARG DUCKDB_VERSION=1.5.4
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl unzip ca-certificates \
@@ -19,7 +19,7 @@ RUN set -eux; \
 # Package A – ingestion container: DuckDB analysis as a nightly one-shot/CronJob.
 # Reads the webserver logs, writes the cube to the (external) MariaDB cube DB and
 # then exits. Default run = run_all.sh (all sites from sites.conf).
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 # default-mysql-client provides mysql + mysqldump (for backup_cube.sh / rotate_cube_secret.sh).
 RUN apt-get update && apt-get install -y --no-install-recommends \

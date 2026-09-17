@@ -1,3 +1,5 @@
+> 🇩🇪 [Deutsche Fassung](README.de.md)
+
 # Package A – Ingestion / analytics (DuckDB) · the operational part
 
 This is the **write side** of SightMetrics: it reads web server logs,
@@ -12,8 +14,9 @@ extension (package B) only reads.
 ## What happens here (data flow)
 
 ```
-access.log  ─►  parse (regex)  ─►  sessionize  ─►  aggregate  ─►  cube DB (MariaDB)
-                transform.sql      (IP+UA, 30 min)   (per day/dim)   cube / daily / meta
+access.log  ─►  parse (regex)  ─►  anonymize  ─►  sessionize  ─►  aggregate  ─►  cube DB (MariaDB)
+                log_formats/       IP + URL       (IP+UA, 30 min)   (per day/dim)   cube / daily / meta
+                                   anonymize.sql  ── transform.sql ──
 ```
 
 DuckDB does all the heavy lifting in C (parsing, GeoIP join, sessionization,
@@ -37,6 +40,7 @@ range, running it multiple times never duplicates data.
 | `run_all.sh` | **Orchestrator**: imports all sites from `sites.conf` (flock-protected, `PARALLEL`/`auto`), alerts on failure via `notify.sh`. The container's default run. |
 | `load_cube.sh` | **Single-site import (file)**: DuckDB → `ATTACH` MariaDB, incremental (byte offset), per-site lock, measures wall/CPU time. Usage: `load_cube.sh <logfile> "<site name>" <site_id>`. |
 | `fetch_loki_logs.sh` | **Single-site import (Grafana Loki, alternative to a file)**: pulls lines via LogQL **day by day** (local calendar day 00:00→24:00 into a temp file), writes each day to MariaDB individually; incremental via a daily state instead of a byte offset, the previous day is overwritten on re-run. |
+| `anonymize.sql` | **Privacy step** (both log importers, always on): truncates IPv4 to `a.b.c.0` and IPv6 to its `/48` prefix, drops URL query strings. Runs right after the parser, so no later stage sees a full IP or a query parameter. `SM_URL_KEEP_PARAMS` keeps named parameters (TYPO3 without slug URLs). See runbook §16. |
 | `transform.sql` | **Analytics logic** (sink-neutral): parse → sessionize → `cube_rows`/`daily_rows`. |
 | `cube_to_mysql.sql` | Compute driver of the log path (reads `transform.sql`). |
 | `sink_mysql.sql` | **Shared MariaDB sink** (schema, idempotent range-DELETE+INSERT, meta). Used by both the log **and** the Matomo path. |

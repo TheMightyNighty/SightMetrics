@@ -13,9 +13,11 @@ fail=0
 
 echo "== 2a: PHP Unit (PHPUnit) =="
 [ -f "$PHAR" ] || curl -fsSL -o "$PHAR" https://phar.phpunit.de/phpunit-11.phar
-docker compose -f "$DEMO/docker-compose.yml" run --rm --no-deps \
+# --entrypoint php: das Image setzt ENTRYPOINT ["bash"].
+docker compose -f "$DEMO/docker-compose.yaml" run --rm --no-deps \
+  --entrypoint php \
   -v "$EXT:/ext:ro" -v "$PHAR:/phpunit.phar:ro" web \
-  php /phpunit.phar -c /ext/phpunit.xml.dist || fail=1
+  /phpunit.phar -c /ext/phpunit.xml.dist || fail=1
 
 echo; echo "== 2b: PHP Functional (typo3/testing-framework, SQLite) =="
 # Check whether testing-framework is installed (only after: composer update in demo/app/)

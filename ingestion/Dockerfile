@@ -1,7 +1,7 @@
 # --- Build-Stage: passendes DuckDB-CLI-Binary von GitHub Releases laden --------
 # dpkg --print-architecture liefert amd64/arm64 == DuckDB-Asset-Namen und folgt
 # beim Multi-Plattform-Build automatisch der Ziel-Architektur.
-FROM debian:bookworm-slim AS duckdb
+FROM debian:trixie-slim AS duckdb
 ARG DUCKDB_VERSION=1.5.4
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl unzip ca-certificates \
@@ -19,11 +19,13 @@ RUN set -eux; \
 # Package A – ingestion container: DuckDB analysis as a nightly one-shot/CronJob.
 # Reads the webserver logs, writes the cube to the (external) MariaDB cube DB and
 # then exits. Default run = run_all.sh (all sites from sites.conf).
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 # default-mysql-client provides mysql + mysqldump (for backup_cube.sh / rotate_cube_secret.sh).
+# curl + jq are required by fetch_loki_logs.sh and tools/fetch_bot_list.sh.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash python3 ca-certificates time gettext-base default-mysql-client \
+      curl jq \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -32,8 +34,9 @@ WORKDIR /app
 COPY --from=duckdb /out/duckdb /usr/local/bin/duckdb
 COPY geo/ ./geo/
 
-# SQL logic
-COPY transform.sql cube_to_mysql.sql matomo_to_cube.sql sink_mysql.sql day_cut.sql ua_lookup.sql ./
+# SQL logic. Deliberately a glob, not a hand-maintained list (a missing file
+# only shows up at runtime). tests/ is excluded via .dockerignore.
+COPY *.sql ./
 COPY geo_sources/ ./geo_sources/
 COPY log_formats/ ./log_formats/
 

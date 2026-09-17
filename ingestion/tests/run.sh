@@ -11,6 +11,7 @@ SET VARIABLE logpath   = 'tests/fixture.log';
 SET VARIABLE geopath   = 'tests/geo_mini.csv';
 .read 'geo_sources/native.sql'
 .read 'log_formats/regex.sql'
+.read 'anonymize.sql'
 SET VARIABLE site_name = 'Test';
 SET VARIABLE tagessalt = 'testsalt';
 .read 'tests/pipeline_test.sql'
@@ -83,6 +84,7 @@ SET VARIABLE tagessalt = 'testsalt';
 SET VARIABLE logregex  = '${VHOST_REGEX}';
 SET VARIABLE tsformat  = '%d/%b/%Y:%H:%M:%S %z';
 .read 'log_formats/regex.sql'
+.read 'anonymize.sql'
 .read 'tests/pipeline_test.sql'
 SQL
 )
@@ -109,6 +111,7 @@ EOF
 JSON_OUT=$(./bin/duckdb <<SQL
 SET VARIABLE logpath = '${JSON_LOG}';
 .read 'log_formats/json_ecs.sql'
+.read 'anonymize.sql'
 SELECT 'raw=' || count(*) FROM raw_lines;
 SELECT 'parsed=' || count(*) FROM parsed_lines;
 SQL
@@ -138,6 +141,7 @@ SET VARIABLE logpath  = '${DF_LOG}';
 SET VARIABLE tsformat = '%Y-%m-%dT%H:%M:%S%z';
 SET VARIABLE tz       = 'Europe/Berlin';
 .read 'log_formats/json_ecs.sql'
+.read 'anonymize.sql'
 .read 'day_filter.sql'
 SELECT 'nofilter=' || count(*) FROM parsed_lines;
 SET VARIABLE range_from = '2026-07-14';
@@ -243,6 +247,7 @@ cut_probe() { # $1=cutoff  -> outputs "consumed remaining"
 SET VARIABLE logpath = '${CUT_LOG}';
 SET VARIABLE cutoff_date = '$1';
 .read 'log_formats/regex.sql'
+.read 'anonymize.sql'
 .read 'day_cut.sql'
 SELECT (CASE WHEN getvariable('cut_rid') IS NULL THEN -1
         ELSE (SELECT COALESCE(SUM(nbytes),0) FROM raw_lines WHERE rid < getvariable('cut_rid')) END)
@@ -283,6 +288,7 @@ SET VARIABLE site_name = 'BotTest'; SET VARIABLE tagessalt = 's';
 $1
 .read 'geo_sources/native.sql'
 .read 'log_formats/regex.sql'
+.read 'anonymize.sql'
 .read 'transform.sql'
 SELECT pageviews_total FROM meta_row;
 SQL
@@ -309,6 +315,7 @@ SET VARIABLE geo6path = 'tests/geo_mini_v6.csv';
 SET VARIABLE site_name = 'V6Test'; SET VARIABLE tagessalt = 's';
 .read 'geo_sources/native.sql'
 .read 'log_formats/regex.sql'
+.read 'anonymize.sql'
 .read 'geo_sources/v6_ranges.sql'
 .read 'transform.sql'
 SELECT dimkey || '=' || v FROM cube_rows WHERE dim='country' AND dimkey IN ('DE','??') ORDER BY dimkey;
@@ -333,6 +340,7 @@ SET VARIABLE ua_oss_path = '$UAD/oss.tsv';
 SET VARIABLE site_name = 'UA'; SET VARIABLE tagessalt = 's';
 .read 'geo_sources/native.sql'
 .read 'log_formats/regex.sql'
+.read 'anonymize.sql'
 .read 'ua_lookup.sql'
 .read 'transform.sql'
 SELECT dimkey || '=' || v FROM cube_rows WHERE dim='browser' ORDER BY dimkey;
@@ -345,6 +353,69 @@ if [ "$ua_out" = "$expected" ]; then
   echo "PASS ua-listen: Listen-Treffer ueberschreibt (TestEdge), Heuristik-Fallback bleibt (Chrome)"
 else
   echo "FAIL ua-listen: erwartet 'Chrome=3/TestEdge=1', ist '${ua_out}'"; fail=1
+fi
+
+# ---- 1.14 Datenschutz (anonymize.sql): IP-Kuerzung + URL-Parameter -----------
+# Fuer BEIDE Quellen identisch, weil Access-Log- und Loki-Import denselben
+# Parser -> anonymize.sql -> transform.sql-Pfad benutzen.
+echo; echo "== Pipeline: Datenschutz (anonymize.sql) =="
+priv_ok=1
+PRIV_LOG=$(mktemp /tmp/sm_priv_XXXXXX.log)
+cat > "$PRIV_LOG" <<'EOF'
+8.8.8.8 - - [10/Jan/2026:10:00:00 +0000] "GET /suche?q=maier&mail=a@b.de HTTP/1.1" 200 1 "https://www.google.com/search?q=test+begriff" "Mozilla/5.0 Firefox/140.0"
+2001:db8:1234:5678:9abc:def0:1:2 - - [10/Jan/2026:10:00:01 +0000] "GET /index.php?id=42&L=1&token=geheim HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
+2001:db8::1 - - [10/Jan/2026:10:00:02 +0000] "GET /a#frag HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
+::ffff:203.0.113.77 - - [10/Jan/2026:10:00:03 +0000] "GET /c?x=1 HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
+- - - [10/Jan/2026:10:00:04 +0000] "GET /d HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
+EOF
+
+priv_probe() { # $1 = url_keep_params -> "ip|url" pro Zeile
+  ./bin/duckdb -noheader -list <<SQL
+SET VARIABLE logpath = '${PRIV_LOG}';
+SET VARIABLE url_keep_params = '$1';
+.read 'log_formats/regex.sql'
+.read 'anonymize.sql'
+SELECT g.ip || '|' || g.url FROM parsed_lines ORDER BY rid;
+SQL
+}
+
+expected_strip='8.8.8.0|/suche
+2001:db8:1234::|/index.php
+2001:db8::|/a
+::ffff:203.0.113.0|/c
+-|/d'
+out=$(priv_probe "")
+[ "$out" = "$expected_strip" ] \
+  || { echo "FAIL Default: erwartet gekuerzte IPs + parameterfreie URLs, ist:"; echo "$out"; priv_ok=0; }
+
+# Whitelist: benannte Parameter bleiben, alle anderen (token) fallen weg.
+out=$(priv_probe "id, L" | sed -n '2p')
+[ "$out" = "2001:db8:1234::|/index.php?id=42&L=1" ] \
+  || { echo "FAIL SM_URL_KEEP_PARAMS: erwartet '/index.php?id=42&L=1', ist '${out}'"; priv_ok=0; }
+
+# Der Referrer bleibt bewusst unangetastet -> keyword-Dimension weiter befuellt.
+out=$(./bin/duckdb -noheader -list <<SQL
+SET VARIABLE logpath = '${PRIV_LOG}';
+SET VARIABLE geopath = 'tests/geo_mini.csv';
+SET VARIABLE site_name = 'Priv'; SET VARIABLE tagessalt = 's';
+.read 'geo_sources/native.sql'
+.read 'log_formats/regex.sql'
+.read 'anonymize.sql'
+.read 'transform.sql'
+SELECT 'kw=' || count(*) FROM cube_rows WHERE dim='keyword' AND dimkey='test begriff';
+SELECT 'geo=' || count(*) FROM cube_rows WHERE dim='country' AND dimkey='US';
+SELECT 'leak=' || count(*) FROM cube_rows WHERE dimkey LIKE '%token%' OR dimkey LIKE '%mail=%';
+SQL
+)
+echo "$out" | grep -q 'kw=1'   || { echo "FAIL Referrer-Keyword nach Anonymisierung verloren"; priv_ok=0; }
+# 8.8.8.8 -> 8.8.8.0 liegt weiter im GeoIP-Range 8.8.8.0-8.8.8.255.
+echo "$out" | grep -q 'geo=1'  || { echo "FAIL GeoIP nach IPv4-Kuerzung nicht mehr aufgeloest"; priv_ok=0; }
+echo "$out" | grep -q 'leak=0' || { echo "FAIL Query-Parameter im Cube gelandet"; priv_ok=0; }
+rm -f "$PRIV_LOG"
+if [ "$priv_ok" -eq 1 ]; then
+  echo "PASS datenschutz: IPv4 -> a.b.c.0, IPv6 -> /48, URL-Parameter entfernt, Whitelist + Referrer/Geo intakt"
+else
+  fail=1
 fi
 
 exit "$fail"
