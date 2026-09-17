@@ -14,6 +14,17 @@
 --      json_ecs - see lib_logformat.sh).
 -- ===========================================================================
 
+-- Privacy: the referrer reaches the cube without its query string. The parts
+-- that are actually evaluated are derived BEFORE this: ref_host (referrer
+-- classification) and keyword (the '?q=' search term) further down. What is
+-- left would otherwise be the one query string in the cube -- including a
+-- same-site referrer whose parameters anonymize.sql strips from 'url'.
+-- Deliberately here and not in anonymize.sql: the keyword is extracted from
+-- the full referrer, so the pruning has to happen after that step.
+CREATE OR REPLACE TEMP MACRO sm_ref_public(ref) AS
+  CASE WHEN ref IS NULL THEN NULL
+       ELSE split_part(split_part(ref, '?', 1), '#', 1) END;
+
 -- tsformat: strptime format for the timestamp string g.tsraw (set by
 -- log_formats/*.sql; default here only as a fallback if used directly without lib_logformat.sh).
 SET VARIABLE tsformat = COALESCE(getvariable('tsformat'), '%d/%b/%Y:%H:%M:%S %z');
@@ -166,7 +177,8 @@ FROM (
          trim(arg_min(browser, ts) || ' ' || arg_min(browser_ver, ts)) AS browser_version,
          arg_min(os, ts) AS os, arg_min(os_ver, ts) AS os_version,
          arg_min(device, ts) AS device, arg_min(device_model, ts) AS device_model,
-         arg_min(referrer, ts) AS referrer, arg_min(ref_host, ts) AS ref_host,
+         sm_ref_public(arg_min(referrer, ts)) AS referrer,
+         arg_min(ref_host, ts) AS ref_host,
          arg_min(keyword, ts) AS keyword
   FROM sess GROUP BY vkey, seq
 ) v LEFT JOIN ip_country gc ON gc.ipint = v.ipint

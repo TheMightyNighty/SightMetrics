@@ -846,9 +846,10 @@ Beide Log-Importer — `load_cube.sh` (Access-Log) und
 Parser und vor jedem weiteren Schritt aus. IP-Kürzung und Entfernung des
 Query-Strings erfolgen daher *vor* dem Geo-Lookup, dem Besucherschlüssel
 und dem Cube; keine spätere Stufe sieht jemals eine vollständige
-IP-Adresse oder den Query-String der aufgerufenen URL. Das ist nicht
-optional und hat keinen Ausschalter. Der **Referrer** ist die bewusste
-Ausnahme — siehe unten.
+IP-Adresse. Der Referrer behält seinen Query-String einen Schritt länger,
+weil die Dimension `keyword` daraus abgeleitet wird, und wird in
+`transform.sql` gekürzt, bevor die Cube-Zeilen entstehen. Das ist nicht
+optional und hat keinen Ausschalter.
 
 ### IP-Adressen
 
@@ -902,17 +903,18 @@ Ausnahme — siehe unten.
   Nur Parameter benennen, die nachweislich keine personenbezogenen Daten
   tragen. Alles nicht Benannte wird entfernt. Standard ist leer — nichts
   wird behalten.
-- Der **Referrer wird bewusst nicht bereinigt**: die Dimension `keyword`
-  wird aus dessen `?q=`-Parameter abgeleitet, und die Dimension
-  `referrer_url` ist nur mit der vollständigen URL nützlich. Er ist damit
-  die einzige Stelle, an der ein Query-String *doch* im Cube landet — auch
-  bei einem Referrer der eigenen Site wie `https://example.org/reset?token=…`,
-  dessen Parameter `anonymize.sql` aus `url` entfernt. Falls das eigene
-  Bedrohungsmodell es verlangt, vor dem Import maskieren (die Dimension
-  `keyword` entfällt damit):
-  ```bash
-  sed -E 's#("https?://[^" ?]*)\?[^" ]*#\1#g' access.log | ./load_cube.sh - "Site" 1
-  ```
+- Der **Referrer verliert seinen Query-String ebenfalls**, nur einen Schritt
+  später als die URL: `transform.sql` leitet zuerst den Referrer-Host (für
+  `referrer_type` / `referrer_name`) und das `keyword` aus `?q=` ab und kürzt
+  den Referrer erst danach für die Dimension `referrer_url`.
+  `https://example.org/passwort-neu?token=…` wird als
+  `https://example.org/passwort-neu` gespeichert. Schema, Host und Pfad
+  bleiben erhalten — die verweisende *Seite* bleibt damit erkennbar, worum es
+  bei dieser Dimension geht —, während ein Referrer der eigenen Site die von
+  `anonymize.sql` aus `url` entfernten Parameter nicht mehr zurückholen kann.
+- Die Dimension `keyword` ist von der Kürzung daher nicht betroffen. Sie ist
+  in der Praxis ohnehin dünn gefüllt: die großen Suchmaschinen senden den
+  Suchbegriff seit Jahren nicht mehr im Referrer.
 - Der Matomo-Altdaten-Import (`matomo_import.sh`) wird von
   `anonymize.sql` **nicht** abgedeckt — er verarbeitet bereits
   vorab-aggregierte Reporting-API-Daten. Anonymisierung dafür in Matomo

@@ -1,0 +1,72 @@
+name: TER-Release
+
+# Veroeffentlicht die Extension (Paket B) im TYPO3 Extension Repository.
+# Trigger: Versions-Tags (v2.1.0) + manuell (workflow_dispatch mit Version).
+#
+# Voraussetzungen:
+#   - Extension-Key "sight_metrics" ist auf extensions.typo3.org registriert.
+#   - Repository-Secret TYPO3_API_TOKEN (Access Token aus dem typo3.org-Profil,
+#     Scope "extension:write"). Fehlt es, ueberspringt der Job sich selbst,
+#     statt den Tag-Build rot zu faerben.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version ohne v-Praefix, z. B. 2.1.0'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: "Extension -> TER"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PHP einrichten
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+          coverage: none
+
+      - name: Version bestimmen und gegen ext_emconf pruefen
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            version="${{ inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          emconf=$(grep -oP "'version' => '\K[^']+" extension/sight_metrics/ext_emconf.php)
+          if [ "$version" != "$emconf" ]; then
+            echo "Tag ($version) und ext_emconf.php ($emconf) weichen ab - Abbruch." >&2
+            exit 1
+          fi
+          grep -q "^## ${version} " extension/sight_metrics/CHANGELOG.md || {
+            echo "Kein CHANGELOG-Abschnitt fuer ${version} - Abbruch." >&2; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: typo3/tailor installieren
+        run: composer global require typo3/tailor --no-interaction --no-progress
+
+      - name: TER-Upload
+        env:
+          TYPO3_API_TOKEN: ${{ secrets.TYPO3_API_TOKEN }}
+        run: |
+          if [ -z "${TYPO3_API_TOKEN}" ]; then
+            echo "TYPO3_API_TOKEN nicht gesetzt - TER-Upload uebersprungen."
+            exit 0
+          fi
+          # --path: die Extension liegt im Unterverzeichnis dieses Monorepos,
+          # tailor packt genau dieses Verzeichnis.
+          php ~/.composer/vendor/bin/tailor ter:publish \
+            --path=extension/sight_metrics \
+            --comment "Siehe CHANGELOG.md zu ${{ steps.version.outputs.version }}" \
+            "${{ steps.version.outputs.version }}" sight_metrics

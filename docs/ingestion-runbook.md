@@ -819,8 +819,9 @@ Both log importers — `load_cube.sh` (access log) and `fetch_loki_logs.sh`
 (Loki) — run `anonymize.sql` immediately after the parser and before every
 other step. IP truncation and query-string removal therefore happen *before*
 the geo lookup, the visitor key and the cube; no later stage ever sees a full
-IP address or the query string of the requested URL. This is not optional and
-has no off switch. The **referrer** is the deliberate exception — see below.
+IP address. The referrer keeps its query string one step longer, because the
+`keyword` dimension is derived from it, and is pruned in `transform.sql`
+before the cube rows are built. This is not optional and has no off switch.
 
 ### IP addresses
 
@@ -867,16 +868,17 @@ has no off switch. The **referrer** is the deliberate exception — see below.
   ```
   Only ever name parameters that provably carry no personal data. Anything not
   named is dropped. Default is empty — nothing is kept.
-- The **referrer is deliberately not stripped**: the `keyword` dimension is
-  derived from its `?q=` parameter, and the `referrer_url` dimension is only
-  useful with the full URL. It is therefore the one place where a query string
-  *does* reach the cube — including a same-site referrer such as
-  `https://example.org/reset?token=…`, whose parameters `anonymize.sql` strips
-  from `url`. If your threat model requires it, mask referrers before import
-  (the `keyword` dimension is lost with them):
-  ```bash
-  sed -E 's#("https?://[^" ?]*)\?[^" ]*#\1#g' access.log | ./load_cube.sh - "Site" 1
-  ```
+- The **referrer loses its query string too**, but one step later than the
+  URL: `transform.sql` first derives the referrer host (for `referrer_type` /
+  `referrer_name`) and the `keyword` from `?q=`, and only then prunes the
+  referrer for the `referrer_url` dimension. `https://example.org/reset?token=…`
+  is stored as `https://example.org/reset`. Scheme, host and path remain — the
+  referring *page* stays identifiable, which is the point of that dimension,
+  while a same-site referrer can no longer reintroduce the parameters that
+  `anonymize.sql` removes from `url`.
+- The `keyword` dimension is therefore unaffected by the pruning. In practice
+  it is sparsely filled regardless: the major search engines stopped sending
+  the search term in the referrer years ago.
 - The Matomo legacy import (`matomo_import.sh`) is **not** covered by
   `anonymize.sql` — it consumes pre-aggregated Reporting API data. Configure
   anonymization in Matomo itself before exporting.

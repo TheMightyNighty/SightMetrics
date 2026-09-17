@@ -137,10 +137,9 @@ Details, mapping, and limitations: [`docs/matomo-import.md`](docs/matomo-import.
 - **Bot/crawler filter** — only human visitors are counted; status codes
   also show 4xx/5xx for error diagnosis
 - **Anonymized at import** — IPv4 addresses lose their last octet, IPv6 is
-  truncated to `/48`, and the query string of the requested URL is dropped
-  before anything is aggregated. Not a toggle. Exception by design: the
-  **referrer** is stored unchanged, because the search-keyword dimension is
-  derived from it — mask it beforehand if your threat model requires it (see
+  truncated to `/48`, and query strings are dropped from the requested URL
+  *and* from the referrer before anything is aggregated. Not a toggle: no
+  query parameter ever reaches the cube (see
   [runbook §16](docs/ingestion-runbook.md#16-privacy--bsi-notes))
 
 Data quality and robustness of the ingestion (each switchable/optional):
@@ -194,6 +193,21 @@ backend module frontend consists of native ES modules (no build step),
 loaded via TYPO3's `JavaScriptModules.php`.
 
 ---
+
+## Releasing
+
+1. Bump `extension/sight_metrics/ext_emconf.php`, the `<project>` release in
+   `Documentation/guides.xml` and the `CHANGELOG.md` heading to the new
+   version, then run `./run-tests.sh`.
+2. Tag it: `git tag -a v2.1.0 -m "SightMetrics 2.1.0" && git push --tags`.
+
+The tag triggers two workflows: `image.yml` builds and pushes the ingestion
+image to GHCR, `ter.yml` publishes the extension to the TER. The TER job
+checks the tag against `ext_emconf.php` and the CHANGELOG first and skips
+itself (without failing) while the repository secret `TYPO3_API_TOKEN` is
+missing. It needs the extension key `sight_metrics` registered on
+extensions.typo3.org and a typo3.org access token with the scope
+`extension:write`.
 
 ## Versioning & upgrades
 

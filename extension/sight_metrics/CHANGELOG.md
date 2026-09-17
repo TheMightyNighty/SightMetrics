@@ -8,11 +8,15 @@
   an address that is not recognisable as an IP fails closed to `-`. Runs
   before geo lookup, visitor key and cube. `uniques` can drop marginally; geo
   stays at country level but is no longer exact for ranges finer than /24.
-- **URL query strings are dropped at import** (`/suche?q=maier` -> `/suche`).
+- **Query strings are dropped at import** (`/suche?q=maier` -> `/suche`).
   `SM_URL_KEEP_PARAMS` keeps named parameters for TYPO3 installations without
-  slug URLs; empty by default. The referrer is kept as logged, since the
-  `keyword` dimension is derived from it — it is the one place where a query
-  string still reaches the cube (see runbook §16).
+  slug URLs; empty by default.
+- **The referrer loses its query string as well**, one step later: the
+  referrer host and the `keyword` (`?q=`) are derived first, then the referrer
+  is pruned for the `referrer_url` dimension — scheme, host and path remain.
+  This closes the last path by which a query parameter could reach the cube,
+  in particular a same-site referrer carrying the parameters that are stripped
+  from `url`. The `keyword` dimension is unaffected.
 - Side effect: `/style.css?v=3` used to pass the asset filter and count as a
   pageview; without its query string it is now filtered out correctly.
 

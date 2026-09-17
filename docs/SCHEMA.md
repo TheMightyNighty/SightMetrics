@@ -35,6 +35,11 @@ default `cube`/`daily`/`meta`).
 `referrer_type` values are language-neutral keys since v2: `direct`, `search`,
 `social`, `website`. Display labels live in the reader (extension XLF).
 
+`dimkey` never carries a query string: the writer removes it from `url`,
+`entry`, `exit`, `download` (`anonymize.sql`) and from `referrer_url`
+(`transform.sql`) before aggregating. Readers can rely on that, but must not
+assume it for data written before 2.1.0.
+
 ### `daily` — one row per site and day
 
 | Column | Type |

@@ -369,6 +369,7 @@ cat > "$PRIV_LOG" <<'EOF'
 - - - [10/Jan/2026:10:00:04 +0000] "GET /d HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
 203.0.113.9:51514 - - [10/Jan/2026:10:00:05 +0000] "GET /e HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
 proxy.example.org - - [10/Jan/2026:10:00:06 +0000] "GET /f?tx_news[news]=7 HTTP/1.1" 200 1 "-" "Mozilla/5.0 Firefox/140.0"
+198.51.100.1 - - [10/Jan/2026:10:00:07 +0000] "GET /g HTTP/1.1" 200 1 "https://www.beispiel.de/passwort-neu?token=geheim&mail=a@b.de" "Mozilla/5.0 Firefox/140.0"
 EOF
 
 priv_probe() { # $1 = url_keep_params -> "ip|url" pro Zeile
@@ -387,7 +388,8 @@ expected_strip='8.8.8.0|/suche
 ::ffff:203.0.113.0|/c
 -|/d
 203.0.113.0|/e
--|/f'
+-|/f
+198.51.100.0|/g'
 out=$(priv_probe "")
 [ "$out" = "$expected_strip" ] \
   || { echo "FAIL Default: erwartet gekuerzte IPs + parameterfreie URLs, ist:"; echo "$out"; priv_ok=0; }
@@ -414,15 +416,19 @@ SET VARIABLE site_name = 'Priv'; SET VARIABLE tagessalt = 's';
 SELECT 'kw=' || count(*) FROM cube_rows WHERE dim='keyword' AND dimkey='test begriff';
 SELECT 'geo=' || count(*) FROM cube_rows WHERE dim='country' AND dimkey='US';
 SELECT 'leak=' || count(*) FROM cube_rows WHERE dimkey LIKE '%token%' OR dimkey LIKE '%mail=%';
+SELECT 'ref=' || count(*) FROM cube_rows
+  WHERE dim='referrer_url' AND dimkey='https://www.beispiel.de/passwort-neu';
 SQL
 )
 echo "$out" | grep -q 'kw=1'   || { echo "FAIL Referrer-Keyword nach Anonymisierung verloren"; priv_ok=0; }
 # 8.8.8.8 -> 8.8.8.0 liegt weiter im GeoIP-Range 8.8.8.0-8.8.8.255.
 echo "$out" | grep -q 'geo=1'  || { echo "FAIL GeoIP nach IPv4-Kuerzung nicht mehr aufgeloest"; priv_ok=0; }
 echo "$out" | grep -q 'leak=0' || { echo "FAIL Query-Parameter im Cube gelandet"; priv_ok=0; }
+# Der Referrer erreicht den Cube ohne Query-String, der Pfad bleibt erhalten.
+echo "$out" | grep -q 'ref=1'  || { echo "FAIL Referrer-URL nicht ohne Query-String im Cube"; priv_ok=0; }
 rm -f "$PRIV_LOG"
 if [ "$priv_ok" -eq 1 ]; then
-  echo "PASS datenschutz: IPv4 (auch mit :port) -> a.b.c.0, IPv6 -> /48, Unbekanntes -> '-', URL-Parameter entfernt, Whitelist + Referrer/Geo intakt"
+  echo "PASS datenschutz: IPv4 (auch mit :port) -> a.b.c.0, IPv6 -> /48, Unbekanntes -> '-', URL- und Referrer-Query entfernt, Whitelist + Keyword/Geo intakt"
 else
   fail=1
 fi

@@ -39,6 +39,11 @@ Tabellennamen sind konfigurierbar
 `search`, `social`, `website`. Anzeigebeschriftungen liegen im Leser
 (Extension-XLF).
 
+`dimkey` enthält nie einen Query-String: der Schreiber entfernt ihn aus `url`,
+`entry`, `exit`, `download` (`anonymize.sql`) und aus `referrer_url`
+(`transform.sql`), bevor aggregiert wird. Leser dürfen sich darauf verlassen,
+für Daten vor 2.1.0 jedoch nicht davon ausgehen.
+
 ### `daily` — eine Zeile je Site und Tag
 
 | Spalte | Typ |
