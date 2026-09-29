@@ -135,12 +135,21 @@ jobs:
 
   # ---- Job 4: E2E (Demo-Stack + Puppeteer, echtes TYPO3-Backend) -------------
   e2e:
-    name: "E2E (TYPO3-Backend, Puppeteer)"
+    name: "E2E (TYPO3 v${{ matrix.typo3 }}-Backend, Puppeteer)"
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # v13: Demo-App wie committet (composer.lock); v14: frisch aufgeloest.
+        typo3: ['13', '14']
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Demo-App auf TYPO3 v14 umstellen
+        if: matrix.typo3 == '14'
+        run: bash demo/use-typo3-v14.sh
 
       - name: DuckDB CLI laden (ingestion/bin/duckdb)
         working-directory: ingestion
