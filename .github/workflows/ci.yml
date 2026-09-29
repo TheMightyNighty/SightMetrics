@@ -190,6 +190,9 @@ jobs:
           done
           echo "TYPO3-Backend nicht erreichbar"; docker logs sightmetrics-web | tail -50; exit 1
 
+      - name: TYPO3-Version
+        run: docker exec sightmetrics-web php vendor/bin/typo3 --version
+
       - name: Smoke (TYPO3 CLI, read-only Cube)
         run: docker exec sightmetrics-web php vendor/bin/typo3 sightmetrics:smoke
 
