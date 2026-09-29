@@ -161,7 +161,7 @@ final class DashboardController implements LoggerAwareInterface
             $conf = [];
             try {
                 $raw = $this->extensionConfiguration->get('sight_metrics');
-                $conf = \is_array($raw) ? $raw : [];
+                $conf = is_array($raw) ? $raw : [];
             } catch (\Throwable) {
             }
             // Technical message (may contain DB host/user/paths) only to admins,
@@ -340,7 +340,7 @@ final class DashboardController implements LoggerAwareInterface
         };
         $conf = $load();
         // @phpstan-ignore function.impossibleType
-        return \is_array($conf) ? $conf : [];
+        return is_array($conf) ? $conf : [];
     }
 
     /**
@@ -351,7 +351,7 @@ final class DashboardController implements LoggerAwareInterface
     {
         try {
             $conf = $this->extensionConfiguration->get('sight_metrics');
-            if (\is_array($conf) && isset($conf['windowDays']) && $conf['windowDays'] !== '') {
+            if (is_array($conf) && isset($conf['windowDays']) && $conf['windowDays'] !== '') {
                 return max(0, Params::toInt($conf['windowDays']));
             }
         } catch (\Throwable) {

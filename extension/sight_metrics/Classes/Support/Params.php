@@ -23,13 +23,13 @@ final class Params
 
     public static function toInt(mixed $value, int $default = 0): int
     {
-        if (\is_int($value)) {
+        if (is_int($value)) {
             return $value;
         }
-        if (\is_float($value) || \is_bool($value)) {
+        if (is_float($value) || is_bool($value)) {
             return (int)$value;
         }
-        if (\is_string($value) && \is_numeric($value)) {
+        if (is_string($value) && is_numeric($value)) {
             return (int)$value;
         }
         return $default;
@@ -37,10 +37,10 @@ final class Params
 
     public static function toString(mixed $value, string $default = ''): string
     {
-        if (\is_string($value)) {
+        if (is_string($value)) {
             return $value;
         }
-        if (\is_scalar($value)) {
+        if (is_scalar($value)) {
             return (string)$value;
         }
         return $default;

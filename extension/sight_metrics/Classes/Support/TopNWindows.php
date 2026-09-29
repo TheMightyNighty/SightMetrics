@@ -22,10 +22,9 @@ namespace SightMetrics\Support;
  */
 final class TopNWindows
 {
-    private function __construct() {}
-
     /** Window labels the ingestion precomputes (sink_mysql.sql). */
     public const SUPPORTED = ['last30', 'last90', 'last365', 'thisyear', 'lastyear', 'all'];
+    private function __construct() {}
 
     /**
      * @return array{0: string, 1: string}|null [from, to] (ISO), or null if $window

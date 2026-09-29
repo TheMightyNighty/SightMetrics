@@ -22,7 +22,7 @@
     },
     "require-dev": {
         "phpstan/phpstan": "^2.0",
-        "typo3/coding-standards": "^0.8",
+        "typo3/coding-standards": "^0.9",
         "phpunit/phpunit": "^11.0",
         "typo3/testing-framework": "^8.0",
         "phpstan/phpstan-strict-rules": "^2.0"

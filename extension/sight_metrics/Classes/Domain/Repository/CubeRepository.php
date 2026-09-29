@@ -57,7 +57,7 @@ final class CubeRepository
     {
         try {
             $conf = $this->extensionConfiguration->get('sight_metrics');
-            if (\is_array($conf) && isset($conf['cacheLifetime']) && $conf['cacheLifetime'] !== '') {
+            if (is_array($conf) && isset($conf['cacheLifetime']) && $conf['cacheLifetime'] !== '') {
                 return max(0, Params::toInt($conf['cacheLifetime']));
             }
         } catch (\Throwable) {
@@ -369,9 +369,9 @@ final class CubeRepository
             $this->applyParentFilter($qb, $parentKey);
             $row = $qb->executeQuery()->fetchAssociative();
             return [
-                'pv' => Params::toInt(\is_array($row) ? ($row['pv'] ?? null) : null),
-                'v' => Params::toInt(\is_array($row) ? ($row['v'] ?? null) : null),
-                'count' => Params::toInt(\is_array($row) ? ($row['cnt'] ?? null) : null),
+                'pv' => Params::toInt(is_array($row) ? ($row['pv'] ?? null) : null),
+                'v' => Params::toInt(is_array($row) ? ($row['v'] ?? null) : null),
+                'count' => Params::toInt(is_array($row) ? ($row['cnt'] ?? null) : null),
             ];
         });
         return $summary;
