@@ -4,7 +4,7 @@ services:
   db:
     # MariaDB-LTS, zugleich die Client-Version des Ingestion-Images (Debian 13).
     # AUTO_UPGRADE zieht ein bestehendes Volume von 11.4 selbst hoch.
-    image: mariadb:11.8
+    image: mariadb:13.0
     container_name: sightmetrics-db
     environment:
       MARIADB_AUTO_UPGRADE: "1"
