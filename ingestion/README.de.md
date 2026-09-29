@@ -54,7 +54,7 @@ Datumsbereich — mehrfaches Ausführen dupliziert niemals Daten.
 | `lib_geo.sh` / `lib_logformat.sh` / `lib_healthcheck.sh` | Gemeinsame Bausteine (eingebunden von `load_cube.sh` und `fetch_loki_logs.sh`): Geo-Quellenauswahl, Log-Format-Auswahl, Healthcheck-Heartbeat. |
 | `geo_sources/` | Geo-Join je Quelle: `native`, `ip2location`, `dbip`, `maxmind` (siehe Runbook §3a). |
 | `log_formats/` | Log-Parsing je Format: `regex` (Klartext, Standard) oder `json_ecs` (strukturiertes JSON, siehe Runbook §7). |
-| `bin/duckdb` (v1.5.4) · `geo/` | DuckDB-Engine (statisches Binary) + GeoIP-Daten. |
+| `bin/duckdb` (v1.5.6) · `geo/` | DuckDB-Engine (statisches Binary) + GeoIP-Daten. |
 | `sites.conf.example` | Vorlage für `sites.conf` (`site_id` TAB Logdatei TAB Name). |
 | `scheduling/` | systemd/cron-Vorlagen für den Produktivbetrieb. |
 

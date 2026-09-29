@@ -27,8 +27,6 @@ namespace SightMetrics\Support;
  */
 final class TopNDims
 {
-    private function __construct() {}
-
     /** Root dim => metric ('pv' or 'v'). */
     public const ROOT_METRIC_BY_DIM = [
         'keyword' => 'v',
@@ -74,6 +72,7 @@ final class TopNDims
      * Top-N dims is no longer fully present in the initial payload.
      */
     public const TREE_DIM = 'url';
+    private function __construct() {}
 
     public static function defaultLimitFor(string $rootDim): int
     {

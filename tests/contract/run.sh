@@ -23,10 +23,10 @@ done
 echo "PASS MariaDB healthy"
 
 if [ ! -x ingestion/bin/duckdb ]; then
-  echo ">> DuckDB-Binary fehlt - lade v1.5.4"
+  echo ">> DuckDB-Binary fehlt - lade v1.5.6"
   mkdir -p ingestion/bin
   curl -fsSL -o /tmp/duckdb.zip \
-    https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip
+    https://github.com/duckdb/duckdb/releases/download/v1.5.6/duckdb_cli-linux-amd64.zip
   unzip -o -q /tmp/duckdb.zip duckdb -d ingestion/bin/
   chmod +x ingestion/bin/duckdb
 fi

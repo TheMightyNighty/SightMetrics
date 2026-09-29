@@ -2,11 +2,12 @@ version: 2
 
 # Ergänzt die (bereits aktiven) Security-Alerts um regelmäßige Update-PRs.
 # Wöchentlich, klein gehalten: Security-Updates laufen unabhängig davon sofort.
+#
+# /demo/app fehlt bewusst: Das path-Repository "/packages/*" existiert nur im
+# Demo-Container, Dependabot kann die Abhängigkeiten dort nicht auflösen.
 updates:
   - package-ecosystem: composer
-    directories:
-      - /extension/sight_metrics
-      - /demo/app
+    directory: /extension/sight_metrics
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -18,11 +19,23 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # TypeScript 7 (nativer Compiler) bricht die JSDoc-Typprüfung
+      # (export.js/createI18n); Umstieg separat angehen.
+      - dependency-name: typescript
+        versions: [">= 7"]
 
   - package-ecosystem: docker
     directories:
       - /ingestion
       - /demo
+    schedule:
+      interval: weekly
+
+  # Images in den Compose-Dateien. ingestion/tests/matomo fehlt bewusst: Die
+  # Matomo-Version ist an die Fixtures in ingestion/tests/matomo_fixture gebunden.
+  - package-ecosystem: docker-compose
+    directory: /demo
     schedule:
       interval: weekly
 

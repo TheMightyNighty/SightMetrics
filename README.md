@@ -186,7 +186,7 @@ running container immediately, no copy/sync step needed.
 
 ## Technology stack
 
-TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.4 (static binary in
+TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.6 (static binary in
 `ingestion/bin/`) · MariaDB · [Chart.js](https://www.chartjs.org/)
 (trend/hourly chart) · [Leaflet](https://leafletjs.com/) (visitor map). The
 backend module frontend consists of native ES modules (no build step),

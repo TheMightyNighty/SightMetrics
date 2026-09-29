@@ -9,7 +9,7 @@ fail=0
 # Install tools if needed (demo app)
 docker exec -w /var/www/html sightmetrics-web sh -c 'test -x vendor/bin/phpstan && test -x vendor/bin/php-cs-fixer && test -f vendor/phpstan/phpstan-strict-rules/rules.neon' \
   || docker exec -w /var/www/html sightmetrics-web composer require --dev --no-interaction --no-progress \
-       phpstan/phpstan phpstan/phpstan-strict-rules "typo3/coding-standards:^0.8" >/dev/null 2>&1
+       phpstan/phpstan phpstan/phpstan-strict-rules "typo3/coding-standards:^0.9" >/dev/null 2>&1
 
 echo "== PHPStan =="
 # --memory-limit: PHPStan runs out with the PHP default (128M) during parallel analysis

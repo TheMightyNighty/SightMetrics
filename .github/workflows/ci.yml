@@ -25,15 +25,18 @@ jobs:
           tools: composer:v2
           coverage: none
 
-      - name: Composer-Cache-Key
-        id: cache-key
-        run: echo "key=${{ hashFiles('extension/sight_metrics/composer.json') }}" >> "$GITHUB_OUTPUT"
+      # Nur den Download-Cache, nicht vendor/: ohne composer.lock wird bei jedem
+      # Lauf neu aufgeloest, und ein veraltetes vendor/ (samt Composer-Plugins)
+      # bricht beim Update auf neue Major-Versionen.
+      - name: Composer-Cache-Verzeichnis
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Composer-Cache laden
         uses: actions/cache@v4
         with:
-          path: extension/sight_metrics/vendor
-          key: composer-${{ matrix.php }}-${{ steps.cache-key.outputs.key }}
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ matrix.php }}-${{ hashFiles('extension/sight_metrics/composer.json') }}
           restore-keys: composer-${{ matrix.php }}-
 
       - name: composer install
@@ -70,11 +73,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: DuckDB v1.5.4 herunterladen
+      - name: DuckDB v1.5.6 herunterladen
         run: |
           mkdir -p ingestion/bin
           curl -fsSL -o /tmp/duckdb.zip \
-            https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip
+            https://github.com/duckdb/duckdb/releases/download/v1.5.6/duckdb_cli-linux-amd64.zip
           unzip -o /tmp/duckdb.zip duckdb -d ingestion/bin/
           chmod +x ingestion/bin/duckdb
 
@@ -99,7 +102,7 @@ jobs:
           - typo3: '^13.4'
             tf: '^8.0'
           - typo3: '^14.0'
-            tf: '^9.0'
+            tf: '^9.7'
 
     steps:
       - uses: actions/checkout@v4
@@ -144,7 +147,7 @@ jobs:
         run: |
           mkdir -p bin
           curl -fsSL -o /tmp/duckdb.zip \
-            https://github.com/duckdb/duckdb/releases/download/v1.5.4/duckdb_cli-linux-amd64.zip
+            https://github.com/duckdb/duckdb/releases/download/v1.5.6/duckdb_cli-linux-amd64.zip
           unzip -o /tmp/duckdb.zip duckdb -d bin/
           chmod +x bin/duckdb
 

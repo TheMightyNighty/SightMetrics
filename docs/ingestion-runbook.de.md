@@ -56,7 +56,7 @@ ingestion/
 ├── generate_logs.py            Test-Log-Generator (sessionbasiert, öffentliche IPs)
 │
 ├── bin/
-│   └── duckdb                  DuckDB-CLI-Binary (v1.5.4, x86_64 Linux)
+│   └── duckdb                  DuckDB-CLI-Binary (v1.5.6, x86_64 Linux)
 │
 ├── geo_sources/
 │   ├── native.sql               Geo-Join: eigenes Schema (start,end,cc)
