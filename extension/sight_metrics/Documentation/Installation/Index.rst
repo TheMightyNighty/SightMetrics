@@ -14,7 +14,7 @@ Requirements
    * - Component
      - Version
    * - PHP
-     - ^8.2 (8.2–8.4 tested)
+     - ^8.2 (8.2–8.5 tested)
    * - TYPO3 CMS
      - ^13.4 or ^14.0
    * - MariaDB

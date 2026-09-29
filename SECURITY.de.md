@@ -10,7 +10,7 @@
 | 2.0.x | ✅ (nur Sicherheitsfixes) |
 | < 2.0 | ❌ (bitte aktualisieren; mit 2.0 hat sich das Cube-Schema geändert) |
 
-Unterstützter Plattformbereich: TYPO3 13.4 LTS / 14, PHP 8.2–8.4 (siehe
+Unterstützter Plattformbereich: TYPO3 13.4 LTS / 14, PHP 8.2–8.5 (siehe
 `extension/sight_metrics/composer.json`).
 
 ## Eine Schwachstelle melden
