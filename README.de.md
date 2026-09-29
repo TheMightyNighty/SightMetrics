@@ -180,10 +180,10 @@ extension/lint.sh         # nur Lint: PHPStan Level max + strict-rules + TYPO3-C
 ```
 
 Tests laufen auf mehreren Ebenen (alle in CI, siehe `.github/workflows/ci.yml`):
-DuckDB-Pipeline-Suite, PHP Unit/Functional (TYPO3 13.4/14 × PHP 8.2–8.4),
+DuckDB-Pipeline-Suite, PHP Unit/Functional (TYPO3 13.4/14 × PHP 8.2–8.5),
 JavaScript-Typcheck (`tsc --checkJs`) + jsdom-Smoke-Test, ein
 **Contract-Test** (Ingestion schreibt → Extension liest, gegen eine echte
-MariaDB) und ein **E2E**-Lauf (Puppeteer gegen das echte TYPO3-Backend).
+MariaDB) und ein **E2E**-Lauf (Puppeteer gegen das echte TYPO3-Backend unter v13 und v14).
 
 Der Extension-Quellcode (`extension/sight_metrics/`) wird live in den
 Demo-Stack gebindmountet (siehe `demo/docker-compose.yaml`) — Änderungen
@@ -194,7 +194,7 @@ nötig.
 
 ## Technologie-Stack
 
-TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.6 (statisches Binary in
+TYPO3 v13.4 LTS / v14 · PHP 8.2–8.5 · DuckDB 1.5.6 (statisches Binary in
 `ingestion/bin/`) · MariaDB · [Chart.js](https://www.chartjs.org/)
 (Trend-/Stunden-Chart) · [Leaflet](https://leafletjs.com/) (Besucherkarte).
 Das Frontend des Backend-Moduls besteht aus nativen ES-Modulen (kein
