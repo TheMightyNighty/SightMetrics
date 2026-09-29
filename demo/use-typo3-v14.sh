@@ -4,6 +4,14 @@
 # Checkout/Worktree ausführen: composer.json wird umgeschrieben und die
 # composer.lock entfernt, der Entrypoint löst beim Start dann neu auf.
 set -euo pipefail
+
+# Schutz: löscht vendor/, public/ und var/ der Demo-App. Außerhalb der CI nur
+# mit --force (z. B. in einem separaten Worktree), nie im Arbeits-Checkout.
+if [ "${CI:-}" != "true" ] && [ "${1:-}" != "--force" ]; then
+  echo "Nur in der CI oder mit --force in einem frischen Worktree ausführen." >&2
+  exit 1
+fi
+
 cd "$(dirname "$0")/app"
 
 sed -i -E \
