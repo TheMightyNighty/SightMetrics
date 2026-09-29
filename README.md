@@ -199,7 +199,7 @@ loaded via TYPO3's `JavaScriptModules.php`.
 1. Bump `extension/sight_metrics/ext_emconf.php`, the `<project>` release in
    `Documentation/guides.xml` and the `CHANGELOG.md` heading to the new
    version, then run `./run-tests.sh`.
-2. Tag it: `git tag -a v2.1.0 -m "SightMetrics 2.1.0" && git push --tags`.
+2. Tag it: `git tag -a v2.1.1 -m "SightMetrics 2.1.1" && git push --tags`.
 
 The tag triggers two workflows: `image.yml` builds and pushes the ingestion
 image to GHCR, `ter.yml` publishes the extension to the TER. The TER job

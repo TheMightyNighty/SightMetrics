@@ -207,7 +207,7 @@ Build-Schritt), geladen über TYPO3s `JavaScriptModules.php`.
 1. Version in `extension/sight_metrics/ext_emconf.php`, im `<project>`-Release
    von `Documentation/guides.xml` und in der `CHANGELOG.md`-Überschrift
    anheben, danach `./run-tests.sh` laufen lassen.
-2. Taggen: `git tag -a v2.1.0 -m "SightMetrics 2.1.0" && git push --tags`.
+2. Taggen: `git tag -a v2.1.1 -m "SightMetrics 2.1.1" && git push --tags`.
 
 Der Tag startet zwei Workflows: `image.yml` baut das Ingestion-Image und
 schiebt es nach GHCR, `ter.yml` veröffentlicht die Extension im TER. Der
