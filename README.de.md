@@ -194,7 +194,7 @@ nötig.
 
 ## Technologie-Stack
 
-TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.4 (statisches Binary in
+TYPO3 v13.4 LTS / v14 · PHP 8.2–8.4 · DuckDB 1.5.6 (statisches Binary in
 `ingestion/bin/`) · MariaDB · [Chart.js](https://www.chartjs.org/)
 (Trend-/Stunden-Chart) · [Leaflet](https://leafletjs.com/) (Besucherkarte).
 Das Frontend des Backend-Moduls besteht aus nativen ES-Modulen (kein

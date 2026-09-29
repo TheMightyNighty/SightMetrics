@@ -53,7 +53,7 @@ range, running it multiple times never duplicates data.
 | `lib_geo.sh` / `lib_logformat.sh` / `lib_healthcheck.sh` | Shared building blocks (sourced by `load_cube.sh` and `fetch_loki_logs.sh`): geo-source selection, log-format selection, healthcheck heartbeat. |
 | `geo_sources/` | Geo join per source: `native`, `ip2location`, `dbip`, `maxmind` (see runbook §3a). |
 | `log_formats/` | Log parsing per format: `regex` (plain text, default) or `json_ecs` (structured JSON, see runbook §7). |
-| `bin/duckdb` (v1.5.4) · `geo/` | DuckDB engine (static binary) + GeoIP data. |
+| `bin/duckdb` (v1.5.6) · `geo/` | DuckDB engine (static binary) + GeoIP data. |
 | `sites.conf.example` | Template for `sites.conf` (`site_id` TAB logfile TAB name). |
 | `scheduling/` | systemd/cron templates for production operation. |
 

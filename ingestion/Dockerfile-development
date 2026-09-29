@@ -2,7 +2,7 @@
 # dpkg --print-architecture liefert amd64/arm64 == DuckDB-Asset-Namen und folgt
 # beim Multi-Plattform-Build automatisch der Ziel-Architektur.
 FROM debian:trixie-slim AS duckdb
-ARG DUCKDB_VERSION=1.5.4
+ARG DUCKDB_VERSION=1.5.6
 RUN apt-get update && apt-get install -y --no-install-recommends \
       curl unzip ca-certificates \
  && rm -rf /var/lib/apt/lists/*
