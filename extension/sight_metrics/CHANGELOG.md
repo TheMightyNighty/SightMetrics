@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.1.1 (2026-09-29)
+
+Maintenance release, no functional changes to the extension.
+
+### Changed
+- **DuckDB 1.5.4 -> 1.5.6** in the ingestion image and all download paths.
+- Demo image on `php:8.5-cli`.
+- Dev tooling: `typo3/coding-standards` ^0.9 (code style adjusted, no
+  behaviour change), `typo3/testing-framework` ^8.0 || ^9.7, TypeScript 6,
+  jsdom 30, puppeteer-core 25; GitHub Actions on current major versions.
+
+### Tests
+- The E2E job now runs against the real TYPO3 v13 **and** v14 backend.
+- JS smoke test no longer flaky: the export poll interval of one test leaked
+  into the next test's DOM and kept the process alive after a failure.
+- CI caches Composer downloads instead of `vendor/` (stale plugins broke major
+  updates).
+
 ## 2.1.0 (2026-09-17)
 
 ### Privacy
