@@ -25,15 +25,18 @@ jobs:
           tools: composer:v2
           coverage: none
 
-      - name: Composer-Cache-Key
-        id: cache-key
-        run: echo "key=${{ hashFiles('extension/sight_metrics/composer.json') }}" >> "$GITHUB_OUTPUT"
+      # Nur den Download-Cache, nicht vendor/: ohne composer.lock wird bei jedem
+      # Lauf neu aufgeloest, und ein veraltetes vendor/ (samt Composer-Plugins)
+      # bricht beim Update auf neue Major-Versionen.
+      - name: Composer-Cache-Verzeichnis
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Composer-Cache laden
         uses: actions/cache@v4
         with:
-          path: extension/sight_metrics/vendor
-          key: composer-${{ matrix.php }}-${{ steps.cache-key.outputs.key }}
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ matrix.php }}-${{ hashFiles('extension/sight_metrics/composer.json') }}
           restore-keys: composer-${{ matrix.php }}-
 
       - name: composer install
@@ -99,7 +102,7 @@ jobs:
           - typo3: '^13.4'
             tf: '^8.0'
           - typo3: '^14.0'
-            tf: '^9.0'
+            tf: '^9.7'
 
     steps:
       - uses: actions/checkout@v4
