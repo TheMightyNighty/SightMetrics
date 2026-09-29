@@ -38,6 +38,10 @@ updates:
     directory: /demo
     schedule:
       interval: weekly
+    ignore:
+      # MariaDB bleibt auf der LTS-Linie; Major-Wechsel bewusst von Hand.
+      - dependency-name: mariadb
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

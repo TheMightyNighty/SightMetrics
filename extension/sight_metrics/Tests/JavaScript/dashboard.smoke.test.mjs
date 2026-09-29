@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 
@@ -15,6 +15,30 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const EXT_ROOT = join(HERE, '..', '..');
 const TEMPLATE_PATH = join(EXT_ROOT, 'Resources/Private/Templates/Dashboard/Index.html');
 const DASHBOARD_JS_PATH = join(EXT_ROOT, 'Resources/Public/JavaScript/dashboard.js');
+
+// dashboard.js runs in Node's realm (see loadDashboard), so its setInterval (the
+// export poll) is a real Node timer: it outlives its test, writes into the next
+// test's DOM via the global document and keeps the process alive if a test fails
+// before the poll ends. Track those intervals and tear everything down per test.
+const liveIntervals = new Set();
+const liveWindows = new Set();
+const nodeSetInterval = globalThis.setInterval;
+const nodeClearInterval = globalThis.clearInterval;
+globalThis.setInterval = (...args) => {
+  const handle = nodeSetInterval(...args);
+  liveIntervals.add(handle);
+  return handle;
+};
+globalThis.clearInterval = (handle) => {
+  liveIntervals.delete(handle);
+  nodeClearInterval(handle);
+};
+afterEach(() => {
+  for (const handle of liveIntervals) nodeClearInterval(handle);
+  liveIntervals.clear();
+  for (const window of liveWindows) window.close();
+  liveWindows.clear();
+});
 
 // dashboard.js is a native ES module (import from ./modules/*) -- window.eval()
 // cannot execute modules. Instead: expose jsdom objects as Node globals
@@ -87,6 +111,7 @@ function buildDom(payload) {
     runScripts: 'dangerously',
   });
   const { window } = dom;
+  liveWindows.add(window);
 
   // jsdom has no canvas getContext without the native 'canvas' package -- Chart.js just
   // needs some object as context, real drawing is not checked here.
