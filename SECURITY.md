@@ -13,6 +13,13 @@
 Supported platform range: TYPO3 13.4 LTS / 14, PHP 8.2–8.5 (see
 `extension/sight_metrics/composer.json`).
 
+The composer constraints only describe compatibility; keeping TYPO3 and PHP
+patched is the operator's job. As of 2026-10 we recommend at least:
+
+- TYPO3 13.4.37 LTS or 14.3.10 LTS
+- PHP 8.2.35, 8.3.36, 8.4.27 or 8.5.12 (fixes the critical "PHP2Shell"
+  RCEs CVE-2026-109618/-109619)
+
 ## Reporting a vulnerability
 
 Please **do not** open a public GitHub issue for security problems.
