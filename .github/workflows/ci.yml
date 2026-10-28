@@ -57,6 +57,12 @@ jobs:
 
       # JS: Typpruefung (tsc --checkJs) + jsdom-Smoke-Tests der ES-Module.
       # Nur einmal je Matrix noetig -> auf PHP 8.3 begrenzt.
+      - name: Node.js einrichten
+        if: matrix.php == '8.3'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
       - name: npm ci + typecheck + JS-Tests
         if: matrix.php == '8.3'
         working-directory: extension/sight_metrics
@@ -199,6 +205,11 @@ jobs:
       # Contract-Test (docs/SCHEMA.md): Ingestion schreibt -> CubeRepository liest.
       - name: Contract (Ingestion <-> Extension)
         run: bash tests/contract/run.sh
+
+      - name: Node.js einrichten
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
 
       - name: E2E (Puppeteer)
         env:
