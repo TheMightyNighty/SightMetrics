@@ -59,7 +59,7 @@ services:
       # und zu EXT_SRC (oben) passen.
       - ../extension/sight_metrics:/packages/sight_metrics:ro
     ports:
-      - "8091:80"
+      - "127.0.0.1:8091:80"
     working_dir: /var/www/html
     # Installation + Serverstart erledigt der Entrypoint (siehe Dockerfile CMD:
     # entrypoint.sh). Kein command-Override mehr nötig.
