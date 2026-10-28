@@ -91,6 +91,8 @@ SM_LOG_FORMAT=json_ecs ./fetch_loki_logs.sh --url http://loki:3100 --query '{job
 # 3) Im Backend ansehen:
 #    http://localhost:8091/typo3/   (admin / SightMetrics-Admin-2026!)
 #    -> Modul  Web > "Web Analytics"
+#    Port 8091 lauscht nur auf 127.0.0.1; auf einem entfernten Host per
+#    SSH-Tunnel: ssh -L 8091:127.0.0.1:8091 <host>
 ```
 
 Für den **Produktivbetrieb** siehe
