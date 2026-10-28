@@ -90,7 +90,7 @@ matrix, architecture, troubleshooting — is in the
 ./run-tests.sh            # unit, functional (SQLite), smoke, contract, and JS tests
 ```
 
-The extension supports **TYPO3 v13.4 LTS and v14**, PHP 8.2–8.4. The backend
+The extension supports **TYPO3 v13.4 LTS and v14**, PHP 8.2–8.5. The backend
 module uses [Chart.js](https://www.chartjs.org/) (MIT license) for the
 trend/bar charts and [Leaflet](https://leafletjs.com/) (BSD-2-Clause) for the
 visitor map (choropleth via `L.geoJSON`).

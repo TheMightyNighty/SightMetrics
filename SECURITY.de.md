@@ -10,8 +10,16 @@
 | 2.0.x | ✅ (nur Sicherheitsfixes) |
 | < 2.0 | ❌ (bitte aktualisieren; mit 2.0 hat sich das Cube-Schema geändert) |
 
-Unterstützter Plattformbereich: TYPO3 13.4 LTS / 14, PHP 8.2–8.4 (siehe
+Unterstützter Plattformbereich: TYPO3 13.4 LTS / 14, PHP 8.2–8.5 (siehe
 `extension/sight_metrics/composer.json`).
+
+Die Composer-Constraints beschreiben nur die Kompatibilität; TYPO3 und PHP
+aktuell zu halten liegt beim Betreiber. Stand 2026-10 empfehlen wir
+mindestens:
+
+- TYPO3 13.4.37 LTS bzw. 14.3.10 LTS
+- PHP 8.2.35, 8.3.36, 8.4.27 bzw. 8.5.12 (behebt die kritischen
+  „PHP2Shell“-RCEs CVE-2026-109618/-109619)
 
 ## Eine Schwachstelle melden
 
