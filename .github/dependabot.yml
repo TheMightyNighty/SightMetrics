@@ -10,6 +10,9 @@ updates:
     directory: /extension/sight_metrics
     schedule:
       interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
     open-pull-requests-limit: 5
 
   - package-ecosystem: npm
@@ -18,6 +21,9 @@ updates:
       - /e2e
     schedule:
       interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
     open-pull-requests-limit: 5
     ignore:
       # TypeScript 7 (nativer Compiler) bricht die JSDoc-Typprüfung
@@ -31,6 +37,9 @@ updates:
       - /demo
     schedule:
       interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
 
   # Images in den Compose-Dateien. ingestion/tests/matomo fehlt bewusst: Die
   # Matomo-Version ist an die Fixtures in ingestion/tests/matomo_fixture gebunden.
@@ -38,6 +47,9 @@ updates:
     directory: /demo
     schedule:
       interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
     ignore:
       # MariaDB bleibt auf der LTS-Linie; Major-Wechsel bewusst von Hand.
       - dependency-name: mariadb
@@ -47,3 +59,6 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    commit-message:
+      prefix: ci
+      include: scope
