@@ -118,7 +118,7 @@ services:
   # UI: http://localhost:3000  – Loki ist als Default-Datenquelle vorprovisioniert.
   grafana:
     # Fest getaggt, damit die Demo reproduzierbar bleibt.
-    image: grafana/grafana:13.2
+    image: grafana/grafana:13.3
     container_name: sightmetrics-grafana
     ports:
       - "3000:3000"
