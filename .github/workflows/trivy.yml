@@ -1,0 +1,60 @@
+# Sicherheitsscan: bekannte Schwachstellen (Critical/High mit Fix) und Secrets brechen den Build ab,
+# Konfigurationsbefunde (Dockerfile/Compose) erscheinen nur in der Job-Zusammenfassung.
+# Trivy wird bewusst als gepinntes Binary mit Pruefsumme installiert (keine trivy-action,
+# vgl. Supply-Chain-Vorfall Maerz 2026). Version + SHA256 gemeinsam anheben.
+name: Trivy
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trivy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  trivy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TRIVY_VERSION: "0.76.1"
+      TRIVY_SHA256: "c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Trivy installieren (gepinnt, Pruefsumme)
+        run: |
+          set -euo pipefail
+          tar="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${tar}"
+          echo "${TRIVY_SHA256}  ${tar}" | sha256sum -c -
+          tar xzf "$tar" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+
+      - name: Schwachstellen und Secrets (blockierend)
+        run: |
+          set +e
+          trivy fs --quiet --scanners vuln,secret --include-dev-deps \
+            --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 \
+            --skip-dirs '**/node_modules' --skip-dirs '**/vendor' \
+            --format table --output trivy-vuln.txt .
+          rc=$?
+          { echo "## Trivy: Schwachstellen & Secrets"; echo '```'; cat trivy-vuln.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cat trivy-vuln.txt
+          exit $rc
+
+      - name: Konfiguration (nur Hinweis)
+        if: always()
+        run: |
+          trivy fs --quiet --scanners misconfig --severity CRITICAL,HIGH,MEDIUM \
+            --format table --output trivy-config.txt . || true
+          { echo "## Trivy: Konfiguration"; echo '```'; cat trivy-config.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
