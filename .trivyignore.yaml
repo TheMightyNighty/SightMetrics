@@ -1,0 +1,10 @@
+# Bewusste Ausnahmen für Trivy (gilt lokal und in .github/workflows/trivy.yml).
+# Je Eintrag nur für die genannte Datei und mit Begründung.
+misconfigurations:
+  - id: KSV-0125
+    paths:
+      - "ingestion/scheduling/k8s/cronjob.yaml"
+    statement: >-
+      Das Ingestion-Image kommt aus GHCR und wird von .github/workflows/image.yml
+      gebaut; im Manifest per Digest gepinnt. KSV-0125 kennt nur die Registries
+      großer Cloud-Anbieter als vertrauenswürdig.

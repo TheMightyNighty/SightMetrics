@@ -1,6 +1,7 @@
 # ===========================================================================
 # SightMetrics ingestion – nightly one-shot as a Kubernetes CronJob.
-# Copy-paste ready; adjust: image (digest!), volumes (logs/geo), namespace.
+# Copy-paste ready; adjust: image (digest!), volumes (logs/geo), namespace
+# (default: sightmetrics, same in all manifests here).
 # Conforms to Pod Security Standard "restricted" (non-root, read-only rootFS,
 # no capabilities, seccomp RuntimeDefault).
 #
@@ -17,6 +18,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: sightmetrics-import
+  namespace: sightmetrics
   labels:
     app.kubernetes.io/name: sightmetrics-ingestion
 spec:

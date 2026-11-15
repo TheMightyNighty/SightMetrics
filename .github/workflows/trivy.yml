@@ -56,5 +56,6 @@ jobs:
         if: always()
         run: |
           trivy fs --quiet --scanners misconfig --severity CRITICAL,HIGH,MEDIUM \
+            --ignorefile .trivyignore.yaml \
             --format table --output trivy-config.txt . || true
           { echo "## Trivy: Konfiguration"; echo '```'; cat trivy-config.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

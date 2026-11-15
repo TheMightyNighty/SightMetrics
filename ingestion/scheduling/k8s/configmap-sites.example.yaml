@@ -5,6 +5,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: sightmetrics-sites
+  namespace: sightmetrics
   labels:
     app.kubernetes.io/name: sightmetrics-ingestion
 data:

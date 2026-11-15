@@ -5,6 +5,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: sightmetrics-state
+  namespace: sightmetrics
   labels:
     app.kubernetes.io/name: sightmetrics-ingestion
 spec:
