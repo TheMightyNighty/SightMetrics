@@ -16,10 +16,10 @@ jobs:
         php: ['8.2', '8.3', '8.4', '8.5']
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: PHP ${{ matrix.php }} einrichten
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ matrix.php }}
           tools: composer:v2
@@ -33,7 +33,7 @@ jobs:
         run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
 
       - name: Composer-Cache laden
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ steps.composer-cache.outputs.dir }}
           key: composer-${{ matrix.php }}-${{ hashFiles('extension/sight_metrics/composer.json') }}
@@ -59,7 +59,7 @@ jobs:
       # Nur einmal je Matrix noetig -> auf PHP 8.3 begrenzt.
       - name: Node.js einrichten
         if: matrix.php == '8.3'
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
 
@@ -77,7 +77,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: DuckDB v1.5.6 herunterladen
         run: |
@@ -111,10 +111,10 @@ jobs:
             tf: '^9.7'
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: PHP ${{ matrix.php }} einrichten
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ matrix.php }}
           tools: composer:v2
@@ -151,7 +151,7 @@ jobs:
         typo3: ['13', '14']
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Demo-App auf TYPO3 v14 umstellen
         if: matrix.typo3 == '14'
@@ -207,7 +207,7 @@ jobs:
         run: bash tests/contract/run.sh
 
       - name: Node.js einrichten
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
 
