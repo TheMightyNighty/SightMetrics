@@ -10,6 +10,9 @@ updates:
     directory: /extension/sight_metrics
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     commit-message:
       prefix: chore
       include: scope
@@ -21,6 +24,9 @@ updates:
       - /e2e
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     commit-message:
       prefix: chore
       include: scope
@@ -37,6 +43,9 @@ updates:
       - /demo
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     commit-message:
       prefix: chore
       include: scope
@@ -47,6 +56,9 @@ updates:
     directory: /demo
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     commit-message:
       prefix: chore
       include: scope
@@ -59,6 +71,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     commit-message:
       prefix: ci
       include: scope
