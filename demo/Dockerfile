@@ -14,5 +14,11 @@ WORKDIR /var/www/html
 
 COPY entrypoint.sh /entrypoint.sh
 
+# Bewusst root: Der Dev-Container schreibt composer/TYPO3-Dateien in den
+# Bind-Mount ./app. Unter rootless Docker ist root im Container der Host-User;
+# ein anderer UID würde dort fremde Dateien anlegen. Nicht für Produktion.
+# trivy:ignore:DS-0002
+USER root
+
 ENTRYPOINT ["bash"]
 CMD ["/entrypoint.sh"]
