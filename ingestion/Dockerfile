@@ -78,5 +78,9 @@ RUN duckdb -c "INSTALL mysql; INSTALL inet;" \
 # No secret in the image: CUBE_DSN/CUBE_DSN_FILE is injected at runtime.
 # Default run imports all sites; for a single import:
 #   docker run --rm … sightmetrics-ingestion load_cube.sh /logs/x.log "Site" 1
+# One-shot batch job (CronJob), no long-running service -> no healthcheck;
+# monitoring via exit code and the optional HEALTHCHECK_URL heartbeat.
+HEALTHCHECK NONE
+
 ENTRYPOINT ["bash"]
 CMD ["run_all.sh"]
