@@ -1,18 +1,18 @@
 {
-    "name": "sightmetrics-dashboard-js-tests",
-    "private": true,
-    "description": "Dev-Tooling: JS-Smoke-Test fuer dashboard.js sowie versionsgepinnter Bezug der Vendor-Assets (Chart.js/Leaflet) ueber npm. Weder node_modules noch dieses package.json werden an TYPO3-Instanzen ausgeliefert, nur die statischen Dateien unter Resources/Public/Vendor/.",
-    "type": "module",
-    "license": "GPL-2.0-or-later",
-    "scripts": {
-        "test": "node --test Tests/JavaScript/*.test.mjs",
-        "vendor:update": "node scripts/update-vendor.mjs",
-        "typecheck": "tsc -p tsconfig.json"
-    },
-    "devDependencies": {
-        "chart.js": "4.5.1",
-        "jsdom": "30.1.3",
-        "leaflet": "1.9.4",
-        "typescript": "6.0.3"
-    }
+  "name": "sightmetrics-dashboard-js-tests",
+  "private": true,
+  "description": "Dev-Tooling: JS-Smoke-Test fuer dashboard.js sowie versionsgepinnter Bezug der Vendor-Assets (Chart.js/Leaflet) ueber npm. Weder node_modules noch dieses package.json werden an TYPO3-Instanzen ausgeliefert, nur die statischen Dateien unter Resources/Public/Vendor/.",
+  "type": "module",
+  "license": "GPL-2.0-or-later",
+  "scripts": {
+    "test": "node --test Tests/JavaScript/*.test.mjs",
+    "vendor:update": "node scripts/update-vendor.mjs",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "chart.js": "4.6.1",
+    "jsdom": "30.1.3",
+    "leaflet": "1.9.4",
+    "typescript": "6.0.3"
+  }
 }
